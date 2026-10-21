@@ -4,6 +4,30 @@
 #include <math.h>
 
 //#include "tntTimer.h"
+#ifdef XR_PLATFORM_APPLE
+// Video for Windows has no counterpart here. The renderer's .avi texture path (SH_Texture.cpp,
+// dx10SH_Texture.cpp) still names this class, so it keeps its interface and Load() fails; the shipped game has no
+// .avi textures (its videos are Theora .ogm, see xrTheora_Surface).
+class ENGINE_API CAviPlayerCustom
+{
+public:
+	CAviPlayerCustom() : m_dwWidth(0), m_dwHeight(0) {}
+
+	DWORD m_dwWidth, m_dwHeight;
+
+	VOID GetSize(DWORD* dwWidth, DWORD* dwHeight)
+	{
+		*dwWidth = m_dwWidth;
+		*dwHeight = m_dwHeight;
+	}
+
+	BOOL Load(char* fname);
+	BOOL GetFrame(BYTE** pDest) { return FALSE; }
+
+	BOOL NeedUpdate() { return FALSE; }
+	INT SetSpeed(INT nPercent) { return 0; }
+};
+#else // XR_PLATFORM_APPLE
 #include "vfw.h"
 #include "mmsystem.h"
 
@@ -102,4 +126,5 @@ public:
 	BOOL NeedUpdate() { return CalcFrame() != m_dwFrameCurrent; }
 	INT SetSpeed(INT nPercent);
 };
+#endif // XR_PLATFORM_APPLE
 #endif

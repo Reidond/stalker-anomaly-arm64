@@ -15,3 +15,8 @@ ENGINE_API extern volatile long g_monitor_list_dirty;
 ENGINE_API HMONITOR GetStartupMonitor();
 ENGINE_API void     SetStartupMonitor(HMONITOR h);
 ENGINE_API void     ResetStartupMonitor();
+
+#ifdef XR_PLATFORM_APPLE
+// The SDL_DisplayID behind a monitor handle from ResolveSelectedMonitor()/GetStartupMonitor(), 0 for Auto.
+ENGINE_API unsigned MonitorToSdlDisplay(HMONITOR h);
+#endif
