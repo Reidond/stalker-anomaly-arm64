@@ -23,7 +23,7 @@
 #pragma once
 extern "C"
 {
-#	include <luajit-2/src/lua.h>
+#	include <lua.h>
 }
 
 #include <luabind/config.hpp>
@@ -32,7 +32,9 @@ extern "C"
 namespace luabind::detail
 {
 	// this class represents a specific overload of a member-function.
+#ifdef _MSC_VER
     template class LUABIND_API std::function<int(lua_State*)>;
+#endif
 
 	struct LUABIND_API overload_rep_base
 	{
