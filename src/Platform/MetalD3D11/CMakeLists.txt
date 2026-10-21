@@ -24,9 +24,9 @@ target_include_directories(metal_d3d11_compat INTERFACE compat)
 target_link_libraries(metal_d3d11_compat INTERFACE metal_d3d11)
 
 # Headless checks: image encoding, filtered texture copies, pixel-input patching. No window or game data needed.
-add_executable(metal_d3d11_headless_test tests/headless_test.mm)
-target_link_libraries(metal_d3d11_headless_test PRIVATE metal_d3d11 "-framework CoreFoundation")
-target_compile_options(metal_d3d11_headless_test PRIVATE -fobjc-arc -Wall -Wextra -Wno-unused-parameter)
 if(NOT ANOMALY_IOS)
+    add_executable(metal_d3d11_headless_test tests/headless_test.mm)
+    target_link_libraries(metal_d3d11_headless_test PRIVATE metal_d3d11 "-framework CoreFoundation")
+    target_compile_options(metal_d3d11_headless_test PRIVATE -fobjc-arc -Wall -Wextra -Wno-unused-parameter)
     add_test(NAME metal_d3d11_headless_test COMMAND metal_d3d11_headless_test)
 endif()

@@ -135,7 +135,7 @@ Engine assumptions (cbuffer index equals slot, original HLSL names, HLSL packing
 | Compute (HDAO) | Done for typed texture UAVs; buffer UAV binding exists, clears of texture UAVs do not. |
 | Swap chain, colour space, resize | SDR done; `ResizeBuffers` supported; fullscreen/`ResizeTarget` are no-ops. |
 | D3DCompiler: `D3DReflect`, `D3DGetInputSignatureBlob`, `D3DDisassemble`; `D3DCompile` via hook | Done. |
-| D3DX11: image info, `CreateTextureFromMemory` (DDS: BC1-7, legacy RGB(A), cube, volume, `FirstMipLevel`, `IMMUTABLE`/`STAGING`), `FilterTexture`, save DDS/BMP | Done. PNG/JPG saving and filtered `LoadTextureFromTexture` resizing are not. |
+| D3DX11: image info, `CreateTextureFromMemory` (DDS: BC1-7, legacy RGB(A), cube, volume, `FirstMipLevel`, `IMMUTABLE`/`STAGING`), `FilterTexture`, save DDS/BMP/JPG/PNG/TIFF/GIF, `LoadTextureFromTexture` | Done. JPG/PNG/TIFF/GIF encode through ImageIO (8-bit RGBA/BGRA textures); `LoadTextureFromTexture` between different sizes filters on the CPU (area average / bilinear, 8-bit colour). |
 | Geometry shaders, hull/domain shaders | Not supported: `Create*Shader` returns `E_NOTIMPL`. |
 | HDR10, tearing flags, gamma ramps, PerfHUD | Not implemented / ignored by design. |
 
@@ -165,7 +165,13 @@ Engine assumptions (cbuffer index equals slot, original HLSL names, HLSL packing
     `ResizeBuffers`, HDR.
 12. **Threading.** The context is single-threaded, like D3D. Resource creation is safe from other threads except a
     `DEFAULT`+`RENDER_TARGET`/`UAV` texture created with initial data, which uses the context's upload path.
-13. **Windows-isms outside D3D11** (D3D9 enums/structures, D3DX9 math, `DWORD`, `HWND` plumbing) are not in this library; see
+13. **Pixel inputs the vertex shader never writes.** D3D reads zero, Metal refuses the pipeline. `Context::fragmentFunctionFor`
+    compares the `[[user(locnN)]]` interpolants of the two MSL sources (`ParseInterpolants`) and, on a mismatch, builds the
+    pixel function from MSL with those inputs as zero locals (`PatchFragmentInputs`), cached per vertex/pixel pair. The stock set
+    has no such pair with the default settings; `tools/r4_shader_warmup` and `metal_d3d11_headless_test` exercise the patch.
+14. **Gamma ramps.** `IDXGIOutput::SetGammaControl` is accepted and ignored (0 control points); R4's gamma slider does nothing
+    until a shader pass applies it.
+15. **Windows-isms outside D3D11** (D3D9 enums/structures, D3DX9 math, `DWORD`, `HWND` plumbing) are not in this library; see
     D3D11-SURFACE.md section 7.
 
 ## Integration steps for R4
