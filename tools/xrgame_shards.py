@@ -102,17 +102,26 @@ def is_shared(rel, pats):
     return any(fnmatch.fnmatchcase(low, p) for p in pats)
 
 
-def assign(files):
+def assign(files, use_overrides=True):
     filt = read_filters()
     pats = read_shared()
-    overrides = read_overrides()
+    overrides = read_overrides() if use_overrides else {}
     pins = set()
     pin_path = os.path.join(OUT_DIR, 'pins.txt')
     if os.path.exists(pin_path):
         for line in open(pin_path):
             line = line.split('#', 1)[0].strip()
             if line:
-                pins.add(line.split(None, 1)[1].lower())
+                shard_, rel_ = line.split(None, 1)
+                pins.add(rel_.lower())
+                if not use_overrides:
+                    overrides[rel_.lower()] = shard_
+    pin_globs = []
+    if os.path.exists(pin_path):
+        for line in open(pin_path):
+            line = line.split('#', 1)[0].strip()
+            if line and any(c in line.split(None, 1)[1] for c in '*?['):
+                pin_globs.append((line.split(None, 1)[0], line.split(None, 1)[1].lower()))
     keyed = {}
     by_dir = collections.defaultdict(collections.Counter)
     for rel in files:
@@ -124,6 +133,10 @@ def assign(files):
     for rel in files:
         if is_shared(rel, pats):
             result[rel] = 'shared'
+            continue
+        glob_shard = next((sh for sh, g in pin_globs if fnmatch.fnmatchcase(rel.lower(), g)), None)
+        if glob_shard:
+            result[rel] = glob_shard
             continue
         if rel.lower() in overrides and (not rel.lower().endswith(('.cpp', '.c')) or rel.lower() in pins):
             result[rel] = overrides[rel.lower()]
@@ -247,7 +260,7 @@ def main():
 
     if args.deps:
         users, per_shard = header_users(os.path.realpath(args.deps))
-        base = assign(tracked_files())
+        base = assign(tracked_files(), use_overrides=False)
         if args.report:
             write_deps_report(args.report, per_shard, lambda r: base.get(r) or next(
                 (v for k, v in base.items() if k.lower() == r.lower()), '?'))

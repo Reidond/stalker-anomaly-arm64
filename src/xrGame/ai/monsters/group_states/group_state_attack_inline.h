@@ -4,7 +4,7 @@
 #include "../states/monster_state_attack_run_attack.h"
 #include "../states/state_hide_from_point.h"
 #include "../states/monster_state_find_enemy.h"
-#include "group_state_squad_move_to_radius.h "
+#include "group_state_squad_move_to_radius.h"
 #include "group_state_home_point_attack.h"
 #include "group_state_custom.h"
 #include "../ai_monster_squad.h"
@@ -181,7 +181,7 @@ void CStateGroupAttackAbstract::execute()
 
 	// a Lua-proposed substate is taken only if registered and its own start conditions pass
 	u32 proposed_substate = this->object->script_combat_substate();
-	CSState* proposed_state = (proposed_substate != u32(-1)) ? this->get_state_if_present(proposed_substate) : 0;
+	typename inherited::CSState* proposed_state = (proposed_substate != u32(-1)) ? this->get_state_if_present(proposed_substate) : 0;
 
 	if (proposed_state && proposed_state->check_start_conditions())
 	{
@@ -359,16 +359,16 @@ bool CStateGroupAttackAbstract::check_home_point()
 	// 		return false;
 	// 	}
 
-	if (prev_substate != eStateAttack_MoveToHomePoint)
+	if (this->prev_substate != eStateAttack_MoveToHomePoint)
 	{
-		if (get_state(eStateAttack_MoveToHomePoint)->check_start_conditions())
+		if (this->get_state(eStateAttack_MoveToHomePoint)->check_start_conditions())
 		{
 			return true;
 		}
 	}
 	else
 	{
-		if (!get_state(eStateAttack_MoveToHomePoint)->check_completion())
+		if (!this->get_state(eStateAttack_MoveToHomePoint)->check_completion())
 		{
 			return true;
 		}
@@ -490,7 +490,7 @@ bool CStateGroupAttackAbstract::check_behinder()
 		if (m_time_start_check_behinder == 0)
 		{
 			// - check if object is behind
-			if (!object->control().direction().is_face_target(object->EnemyMan.get_enemy(), ANGLE_START_CHECK_BEHINDER))
+			if (!this->object->control().direction().is_face_target(this->object->EnemyMan.get_enemy(), ANGLE_START_CHECK_BEHINDER))
 			{
 				m_time_start_check_behinder = time();
 			}
@@ -500,7 +500,7 @@ bool CStateGroupAttackAbstract::check_behinder()
 			// if we already in check mode
 
 			// - check if object is not behind (break checker)
-			if (object->control().direction().is_face_target(object->EnemyMan.get_enemy(),
+			if (this->object->control().direction().is_face_target(this->object->EnemyMan.get_enemy(),
 			                                                 ANGLE_CONTINUE_CHECK_BEHINDER))
 			{
 				m_time_start_check_behinder = 0;

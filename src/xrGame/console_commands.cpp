@@ -233,8 +233,9 @@ extern CrosshairSettings g_crosshair_weapon_far;
 extern CrosshairSettings g_crosshair_device_near;
 extern CrosshairSettings g_crosshair_device_far;
 
-#define Concat2(a, b) #a ## b
-#define Concat3(a, b, c) #a ## b ## #c
+// `#a ## b` pastes two string literals, which only MSVC accepts; adjacent literals concatenate in every compiler
+#define Concat2(a, b) #a b
+#define Concat3(a, b, c) #a b #c
 
 #define CrosshairBaseCommands(crosshair, suffix) \
 	CMD3(CCC_Mask, Concat2(g_crosshair_, suffix), &crosshair.flags, CROSSHAIR_SHOW); \

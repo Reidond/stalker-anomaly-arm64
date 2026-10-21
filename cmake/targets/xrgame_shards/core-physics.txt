@@ -229,8 +229,6 @@ xrGame/random32.cpp
 xrGame/random32.h
 xrGame/raypick.cpp
 xrGame/raypick.h
-xrGame/RegistryFuncs.cpp
-xrGame/RegistryFuncs.h
 xrGame/screenshot_server.cpp
 xrGame/screenshot_server.h
 xrGame/script_wallmarks_manager.cpp

@@ -84,13 +84,11 @@ xrGame/FryupZone.cpp
 xrGame/FryupZone.h
 xrGame/game_news.cpp
 xrGame/game_news.h
-xrGame/game_object_space.h
 xrGame/GameObject.cpp
 xrGame/GameObject.h
 xrGame/GameTask.cpp
 xrGame/GameTask.h
 xrGame/GameTask_script.cpp
-xrGame/GameTaskDefs.h
 xrGame/GametaskManager.cpp
 xrGame/GraviZone.cpp
 xrGame/GraviZone.h

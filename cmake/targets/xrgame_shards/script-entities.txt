@@ -116,7 +116,6 @@ xrGame/WeaponUSP45.h
 xrGame/WeaponVal.h
 xrGame/WeaponVintorez.h
 xrGame/WeaponWalther.h
-xrServerEntities/ai_sounds.h
 xrServerEntities/alife_human_brain.cpp
 xrServerEntities/alife_human_brain.h
 xrServerEntities/alife_human_brain_inline.h
@@ -125,7 +124,6 @@ xrServerEntities/alife_monster_brain.h
 xrServerEntities/alife_monster_brain_inline.h
 xrServerEntities/alife_movement_manager_holder.h
 xrServerEntities/alife_space.cpp
-xrServerEntities/alife_space.h
 xrServerEntities/associative_vector.h
 xrServerEntities/associative_vector_compare_predicate_inline.h
 xrServerEntities/character_info.cpp
@@ -146,7 +144,6 @@ xrServerEntities/lua_studio.cpp
 xrServerEntities/lua_studio.h
 xrServerEntities/mslotutils.h
 xrServerEntities/object_broker.h
-xrServerEntities/object_cloner.h
 xrServerEntities/object_factory.cpp
 xrServerEntities/object_factory.h
 xrServerEntities/object_factory_impl.h
@@ -168,7 +165,6 @@ xrServerEntities/pch_script.cpp
 xrServerEntities/PHNetState.cpp
 xrServerEntities/PHNetState.h
 xrServerEntities/PHSynchronize.h
-xrServerEntities/restriction_space.h
 xrServerEntities/script_callStack.cpp
 xrServerEntities/script_callStack.h
 xrServerEntities/script_debugger.cpp

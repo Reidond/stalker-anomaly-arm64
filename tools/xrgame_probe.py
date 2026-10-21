@@ -34,6 +34,9 @@ SHARDS = ['ai-monsters-a', 'ai-monsters-b', 'ai-core', 'nav-alife', 'script-enti
           'objects-items', 'objects-world', 'core-physics', 'mp-stub']
 
 
+SPELLED = {}  # lower-case path -> the spelling on disk (an include may name a file in another case)
+
+
 def load_owners():
     owner = {}
     for shard in SHARDS:
@@ -43,6 +46,7 @@ def load_owners():
                 line = line.strip()
                 if line:
                     owner['src/' + line.lower()] = shard
+                    SPELLED['src/' + line.lower()] = 'src/' + line
     shared = os.path.join(SHARD_DIR, 'shared.files')
     if os.path.exists(shared):
         for line in open(shared):
@@ -115,7 +119,7 @@ def main():
 
     extra = list(args.flag) + ['-w']
     raw = open(args.raw, 'w') if args.raw else None
-    by_shard = collections.defaultdict(lambda: {'tus': 0, 'clean': 0, 'total': 0, 'other_total': 0,
+    by_shard = collections.defaultdict(lambda: {'tus': 0, 'clean': 0, 'game_clean': 0, 'total': 0, 'other_total': 0,
                                                 'sites': collections.Counter(), 'foreign_total': 0})
     # site -> {tus, first_tu_shard set, owner}
     site_info = {}
@@ -141,12 +145,14 @@ def main():
             r = by_shard[shard]
             r['tus'] += 1
             errors = 0
+            game_errors = 0
             for line in err.splitlines():
                 mt = sp.ERROR_RE.match(line)
                 if not mt:
                     continue
                 errors += 1
                 f = sp.rel(mt['file'], ROOT).replace('\\', '/')
+                f = SPELLED.get(f.lower(), f)
                 o = owner_of(f, owners)
                 key = (f, int(mt['line']), mt['msg'])
                 s = site_info.setdefault(key, {'owner': o, 'tus': 0, 'shards': set()})
@@ -156,11 +162,14 @@ def main():
                     r['other_total'] += 1
                 else:
                     r['total'] += 1
+                    game_errors += 1
                     if o != shard:
                         r['foreign_total'] += 1
                 r['sites'][key] += 1
             if errors == 0 and code == 0:
                 r['clean'] += 1
+            if game_errors == 0:
+                r['game_clean'] += 1
             if raw:
                 raw.write('===== %s (exit %d)\n%s\n' % (rel, code, err))
     if raw:
@@ -184,7 +193,7 @@ def main():
             else:
                 foreign += 1
         rows.append((shard, r['tus'], r['clean'], r['total'], r['other_total'], len(r['sites']) - other, own, shared, foreign,
-                     other))
+                     other, r['game_clean']))
     tot = ['total', sum(x[1] for x in rows), sum(x[2] for x in rows), sum(x[3] for x in rows), sum(x[4] for x in rows)]
     all_sites = [k for k, v in site_info.items() if v['owner'] not in ('shim', 'third_party', 'other-module', 'system')]
     cross = [k for k in all_sites if len(site_info[k]['shards']) > 1]
@@ -192,18 +201,18 @@ def main():
     tot += [len(all_sites), sum(owned_sites.get(s, 0) for s in SHARDS), owned_sites.get('shared', 0), len(cross)]
 
     if args.markdown:
-        print('| shard | TUs | clean TUs | errors | unique sites | in own files | in shared headers | in other shards\' files |')
-        print('|---|---:|---:|---:|---:|---:|---:|---:|')
+        print('| shard | TUs | TUs without xrGame errors | TUs with no error at all | errors | unique sites | in own files | in shared headers | in other shards\' files |')
+        print('|---|---:|---:|---:|---:|---:|---:|---:|---:|')
         for row in rows:
-            shard, tus_n, clean, total, other_total, sites, own, shared, foreign, other = row
-            print('| %s | %d | %d | %d | %d | %d | %d | %d |' % (shard, tus_n, clean, total, sites, own, shared, foreign))
-        print('| **total** | %d | %d | %d | %d | %d | %d | %d |' % (tot[1], tot[2], tot[3], tot[5], tot[6], tot[7],
-                                                                    len(cross)))
+            shard, tus_n, clean, total, other_total, sites, own, shared, foreign, other, game_clean = row
+            print('| %s | %d | %d | %d | %d | %d | %d | %d | %d |' % (shard, tus_n, game_clean, clean, total, sites, own, shared, foreign))
+        print('| **total** | %d | %d | %d | %d | %d | %d | %d | %d |' % (tot[1], sum(x[10] for x in rows), tot[2], tot[3], tot[5],
+                                                                          tot[6], tot[7], sum(x[8] for x in rows)))
     else:
-        print('%-16s %5s %6s %8s %7s | %-6s %6s %7s %9s | %s' % ('shard', 'TUs', 'clean', 'errors', 'sites', 'own', 'shared',
+        print('%-16s %5s %6s %8s %7s | %-6s %6s %7s %9s | %s' % ('shard', 'TUs', 'xrGame-clean', 'errors', 'sites', 'own', 'shared',
                                                                'foreign', 'shim/3rd', 'errors outside xrGame'))
-        for shard, tus_n, clean, total, other_total, sites, own, shared, foreign, other in rows:
-            print('%-16s %5d %6d %8d %7d | %-6d %6d %7d %9d | %d' % (shard, tus_n, clean, total, sites, own, shared, foreign,
+        for shard, tus_n, clean, total, other_total, sites, own, shared, foreign, other, game_clean in rows:
+            print('%-16s %5d %6d %8d %7d | %-6d %6d %7d %9d | %d' % (shard, tus_n, game_clean, total, sites, own, shared, foreign,
                                                                   other, other_total))
         print('%-16s %5d %6d %8d %7d | %-6d %6d %7d' % ('total', tot[1], tot[2], tot[3], tot[5], tot[6], tot[7], len(cross)))
         print()

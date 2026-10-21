@@ -90,7 +90,7 @@ void CStateMonsterAttackAbstract::execute()
 
 	// a Lua-proposed substate is taken only if registered and its own start conditions pass
 	u32 proposed_substate = this->object->script_combat_substate();
-	CSState* proposed_state = (proposed_substate != u32(-1)) ? this->get_state_if_present(proposed_substate) : 0;
+	typename inherited::CSState* proposed_state = (proposed_substate != u32(-1)) ? this->get_state_if_present(proposed_substate) : 0;
 
 	if (proposed_state && proposed_state->check_start_conditions())
 		this->select_state(proposed_substate);
@@ -143,14 +143,14 @@ void CStateMonsterAttackAbstract::execute()
 TEMPLATE_SPECIALIZATION
 bool CStateMonsterAttackAbstract::check_steal_state()
 {
-	if (prev_substate == u32(-1))
+	if (this->prev_substate == u32(-1))
 	{
-		if (get_state(eStateAttack_Steal)->check_start_conditions())
+		if (this->get_state(eStateAttack_Steal)->check_start_conditions())
 			return true;
 	}
-	else if (prev_substate == eStateAttack_Steal)
+	else if (this->prev_substate == eStateAttack_Steal)
 	{
-		if (!get_state(eStateAttack_Steal)->check_completion())
+		if (!this->get_state(eStateAttack_Steal)->check_completion())
 			return true;
 	}
 	return false;
@@ -159,14 +159,14 @@ bool CStateMonsterAttackAbstract::check_steal_state()
 TEMPLATE_SPECIALIZATION
 bool CStateMonsterAttackAbstract::check_camp_state()
 {
-	if (prev_substate == u32(-1))
+	if (this->prev_substate == u32(-1))
 	{
-		if (get_state(eStateAttackCamp)->check_start_conditions())
+		if (this->get_state(eStateAttackCamp)->check_start_conditions())
 			return true;
 	}
-	else if (prev_substate == eStateAttackCamp)
+	else if (this->prev_substate == eStateAttackCamp)
 	{
-		if (!get_state(eStateAttackCamp)->check_completion())
+		if (!this->get_state(eStateAttackCamp)->check_completion())
 			return true;
 	}
 	return false;
@@ -176,7 +176,7 @@ TEMPLATE_SPECIALIZATION
 bool CStateMonsterAttackAbstract::check_find_enemy_state()
 {
 	// check state find enemy
-	if (object->EnemyMan.get_enemy_time_last_seen() + FIND_ENEMY_DELAY < Device.dwTimeGlobal)
+	if (this->object->EnemyMan.get_enemy_time_last_seen() + FIND_ENEMY_DELAY < Device.dwTimeGlobal)
 		return true;
 	return false;
 }
@@ -187,13 +187,13 @@ bool CStateMonsterAttackAbstract::check_run_away_state()
 	if (m_time_start_behinder != 0)
 		return false;
 
-	if (prev_substate == eStateAttack_RunAway)
+	if (this->prev_substate == eStateAttack_RunAway)
 	{
-		if (!get_state(eStateAttack_RunAway)->check_completion())
+		if (!this->get_state(eStateAttack_RunAway)->check_completion())
 			return true;
 		else m_time_next_run_away = Device.dwTimeGlobal + 10000;
 	}
-	else if ((object->EnemyMan.get_enemy() != Actor()) && object->Morale.is_despondent() && (m_time_next_run_away <
+	else if ((this->object->EnemyMan.get_enemy() != Actor()) && this->object->Morale.is_despondent() && (m_time_next_run_away <
 		Device.dwTimeGlobal))
 	{
 		return true;
@@ -205,14 +205,14 @@ bool CStateMonsterAttackAbstract::check_run_away_state()
 TEMPLATE_SPECIALIZATION
 bool CStateMonsterAttackAbstract::check_home_point()
 {
-	if (prev_substate != eStateAttack_MoveToHomePoint)
+	if (this->prev_substate != eStateAttack_MoveToHomePoint)
 	{
-		if (get_state(eStateAttack_MoveToHomePoint)->check_start_conditions())
+		if (this->get_state(eStateAttack_MoveToHomePoint)->check_start_conditions())
 			return true;
 	}
 	else
 	{
-		if (!get_state(eStateAttack_MoveToHomePoint)->check_completion())
+		if (!this->get_state(eStateAttack_MoveToHomePoint)->check_completion())
 			return true;
 	}
 
@@ -222,16 +222,16 @@ bool CStateMonsterAttackAbstract::check_home_point()
 TEMPLATE_SPECIALIZATION
 bool CStateMonsterAttackAbstract::check_run_attack_state()
 {
-	if (!object->ability_run_attack()) return false;
+	if (!this->object->ability_run_attack()) return false;
 
-	if (prev_substate == eStateAttack_Run)
+	if (this->prev_substate == eStateAttack_Run)
 	{
-		if (get_state(eStateAttack_RunAttack)->check_start_conditions())
+		if (this->get_state(eStateAttack_RunAttack)->check_start_conditions())
 			return true;
 	}
-	else if (prev_substate == eStateAttack_RunAttack)
+	else if (this->prev_substate == eStateAttack_RunAttack)
 	{
-		if (!get_state(eStateAttack_RunAttack)->check_completion())
+		if (!this->get_state(eStateAttack_RunAttack)->check_completion())
 			return true;
 	}
 

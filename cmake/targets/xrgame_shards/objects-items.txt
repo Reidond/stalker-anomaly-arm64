@@ -98,7 +98,6 @@ xrGame/HudSound.cpp
 xrGame/HudSound.h
 xrGame/InfoDocument.cpp
 xrGame/InfoDocument.h
-xrGame/ini_table_loader.h
 xrGame/Inventory.cpp
 xrGame/Inventory.h
 xrGame/inventory_item.cpp
@@ -136,7 +135,6 @@ xrGame/Needles.cpp
 xrGame/Needles.h
 xrGame/PDA.cpp
 xrGame/PDA.h
-xrGame/pda_space.h
 xrGame/PdaMsg.h
 xrGame/physic_item.cpp
 xrGame/physic_item.h

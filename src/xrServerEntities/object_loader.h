@@ -46,7 +46,7 @@ struct CLoader
 		template <>
 		IC static void load_data<true>(T& data, M& stream, const P& p)
 		{
-			CLoader<M, P>::load_data(*(data = xr_new<object_type_traits::remove_pointer<T>::type>()), stream, p);
+			CLoader<M, P>::load_data(*(data = xr_new<typename object_type_traits::remove_pointer<T>::type>()), stream, p);
 		}
 	};
 
@@ -155,11 +155,11 @@ struct CLoader
 	template <typename T1, typename T2>
 	IC static void load_data(std::pair<T1, T2>& data, M& stream, const P& p)
 	{
-		if (p(data, const_cast<object_type_traits::remove_const<T1>::type&>(data.first), true))
+		if (p(data, const_cast<typename object_type_traits::remove_const<T1>::type&>(data.first), true))
 		{
 			const bool value = object_type_traits::is_same<T1, LPCSTR>::value;
 			VERIFY(!value);
-			load_data(const_cast<object_type_traits::remove_const<T1>::type&>(data.first), stream, p);
+			load_data(const_cast<typename object_type_traits::remove_const<T1>::type&>(data.first), stream, p);
 		}
 		if (p(data, data.second, false))
 			load_data(data.second, stream, p);

@@ -32,7 +32,7 @@ free from ModDB.
 
 | Area | Approach | Doc |
 |---|---|---|
-| Engine | `src/`, the [xray-monolith](https://github.com/themrdemonized/xray-monolith) engine ("Modded Exes"), hard-forked. Port changes sit behind platform guards (`XR_PLATFORM_APPLE`), so the Windows code stays intact. | [XRCORE.md](docs/ios-port/XRCORE.md) |
+| Engine | `src/`, the [xray-monolith](https://github.com/themrdemonized/xray-monolith) engine ("Modded Exes"), hard-forked. Port changes sit behind platform guards (`XR_PLATFORM_APPLE`), so the Windows code stays intact. | [XRCORE.md](docs/ios-port/XRCORE.md), [XRGAME-SHARDS.md](docs/ios-port/XRGAME-SHARDS.md) |
 | Graphics | Anomaly's DX11 renderer is kept and runs on a D3D11 subset implemented on Metal (`src/Platform/MetalD3D11`). | [METAL-SHIM.md](docs/ios-port/METAL-SHIM.md) |
 | Shaders | Translated at runtime with an on-disk cache, so addon shaders keep working (`src/Platform/ShaderXlat`). The pipeline is HLSL → vkd3d-shader → SPIR-V → SPIRV-Cross → MSL. | [SHADERS.md](docs/ios-port/SHADERS.md) |
 | Controls | `src/Platform/GameInput`, over SDL3 and GameController. | [CONTROLS.md](docs/ios-port/CONTROLS.md) |

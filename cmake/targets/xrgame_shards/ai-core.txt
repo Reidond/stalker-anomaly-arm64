@@ -96,11 +96,8 @@ xrGame/debug_text_tree.h
 xrGame/debug_text_tree_inline.h
 xrGame/detail_path_builder.h
 xrGame/detail_path_manager.cpp
-xrGame/detail_path_manager.h
 xrGame/detail_path_manager_inline.h
 xrGame/detail_path_manager_smooth.cpp
-xrGame/detail_path_manager_space.h
-xrGame/doors.h
 xrGame/doors_actor.cpp
 xrGame/doors_actor.h
 xrGame/doors_door.cpp
@@ -119,9 +116,7 @@ xrGame/enemy_manager.cpp
 xrGame/enemy_manager.h
 xrGame/enemy_manager_inline.h
 xrGame/game_location_selector.h
-xrGame/game_location_selector_inline.h
 xrGame/game_path_manager.h
-xrGame/game_path_manager_inline.h
 xrGame/hit_memory_manager.cpp
 xrGame/hit_memory_manager.h
 xrGame/hit_memory_manager_inline.h
@@ -131,7 +126,6 @@ xrGame/level_location_selector.h
 xrGame/level_location_selector_inline.h
 xrGame/level_path_builder.h
 xrGame/level_path_manager.h
-xrGame/level_path_manager_inline.h
 xrGame/location_manager.cpp
 xrGame/location_manager.h
 xrGame/location_manager_inline.h
@@ -146,7 +140,6 @@ xrGame/member_order.h
 xrGame/member_order_inline.h
 xrGame/memory_manager.cpp
 xrGame/memory_manager.h
-xrGame/memory_manager_inline.h
 xrGame/memory_space.h
 xrGame/memory_space_impl.h
 xrGame/memory_space_script.cpp
@@ -156,7 +149,6 @@ xrGame/movement_manager_impl.h
 xrGame/movement_manager_level.cpp
 xrGame/movement_manager_patrol.cpp
 xrGame/movement_manager_physic.cpp
-xrGame/movement_manager_space.h
 xrGame/moving_object.cpp
 xrGame/moving_object.h
 xrGame/moving_object_inline.h
@@ -178,9 +170,7 @@ xrGame/object_handler_planner_impl.h
 xrGame/object_handler_planner_inline.h
 xrGame/object_handler_planner_missile.cpp
 xrGame/object_handler_planner_weapon.cpp
-xrGame/object_handler_space.h
 xrGame/object_manager.h
-xrGame/object_manager_inline.h
 xrGame/object_property_evaluators.cpp
 xrGame/object_property_evaluators.h
 xrGame/object_property_evaluators_inline.h
@@ -191,7 +181,6 @@ xrGame/operator_condition_inline.h
 xrGame/patrol_path_manager.cpp
 xrGame/patrol_path_manager.h
 xrGame/patrol_path_manager_inline.h
-xrGame/patrol_path_manager_space.h
 xrGame/property_evaluator.h
 xrGame/property_evaluator_inline.h
 xrGame/property_evaluator_script.cpp
@@ -226,7 +215,6 @@ xrGame/sight_control_action_inline.h
 xrGame/sight_manager.cpp
 xrGame/sight_manager.h
 xrGame/sight_manager_inline.h
-xrGame/sight_manager_space.h
 xrGame/sight_manager_target.cpp
 xrGame/smart_cover.cpp
 xrGame/smart_cover.h
@@ -249,7 +237,6 @@ xrGame/smart_cover_object_script.cpp
 xrGame/smart_cover_storage.cpp
 xrGame/smart_cover_storage.h
 xrGame/smart_cover_transition.cpp
-xrGame/smart_cover_transition.hpp
 xrGame/smart_cover_transition_animation.cpp
 xrGame/smart_cover_transition_animation.hpp
 xrGame/smart_cover_transition_animation_inline.hpp
@@ -257,7 +244,6 @@ xrGame/sound_collection_storage.cpp
 xrGame/sound_collection_storage.h
 xrGame/sound_collection_storage_inline.h
 xrGame/sound_memory_manager.cpp
-xrGame/sound_memory_manager.h
 xrGame/sound_memory_manager_inline.h
 xrGame/sound_player.cpp
 xrGame/sound_player.h

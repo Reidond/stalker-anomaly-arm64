@@ -173,6 +173,8 @@ xrGame/profile_store.cpp
 xrGame/profile_store.h
 xrGame/profile_store_script.cpp
 xrGame/queued_async_method.h
+xrGame/RegistryFuncs.cpp
+xrGame/RegistryFuncs.h
 xrGame/reward_event_generator.cpp
 xrGame/reward_event_generator.h
 xrGame/reward_event_handler.h
