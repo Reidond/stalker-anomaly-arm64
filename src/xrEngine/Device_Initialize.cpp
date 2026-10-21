@@ -7,7 +7,9 @@
 # include "engine_impl.hpp"
 #endif // #ifdef INGAME_EDITOR
 
+#ifndef XR_PLATFORM_APPLE
 extern LRESULT CALLBACK WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
+#endif
 
 #ifdef INGAME_EDITOR
 void CRenderDevice::initialize_editor()
@@ -46,6 +48,19 @@ PROTECT_API void CRenderDevice::Initialize()
 #endif // #ifdef INGAME_EDITOR
 
 	// Unless a substitute hWnd has been specified, create a window to render into
+#ifdef XR_PLATFORM_APPLE
+	// The window is an SDL3 window and m_hWnd is its SDL_Window* (xr_window.h)
+	if (m_hWnd == NULL)
+	{
+		R_ASSERT2(xr_window::Create("S.T.A.L.K.E.R.: Anomaly", 1280, 720), "Cannot create the game window");
+		m_hWnd = xr_window::Handle();
+	}
+
+	// Save window properties
+	m_dwWindowStyle = 0;
+	GetWindowRect(m_hWnd, &m_rcWindowBounds);
+	GetClientRect(m_hWnd, &m_rcWindowClient);
+#else
 	if (m_hWnd == NULL)
 	{
 		const char* wndclass = "_XRAY_1.5";
@@ -81,6 +96,7 @@ PROTECT_API void CRenderDevice::Initialize()
 	m_dwWindowStyle = GetWindowLong(m_hWnd, GWL_STYLE);
 	GetWindowRect(m_hWnd, &m_rcWindowBounds);
 	GetClientRect(m_hWnd, &m_rcWindowClient);
+#endif // XR_PLATFORM_APPLE
 
 	/*
 	if (strstr(lpCmdLine,"-gpu_sw")!=NULL) HW.Caps.bForceGPU_SW = TRUE;

@@ -6,6 +6,7 @@
 #include "render.h"
 #include "dedicated_server_only.h"
 #include "../xrcdb/xrxrc.h"
+#include "MonitorList.h"
 
 //#include "securom_api.h"
 
@@ -181,6 +182,10 @@ PROTECT_API void CRenderDevice::Create()
 		psCurrentVidMode[1] = h;
 	}
 
+#ifdef XR_PLATFORM_APPLE
+	xr_window::SetMode(xr_window::Mode(g_screenmode), psCurrentVidMode[0], psCurrentVidMode[1],
+	                   xr_display_from_monitor(GetStartupMonitor()));
+#else
 	DWORD style;
 	if (g_screenmode == 0)
 	{
@@ -195,6 +200,7 @@ PROTECT_API void CRenderDevice::Create()
 
 	SetWindowLongPtr(m_hWnd, GWL_STYLE, style);
 	SetWindowPos(m_hWnd, HWND_TOP, monX, monY, w, h, SWP_FRAMECHANGED);
+#endif
 
 	Statistic = xr_new<CStats>();
 #ifdef DEBUG

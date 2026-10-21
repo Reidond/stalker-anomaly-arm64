@@ -11,6 +11,10 @@
 
 #include "dedicated_server_only.h"
 #include "no_single.h"
+#ifdef XR_PLATFORM_APPLE
+// TODO(shim): REFIID is requested for Common/PlatformApple.inl (shim-requests.md); xrNetServer/net_shared.h names it.
+typedef const GUID& REFIID;
+#endif
 #include "../xrNetServer/NET_AuthCheck.h"
 
 #include "xr_input.h"
@@ -21,19 +25,25 @@
 #include "resource.h"
 #include "LightAnimLibrary.h"
 #include "../xrcdb/ispatial.h"
-#include "Text_Console.h"
+#ifndef XR_PLATFORM_APPLE
+# include "Text_Console.h"
+#endif
 #include <process.h>
 #include <locale.h>
 
-#include <unicode\unistr.h>
-#include <unicode\ucnv.h>
-#include <discord\discord.h>
+#ifdef XR_USE_DISCORD
+# include <unicode\unistr.h>
+# include <unicode\ucnv.h>
+# include <discord\discord.h>
+#endif
 #include "../xrCore/profiler.h"
 
 #include "xrSash.h"
 #include "MonitorList.h"
 
+#ifndef XR_PLATFORM_APPLE
 extern "C" void XR_EARLY_INIT();
+#endif
 
 //#include "securom_api.h"
 
@@ -57,11 +67,13 @@ XRCORE_API u32 build_id;
 
 
 //Discord
+#ifdef XR_USE_DISCORD
 discord::Core* discord_core{};
 discord::Activity discordPresence{};
 static int64_t StartTime;
 bool use_discord = true;
 #pragma comment(lib, "discord_game_sdk.lib")
+#endif
 rpc_info discord_gameinfo;
 rpc_strings discord_strings;
 float discord_update_rate = .5f;
@@ -155,7 +167,9 @@ struct _SoundProcessor : public pureFrame
 //////////////////////////////////////////////////////////////////////////
 // global variables
 ENGINE_API CApplication* pApp = NULL;
+#ifndef XR_PLATFORM_APPLE
 static HWND logoWindow = NULL;
+#endif
 
 int doLauncher();
 void doBenchmark(LPCSTR name);
@@ -345,6 +359,28 @@ void CheckPrivilegySlowdown()
 #endif // DEBUG
 }
 
+#ifndef XR_USE_DISCORD
+// Without the Discord glue there is no ICU: convert Windows-1251 to UTF-8 through the platform layer.
+LPCSTR xr_ToUTF8(LPCSTR input, int max_length)
+{
+	static std::string g;
+	const int wlen = MultiByteToWideChar(1251, 0, input, -1, nullptr, 0);
+	if (wlen <= 0)
+		return input;
+	std::vector<wchar_t> wide(wlen);
+	MultiByteToWideChar(1251, 0, input, -1, wide.data(), wlen);
+	const int ulen = WideCharToMultiByte(65001, 0, wide.data(), -1, nullptr, 0, nullptr, nullptr);
+	if (ulen <= 0)
+		return input;
+	g.resize(ulen);
+	WideCharToMultiByte(65001, 0, wide.data(), -1, &g[0], ulen, nullptr, nullptr);
+	g.resize(_min(int(strlen(g.c_str())), max_length));
+	return g.c_str();
+}
+
+void updateDiscordPresence() {}
+void clearDiscordPresence() {}
+#else // XR_USE_DISCORD
 LPCSTR xr_ToUTF8(LPCSTR input, int max_length)
 {
 	UErrorCode errorCode = U_ZERO_ERROR;
@@ -574,8 +610,11 @@ void clearDiscordPresence()
 	if (discord_core)
 		discord_core->ActivityManager().ClearActivity([](discord::Result result) {});
 }
+#endif // XR_USE_DISCORD
 
-void Startup()
+// Everything between "the engine is initialized" and the main loop. Startup() runs it and the loop on Windows; the
+// Apple entry point (below) runs the halves from its own SDL loop.
+static void Startup_Create()
 {
 #ifndef DEDICATED_SERVER
 	fill_vid_monitor_list();
@@ -642,12 +681,16 @@ void Startup()
 	g_SpatialSpace = xr_new<ISpatial_DB>();
 	g_SpatialSpacePhysic = xr_new<ISpatial_DB>();
 
+#ifndef XR_PLATFORM_APPLE
 	// Destroy LOGO
 	DestroyWindow(logoWindow);
 	logoWindow = NULL;
+#endif
 
+#ifdef XR_USE_DISCORD
 	//Discord Rich Presence - Rezy
 	Init_Discord();
+#endif
 
 	//Reshade
 	use_reshade = init_reshade();
@@ -659,11 +702,14 @@ void Startup()
 	// Main cycle
 	Msg("* [x-ray]: Starting Main Loop");
 	Memory.mem_usage();
+}
 
-	Device.Run();
-
+static void Startup_Destroy()
+{
 	// Discord
+#ifdef XR_USE_DISCORD
 	clearDiscordPresence();
+#endif
 
 	//Reshade
 	if (use_reshade)
@@ -702,6 +748,14 @@ void Startup()
 	destroyEngine();
 }
 
+void Startup()
+{
+	Startup_Create();
+	Device.Run();
+	Startup_Destroy();
+}
+
+#ifndef XR_PLATFORM_APPLE
 static INT_PTR CALLBACK logDlgProc(HWND hw, UINT msg, WPARAM wp, LPARAM lp)
 {
 	switch (msg)
@@ -730,6 +784,7 @@ extern "C"
 	// https://gpuopen.com/amdpowerxpressrequesthighperformance/
 	_declspec(dllexport) DWORD AmdPowerXpressRequestHighPerformance = 0x00000001; // PowerXpress or Hybrid Graphics
 }
+#endif // XR_PLATFORM_APPLE
 
 /*
 void test_rtc ()
@@ -798,6 +853,7 @@ IntroDSHOW_wnd (g_hInstance,g_hPrevInstance,"GameData\\Stalker_Intro.avi",g_nCmd
 g_bIntroFinished = TRUE ;
 }
 */
+#ifndef XR_PLATFORM_APPLE
 #define dwStickyKeysStructSize sizeof( STICKYKEYS )
 #define dwFilterKeysStructSize sizeof( FILTERKEYS )
 #define dwToggleKeysStructSize sizeof( TOGGLEKEYS )
@@ -904,6 +960,7 @@ struct damn_keys_filter
 #undef dwStickyKeysStructSize
 #undef dwFilterKeysStructSize
 #undef dwToggleKeysStructSize
+#endif // XR_PLATFORM_APPLE
 
 #include "xr_ioc_cmd.h"
 
@@ -955,6 +1012,7 @@ ENGINE_API bool g_dedicated_server = false;
 
 #endif // DEDICATED_SERVER
 
+#ifndef XR_PLATFORM_APPLE
 int APIENTRY WinMain_impl(HINSTANCE hInstance,
                           HINSTANCE hPrevInstance,
                           char* lpCmdLine,
@@ -1308,6 +1366,9 @@ int APIENTRY WinMain(HINSTANCE hInstance,
 
 	return (0);
 }
+#else // XR_PLATFORM_APPLE
+# include "x_ray_apple.inc"
+#endif // XR_PLATFORM_APPLE
 
 LPCSTR _GetFontTexName(LPCSTR section) { return GetFontTextureName(section); }
 
@@ -1399,7 +1460,11 @@ void CApplication::OnEvent(EVENT E, u64 P1, u64 P2)
 	{
 		g_SASH.EndBenchmark();
 
+#ifdef XR_PLATFORM_APPLE
+		xr_window::RequestQuit();
+#else
 		PostQuitMessage(0);
+#endif
 
 		for (u32 i = 0; i < Levels.size(); i++)
 		{
@@ -1563,6 +1628,11 @@ PROTECT_API void CApplication::LoadDraw()
 
 	if (g_appLoaded) return;
 	Device.dwFrame += 1;
+
+#ifdef XR_PLATFORM_APPLE
+	// Level loading blocks the main thread for many seconds; keep the SDL queue (lifecycle, window, input) moving.
+	xr_window::PumpEvents();
+#endif
 
 
 	if (!Device.Begin()) return;

@@ -103,12 +103,17 @@ void CRenderDevice::Reset(bool precache)
 
 	if (g_screenmode == 1)
 	{
+#ifdef XR_PLATFORM_APPLE
+		xr_window::SetMode(xr_window::Borderless, psCurrentVidMode[0], psCurrentVidMode[1],
+		                   xr_display_from_monitor(GetStartupMonitor()));
+#else
 		u32 w, h;
 		int monX, monY;
 		GetMonitorResolution(w, h);
 		GetMonitorPosition(monX, monY);
 		SetWindowLongPtr(Device.m_hWnd, GWL_STYLE, WS_VISIBLE | WS_POPUP);
 		SetWindowPos(Device.m_hWnd, HWND_TOP, monX, monY, w, h, SWP_FRAMECHANGED);
+#endif
 	}
 
 #ifndef DEDICATED_SERVER

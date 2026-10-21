@@ -1,6 +1,8 @@
 #include "stdafx.h"
 #include "MonitorList.h"
 
+#ifndef XR_PLATFORM_APPLE
+
 bool CRenderDevice::on_message(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, LRESULT& result)
 {
 	switch (uMsg)
@@ -95,3 +97,91 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 
 	return (DefWindowProc(hWnd, uMsg, wParam, lParam));
 }
+#else // XR_PLATFORM_APPLE
+
+// The Apple counterpart of WndProc: SDL events instead of window messages. xr_window::PumpEvents() hands every event
+// here after the registered handlers (input) have seen it.
+#include <SDL3/SDL.h>
+
+void CRenderDevice::on_sdl_event(const SDL_Event& e)
+{
+	SDL_Window* const window = xr_window::Get();
+	switch (e.type)
+	{
+	case SDL_EVENT_QUIT:
+		// macOS Cmd+Q / the dock; on iPadOS the app is going away, the shell's Terminating listener covers that
+		Engine.Event.Defer("KERNEL:disconnect");
+		Engine.Event.Defer("KERNEL:quit");
+		break;
+
+	case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
+		if (!window || e.window.windowID != SDL_GetWindowID(window))
+			break;
+		Engine.Event.Defer("KERNEL:disconnect");
+		Engine.Event.Defer("KERNEL:quit");
+		break;
+
+	case SDL_EVENT_WINDOW_FOCUS_GAINED:
+	case SDL_EVENT_WINDOW_FOCUS_LOST:
+	case SDL_EVENT_WINDOW_MINIMIZED:
+	case SDL_EVENT_WINDOW_RESTORED:
+	case SDL_EVENT_WINDOW_SHOWN:
+	case SDL_EVENT_WINDOW_HIDDEN:
+		{
+			if (!window || e.window.windowID != SDL_GetWindowID(window))
+				break;
+			const SDL_WindowFlags flags = SDL_GetWindowFlags(window);
+#if defined(XR_PLATFORM_IOS)
+			// the shell's pause/resume (OnSystemPause) is the authority on iPadOS; focus only follows it
+			const bool focused = true;
+#else
+			const bool focused = (flags & SDL_WINDOW_INPUT_FOCUS) != 0;
+#endif
+			const bool visible = !(flags & (SDL_WINDOW_MINIMIZED | SDL_WINDOW_HIDDEN));
+			OnAppActive(focused && visible && !m_bSystemPaused);
+			break;
+		}
+
+	case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
+		// A resizable macOS window: follow the new size with the render resolution.
+		if (window && e.window.windowID == SDL_GetWindowID(window) && b_is_Ready &&
+			xr_window::CurrentMode() == xr_window::Windowed &&
+			(u32(e.window.data1) != dwWidth || u32(e.window.data2) != dwHeight))
+		{
+			psCurrentVidMode[0] = u32(e.window.data1);
+			psCurrentVidMode[1] = u32(e.window.data2);
+			m_bResizePending = true;
+		}
+		break;
+
+	case SDL_EVENT_WINDOW_DISPLAY_CHANGED:
+	case SDL_EVENT_DISPLAY_ADDED:
+	case SDL_EVENT_DISPLAY_REMOVED:
+	case SDL_EVENT_DISPLAY_MOVED:
+	case SDL_EVENT_DISPLAY_CURRENT_MODE_CHANGED:
+		__atomic_store_n(&g_monitor_list_dirty, 1, __ATOMIC_SEQ_CST);
+		break;
+	}
+}
+
+void CRenderDevice::OnSystemPause(bool paused)
+{
+	m_bSystemPaused = paused;
+	if (paused)
+		OnAppActive(false);
+	else
+	{
+		SDL_Window* window = xr_window::Get();
+		const SDL_WindowFlags flags = window ? SDL_GetWindowFlags(window) : 0;
+		OnAppActive(window && !(flags & (SDL_WINDOW_MINIMIZED | SDL_WINDOW_HIDDEN)));
+	}
+}
+
+void CRenderDevice::OnMemoryPressure(int level)
+{
+	Msg("* memory pressure: level %d (1 = warning, 2 = critical)", level);
+	// Resources the engine can drop without the renderer's help; the renderer's own caches are its session's business.
+	Memory.mem_compact();
+}
+
+#endif // XR_PLATFORM_APPLE
