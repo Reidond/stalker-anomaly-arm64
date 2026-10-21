@@ -15,6 +15,7 @@
 #include "../../xrEngine/XR_IOConsole.h"
 #include "../../Include/xrAPI/xrAPI.h"
 #include "../xrRender/xrRender_console.h"
+#include "../xrRender/AppleWindow.h"
 
 #include "StateManager\dx10SamplerStateCache.h"
 #include "StateManager\dx10StateCache.h"
@@ -168,7 +169,7 @@ void CHW::CreateD3D()
     m_pOutput     = nullptr;
     m_bUsePerfhud = false;
 
-#ifndef MASTER_GOLD
+#if !defined(MASTER_GOLD) && !defined(XR_PLATFORM_APPLE)
     // Look for 'NVIDIA NVPerfHUD' adapter
     // If it is present, override default settings
     UINT i = 0;
@@ -196,7 +197,11 @@ void CHW::CreateD3D()
 #endif	//	MASTER_GOLD
 
     if (!m_pAdapter) {
-#if defined(USE_DX11)
+#if defined(XR_PLATFORM_APPLE)
+        // one GPU and one display: the Metal shim reports a single adapter with a single output
+        R_CHK(m_pFactory->EnumAdapters1(0, &m_pAdapter));
+        AcquireDefaultOutput();
+#elif defined(USE_DX11)
         SelectAdapterAndOutput(MonitorFromWindow(m_hWnd, MONITOR_DEFAULTTOPRIMARY));
 #elif defined(USE_DX10)
         const HMONITOR hTarget = MonitorFromWindow(m_hWnd, MONITOR_DEFAULTTOPRIMARY);
@@ -583,6 +588,10 @@ void CHW::CreateDevice(HWND hwnd, bool move_window)
     _RELEASE(context);
 
     // create swapchain
+#if defined(XR_PLATFORM_APPLE)
+    // the shim creates the swap chain on the CAMetalLayer of the engine's SDL window
+    R_ASSERT2(xr_apple_window::AttachMetalLayer(m_hWnd), "Can't get a CAMetalLayer for the render window");
+#endif
     R_CHK(m_pFactory->CreateSwapChainForHwnd(pDevice, m_hWnd, &sd, &sd_fullscreen, NULL, &m_pSwapChain));
 
     // setup colorspace
@@ -652,7 +661,11 @@ void CHW::CreateDevice(HWND hwnd, bool move_window)
         FlushLog();
 		MessageBox(NULL, "Failed to initialize graphics hardware.\nPlease try to restart the game.", "Error!",
             MB_OK | MB_ICONERROR);
+#if defined(XR_PLATFORM_APPLE)
+        exit(1);
+#else
         TerminateProcess(GetCurrentProcess(), 0);
+#endif
     };
     R_CHK(R);
 
@@ -799,8 +812,13 @@ void CHW::Reset(HWND hwnd)
 
     if (!bWindowed)
     {
+#if defined(XR_PLATFORM_APPLE)
+        xr_apple_window::Restore(hwnd);
+        xr_apple_window::Raise(hwnd);
+#else
         ShowWindow(hwnd, SW_SHOWNORMAL);
         SetForegroundWindow(hwnd);
+#endif
     }
 
     m_pSwapChain->SetFullscreenState(!bWindowed, bWindowed ? NULL : m_pOutput);
@@ -959,12 +977,21 @@ void CHW::selectResolution(u32& dwWidth, u32& dwHeight, BOOL bWindowed)
     if (psCurrentVidMode[0] == 0 || psCurrentVidMode[1] == 0)
         GetMonitorResolution(psCurrentVidMode[0], psCurrentVidMode[1]);
 
+#if defined(XR_PLATFORM_IOS)
+	// the window always covers the screen: the drawable size is the only resolution there is
+	if (xr_apple_window::GetClientSize(Device.m_hWnd, dwWidth, dwHeight))
+		return;
+#endif
 	if (g_screenmode == 0)
 	{
+#if defined(XR_PLATFORM_APPLE)
+		xr_apple_window::GetClientSize(Device.m_hWnd, dwWidth, dwHeight);
+#else
 		RECT clientRect;
 		GetClientRect(Device.m_hWnd, &clientRect);
 		dwWidth = clientRect.right;
 		dwHeight = clientRect.bottom;
+#endif
 	}
 	else if (g_screenmode == 1)
 	{
@@ -1090,7 +1117,11 @@ void CHW::OnAppActivate()
 
 	if (m_pSwapChain && !is_windowed)
 	{
+#if defined(XR_PLATFORM_APPLE)
+        xr_apple_window::Restore(m_hWnd);
+#else
         ShowWindow(m_hWnd, SW_RESTORE);
+#endif
         m_pSwapChain->SetFullscreenState(TRUE, m_pOutput);
 
 #ifdef USE_DX11
@@ -1165,7 +1196,11 @@ void CHW::OnAppDeactivate()
         UpdateViews();
 #endif
 
+#if defined(XR_PLATFORM_APPLE)
+        xr_apple_window::Minimize(m_hWnd);
+#else
         ShowWindow(m_hWnd, SW_MINIMIZE);
+#endif
     }
 }
 
@@ -1184,6 +1219,13 @@ BOOL CHW::support(D3DFORMAT fmt, DWORD type, DWORD usage)
 
 void CHW::updateWindowProps(HWND m_hWnd)
 {
+#if defined(XR_PLATFORM_APPLE)
+    // the cursor and its grab belong to the input layer
+    u32 res_width = psCurrentVidMode[0], res_height = psCurrentVidMode[1];
+    if (g_screenmode != 0 || res_width == 0 || res_height == 0)
+        xr_apple_window::GetDisplaySize(m_hWnd, res_width, res_height);
+    xr_apple_window::ApplyWindowMode(m_hWnd, g_screenmode, res_width, res_height, m_move_window);
+#else
 	//	BOOL	bWindowed				= strstr(Core.Params,"-dedicated") ? TRUE : !psDeviceFlags.is	(rsFullscreen);
     BOOL bWindowed = (g_screenmode != 2);
 
@@ -1255,6 +1297,7 @@ void CHW::updateWindowProps(HWND m_hWnd)
     GetClientRect(m_hWnd, &winRect);
     MapWindowPoints(m_hWnd, nullptr, reinterpret_cast<LPPOINT>(&winRect), 2);
     ClipCursor(&winRect);
+#endif // XR_PLATFORM_APPLE
 }
 
 

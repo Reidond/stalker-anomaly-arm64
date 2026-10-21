@@ -12,6 +12,7 @@
 class CKinematics;
 class CInifile;
 class CBoneData;
+class CSkeletonX; // `friend class` does not declare the name for lookup outside MSVC
 struct SEnumVerticesCallback;
 
 class IRenderable;
