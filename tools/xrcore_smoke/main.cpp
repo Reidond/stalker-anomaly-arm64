@@ -33,10 +33,13 @@ void check(bool ok, const char* what)
 
 void engine_log(LPCSTR line) { printf("    | %s\n", line); }
 
-bool is_dir(const std::string& p)
+bool is_dir(const std::string& native)
 {
+	// resolved through the path layer: "db" may be spelled "DB" on disk
+	string_path virtual_path;
+	xr_virtual_path(native.c_str(), virtual_path, sizeof(virtual_path));
 	struct stat st;
-	return stat(p.c_str(), &st) == 0 && S_ISDIR(st.st_mode);
+	return stat(xr_native_path(virtual_path), &st) == 0 && S_ISDIR(st.st_mode);
 }
 
 void make_dirs(const std::string& path)
@@ -56,7 +59,10 @@ std::string with_trailing_slash(std::string p)
 // fsgame.ltx for the run: the game's own file with $app_data_root$ redirected, plus an explicit $fs_root$.
 bool write_fsgame(const std::string& game_dir, const std::string& run_dir, const std::string& out_path)
 {
-	std::ifstream in(game_dir + "fsgame.ltx");
+	// through the path layer, so a differently-cased fsgame.ltx is found on a case-sensitive volume
+	string_path virtual_path;
+	xr_virtual_path((game_dir + "fsgame.ltx").c_str(), virtual_path, sizeof(virtual_path));
+	std::ifstream in(xr_native_path(virtual_path));
 	if (!in)
 	{
 		printf("cannot read %sfsgame.ltx\n", game_dir.c_str());
