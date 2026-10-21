@@ -2,7 +2,7 @@
 
 set(ANOMALY_EXTERNAL_DIR "${PROJECT_SOURCE_DIR}/external")
 
-foreach(dep SDL openal-soft LuaJIT ogg vorbis theora)
+foreach(dep SDL openal-soft LuaJIT ogg vorbis theora SPIRV-Cross vkd3d)
     if(NOT EXISTS "${ANOMALY_EXTERNAL_DIR}/${dep}/.git")
         message(FATAL_ERROR "external/${dep} is missing; run: git submodule update --init --depth 1 external/${dep}")
     endif()
@@ -45,3 +45,7 @@ include(deps/Theora)
 
 # LuaJIT 2.1: built with its own Makefile; JIT is on for macOS, interpreter-only on iOS by default.
 include(deps/LuaJIT)
+
+# Shader translation (src/Platform/ShaderXlat): HLSL -> SPIR-V (vkd3d-shader), SPIR-V -> MSL (SPIRV-Cross).
+include(deps/SPIRV-Cross)
+include(deps/Vkd3dShader)
