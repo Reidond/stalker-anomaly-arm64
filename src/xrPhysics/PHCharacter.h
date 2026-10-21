@@ -18,10 +18,15 @@ class CElevatorState;
 class CPHActorCharacter;
 class CPHAICharacter;
 
+#ifdef XR_PLATFORM_APPLE
+// an enum without a fixed underlying type cannot be forward declared outside MSVC
+#include "../xrServerEntities/alife_space.h"
+#else
 namespace ALife
 {
 	enum EHitType;
 };
+#endif
 
 static enum EEnvironment
 {
