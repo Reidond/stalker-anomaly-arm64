@@ -242,6 +242,21 @@ struct DIMOUSESTATE2
 	BYTE rgbButtons[8];
 };
 
+// Mouse data offsets (DIMOUSESTATE2 layout), as dinput.h defines them.
+#ifndef DIMOFS_X
+#define DIMOFS_X 0
+#define DIMOFS_Y 4
+#define DIMOFS_Z 8
+#define DIMOFS_BUTTON0 12
+#define DIMOFS_BUTTON1 13
+#define DIMOFS_BUTTON2 14
+#define DIMOFS_BUTTON3 15
+#define DIMOFS_BUTTON4 16
+#define DIMOFS_BUTTON5 17
+#define DIMOFS_BUTTON6 18
+#define DIMOFS_BUTTON7 19
+#endif
+
 #define DIDFT_ALL 0x00000000
 #define DIDFT_AXIS 0x00000003
 #define DIDFT_BUTTON 0x0000000C
