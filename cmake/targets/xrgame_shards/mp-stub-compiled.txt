@@ -1,0 +1,5 @@
+# Sources of the mp-stub shard that ARE compiled while ANOMALY_XRGAME_MULTIPLAYER=OFF (the other multiplayer sources of
+# mp-stub.txt are not). One path per line, relative to src/. Edited by the mp-stub shard; no other file needs to change.
+#   - apple_mp_stubs.cpp: the stand-ins for entry points that single-player code calls.
+#   - a multiplayer source goes here when single-player code turns out to need it (or move its symbols into the stubs).
+xrGame/apple_mp_stubs.cpp
