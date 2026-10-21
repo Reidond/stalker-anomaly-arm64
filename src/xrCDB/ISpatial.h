@@ -134,7 +134,11 @@ public:
 class ISpatial_NODE
 {
 public:
+#ifdef XR_PLATFORM_APPLE
+	typedef uintptr_t ptrt; // `unsigned` is 32 bits here: _empty() would see a child pointer whose low half is zero as null
+#else
 	typedef __w64 unsigned ptrt;
+#endif
 public:
 	ISpatial_NODE* parent; // parent node for "empty-members" optimization
 	ISpatial_NODE* children [8]; // children nodes
