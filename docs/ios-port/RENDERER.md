@@ -137,15 +137,14 @@ Against what R4 calls (see [D3D11-SURFACE.md](D3D11-SURFACE.md)); the rest of ME
 Still open and relevant to R4: `MipLODBias` is ignored (`tf_mipbias` default 0), depth bias units differ from D24, pipeline
 creation is synchronous (the first frame in a new area will hitch; the warm-up numbers below are the cost of one pass), gamma.
 
-### Requests
+### Shim additions (commit `shim: ...`)
 
-The shim owner session was archived, so the D3D9 names and D3DX vector operators R4 needs were sent to the orchestrating session
-instead; `Layers/xrRender/AppleD3D9Gaps.h` carries them meanwhile (marked `TODO(shim)`, skipped once the shim defines
-`XR_D3D9COMPAT_QUERY_RTYPE` and `XR_D3DX9COMPAT_VECTOR_OPS`):
+The shim owner session is archived, so the orchestrating session had this session add the D3D9 names R4 needs to `src/Common`
+itself, in a separate commit (additive, guarded by `XR_D3D9COMPAT_QUERY_RTYPE` / `XR_D3DX9COMPAT_VECTOR_OPS`):
 
-* `src/Common/d3d9compat.h`: `D3DBLEND_SRCCOLOR2 = 16`, `D3DBLEND_INVSRCCOLOR2 = 17`, `D3DRESOURCETYPE` (`D3DRTYPE_TEXTURE`, ...),
+* `d3d9compat.h`: `D3DBLEND_SRCCOLOR2 = 16`, `D3DBLEND_INVSRCCOLOR2 = 17`, `D3DRESOURCETYPE` (`D3DRTYPE_TEXTURE`, ...),
   `D3DQUERYTYPE` (`D3DQUERYTYPE_OCCLUSION`, ...).
-* `src/Common/d3dx9compat.h`: `+ - * /` and compound assignment on `D3DXVECTOR2` and `D3DXVECTOR4`, `float * D3DXVECTOR2/3/4`
+* `d3dx9compat.h`: `+ - * /` and compound assignment on `D3DXVECTOR2` and `D3DXVECTOR4`, `float * D3DXVECTOR2/3/4`
   (`r2_R_sun.cpp`).
 
 ## tools/r4_shader_warmup (task 4)
