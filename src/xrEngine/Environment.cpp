@@ -511,6 +511,9 @@ void CEnvironment::SelectEnvs(float gt)
 	}
 }
 
+#ifdef XR_PLATFORM_APPLE
+# include <mtl_d3d11/mtl_wintypes.h> // IUnknown (no COM here; the Metal D3D11 shim defines the base interface)
+#endif
 int get_ref_count(IUnknown* ii)
 {
 	if (ii)

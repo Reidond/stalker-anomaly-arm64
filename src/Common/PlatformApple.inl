@@ -462,6 +462,9 @@ int MessageBox(HWND window, const char* text, const char* caption, unsigned type
 // Process / thread / environment
 // ---------------------------------------------------------------------------------------------
 const char* GetCommandLine();
+// Replaces the string GetCommandLine() returns (the process argv otherwise). For platforms without a command line:
+// the iPad app reads its flags from Documents/commandline.txt. Call it before Core._initialize.
+void xr_set_command_line(const char* line);
 DWORD GetCurrentThreadId();
 inline DWORD GetCurrentProcessId() { return (DWORD)getpid(); }
 inline HANDLE GetCurrentProcess() { return (HANDLE)(intptr_t)-1; }
@@ -882,6 +885,7 @@ BOOL SetFileAttributes(const char* path, DWORD attr);
 // ---------------------------------------------------------------------------------------------
 typedef const GUID& REFGUID;
 typedef const GUID& REFCLSID;
+typedef const GUID& REFIID; // IID is GUID above; xrNetServer/net_shared.h names REFIID
 inline bool operator==(const GUID& a, const GUID& b) { return memcmp(&a, &b, sizeof(GUID)) == 0; }
 inline bool operator!=(const GUID& a, const GUID& b) { return !(a == b); }
 inline bool IsEqualGUID(const GUID& a, const GUID& b) { return a == b; }

@@ -17,7 +17,9 @@
 #pragma warning(default:4995)
 
 #include "x_ray.h"
-#include "discord\discord.h"
+#ifdef XR_USE_DISCORD
+# include "discord\discord.h"
+#endif
 #include "render.h"
 #include <chrono>
 
@@ -49,8 +51,10 @@ BOOL psLua_ParallelGC = TRUE;
 BOOL psLua_ParallelGC_debug = FALSE;
 int psLua_ParallelGC_CallAmount = 25;
 
+#ifdef XR_USE_DISCORD
 extern discord::Core* discord_core;
 extern bool use_discord;
+#endif
 
 extern Fvector4 ps_ssfx_grass_interactive;
 
@@ -147,10 +151,15 @@ void CRenderDevice::End(void)
 
 			if (g_pGamePersistent->GameType() == 1) //haCk
 			{
+#ifdef XR_PLATFORM_APPLE
+				if (!b_is_Active)
+					Pause(TRUE, TRUE, TRUE, "application start");
+#else
 				WINDOWINFO wi;
 				GetWindowInfo(m_hWnd, &wi);
 				if (wi.dwWindowStatus != WS_ACTIVECAPTION)
 					Pause(TRUE, TRUE, TRUE, "application start");
+#endif
 			}
 		}
 	}
@@ -292,9 +301,14 @@ static void InitMonitor()
 		Msg("! vid_monitor: resolved handle is invalid, using Auto");
 	}
 
+#ifdef XR_PLATFORM_APPLE
+	// the window's display once it exists, the primary one before
+	g_StartupMonitor = xr_monitor_from_display(xr_window::CurrentDisplay());
+#else
 	POINT cursorPos;
 	GetCursorPos(&cursorPos);
 	g_StartupMonitor = MonitorFromPoint(cursorPos, MONITOR_DEFAULTTOPRIMARY);
+#endif
 }
 
 ENGINE_API void ResetStartupMonitor()
@@ -326,11 +340,16 @@ void GetMonitorResolution(u32& horizontal, u32& vertical)
 	}
 	else
 	{
+#ifdef XR_PLATFORM_APPLE
+		horizontal = 1920;
+		vertical = 1080;
+#else
 		RECT desktop;
 		const HWND hDesktop = GetDesktopWindow();
 		GetWindowRect(hDesktop, &desktop);
 		horizontal = desktop.right - desktop.left;
 		vertical = desktop.bottom - desktop.top;
+#endif
 	}
 }
 
@@ -354,6 +373,9 @@ void GetMonitorPosition(int& x, int& y)
 
 float GetMonitorRefresh()
 {
+#ifdef XR_PLATFORM_APPLE
+	return 1.f / xr_window::DisplayRefreshHz(xr_display_from_monitor(g_StartupMonitor));
+#else
 	DEVMODE lpDevMode;
 	memset(&lpDevMode, 0, sizeof(DEVMODE));
 	lpDevMode.dmSize = sizeof(DEVMODE);
@@ -365,6 +387,7 @@ float GetMonitorRefresh()
 	}
 	else
 		return 1.f / lpDevMode.dmDisplayFrequency;
+#endif
 }
 
 extern int ps_framelimiter;
@@ -610,6 +633,11 @@ void CRenderDevice::message_loop()
         return;
     }
 #endif
+#ifdef XR_PLATFORM_APPLE
+	// Blocking form for tools; the app normally calls RunFrame() from SDL_AppIterate instead.
+	while (!xr_window::QuitRequested())
+		RunFrame();
+#else
 	MSG msg;
 	PeekMessage(&msg, NULL, 0U, 0U, PM_NOREMOVE);
 	while (msg.message != WM_QUIT)
@@ -622,8 +650,24 @@ void CRenderDevice::message_loop()
 		}
 		on_idle();
 	}
+#endif
 }
 
+#ifdef XR_PLATFORM_APPLE
+void CRenderDevice::RunFrame()
+{
+	xr_window::PumpEvents();
+	if (m_bResizePending)
+	{
+		m_bResizePending = false;
+		if (b_is_Ready)
+			Reset();
+	}
+	on_idle();
+}
+#endif
+
+#ifdef XR_USE_DISCORD
 void mt_DiscordThread(void*)
 {
 	while (true)
@@ -649,8 +693,16 @@ void mt_DiscordThread(void*)
 		}
 	}
 }
+#endif // XR_USE_DISCORD
 
 void CRenderDevice::Run()
+{
+	RunBegin();
+	message_loop();
+	RunEnd();
+}
+
+void CRenderDevice::RunBegin()
 {
 	// DUMP_PHASE;
 	g_bLoaded = FALSE;
@@ -673,12 +725,17 @@ void CRenderDevice::Run()
 	mt_bMustExit = FALSE;
 	thread_spawn(mt_FreezeThread, "Freeze detecting thread", 0, 0);
 	thread_spawn(mt_Thread, "X-RAY Secondary thread", 0, this);
+#ifdef XR_USE_DISCORD
 	thread_spawn(mt_DiscordThread, "X-RAY Discord thread", 0, 0);
+#endif
 	// Message cycle
 	seqAppStart.Process(rp_AppStart);
 	m_pRender->ClearTarget();
 	SetForegroundWindow(m_hWnd);
-	message_loop();
+}
+
+void CRenderDevice::RunEnd()
+{
 	seqAppEnd.Process(rp_AppEnd);
 	// Stop Balance-Thread
 	mt_bMustExit = TRUE;
@@ -695,7 +752,11 @@ void CRenderDevice::FrameMove()
 {
 	PROF_EVENT();
 
+#ifdef XR_PLATFORM_APPLE
+	if (__atomic_exchange_n(&g_monitor_list_dirty, 0, __ATOMIC_SEQ_CST))
+#else
 	if (InterlockedExchange(&g_monitor_list_dirty, 0))
+#endif
 		refresh_vid_monitor_list();
 
 	dwFrame++;
@@ -829,12 +890,18 @@ bool CRenderDevice::Paused()
 	return g_pauseMngr().Paused();
 }
 
+#ifndef XR_PLATFORM_APPLE
 void CRenderDevice::OnWM_Activate(WPARAM wParam, LPARAM lParam)
 {
 	u16 fActive = LOWORD(wParam);
 	BOOL fMinimized = (BOOL)HIWORD(wParam);
 	BOOL bActive = ((fActive != WA_INACTIVE) && (!fMinimized)) ? TRUE : FALSE;
+	OnAppActive(bActive != FALSE);
+}
+#endif
 
+void CRenderDevice::OnAppActive(bool bActive)
+{
 	if (psDeviceFlags2.test(rsAlwaysActive) && g_screenmode != 2)
 	{
 		Device.b_is_Active = TRUE;

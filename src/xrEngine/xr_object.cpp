@@ -43,7 +43,7 @@ void CObject::MakeMeCrow()
 	u32 const object_frame_id = dwFrame_AsCrow;
 	if (
 		(u32)_InterlockedCompareExchange(
-			(long*)&dwFrame_AsCrow,
+			(volatile LONG*)&dwFrame_AsCrow,
 			device_frame_id,
 			object_frame_id
 		) == device_frame_id

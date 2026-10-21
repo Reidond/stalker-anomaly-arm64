@@ -29,6 +29,7 @@
 #include "../Include/xrRender/FactoryPtr.h"
 #include "../Include/xrRender/RenderDeviceRender.h"
 #include "imgui_base.h"
+#include "xr_window.h"
 
 #ifdef INGAME_EDITOR
 # include "../Include/editor/interfaces.hpp"
@@ -276,6 +277,10 @@ public:
 #endif // #ifdef PROFILE_CRITICAL_SECTIONS
 	{
 		m_hWnd = NULL;
+#ifdef XR_PLATFORM_APPLE
+		m_bSystemPaused = false;
+		m_bResizePending = false;
+#endif
 		b_is_Active = FALSE;
 		b_is_Ready = FALSE;
 		b_hide_cursor = FALSE;
@@ -313,6 +318,8 @@ public:
 	void ConnectToRender();
 	void Create(void);
 	void Run(void);
+	void RunBegin(); // Run() in two halves (the Apple SDL main loop calls them from its own loop): start threads, seqAppStart
+	void RunEnd(); // seqAppEnd, stop the secondary thread
 	void Destroy(void);
 	void Reset(bool precache = true);
 
@@ -472,6 +479,22 @@ public:
 public:
 	void xr_stdcall on_idle();
 	bool xr_stdcall on_message(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, LRESULT& result);
+
+	// The window became active/inactive (WM_ACTIVATE on Windows; focus, minimize and app lifecycle events on Apple)
+	void OnAppActive(bool active);
+
+#ifdef XR_PLATFORM_APPLE
+	// Apple: the SDL main loop drives the engine (RunBegin, then RunFrame per SDL_AppIterate, then RunEnd).
+	void RunFrame(); // pumps the SDL events, then one on_idle()
+	void on_sdl_event(const SDL_Event& event);
+	void SyncActiveState(); // OnAppActive() from the window's own state (visible, focused, not system-paused)
+	// The app went to / came back from the background (AppleShell lifecycle); no GPU work while paused.
+	void OnSystemPause(bool paused);
+	// The OS is short on memory: 1 = warning, 2 = critical.
+	void OnMemoryPressure(int level);
+	bool m_bSystemPaused;
+	bool m_bResizePending;
+#endif
 
 private:
 	void message_loop();

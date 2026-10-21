@@ -1,7 +1,7 @@
 #include "stdafx.h"
 #pragma hdrstop
 
-#ifdef DEBUG
+#ifdef XR_USE_MAILSLOT
 
 static HANDLE hLocalSlot = INVALID_HANDLE_VALUE;
 

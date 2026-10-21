@@ -6,11 +6,14 @@
 #include "..\editors\ECore\stdafx.h"
 #else
 
-#ifndef NDEBUG
+#include "../Common/Platform.h"
+
+// The in-game editor is a Windows DLL (editor.dll); not built on Apple.
+#if !defined(NDEBUG) && !defined(XR_PLATFORM_APPLE)
 # ifndef INGAME_EDITOR
 # define INGAME_EDITOR
 # endif // #ifndef INGAME_EDITOR
-#endif // #ifndef NDEBUG
+#endif // #if !defined(NDEBUG) && !defined(XR_PLATFORM_APPLE)
 
 #ifdef INGAME_EDITOR
 # define _WIN32_WINNT 0x0550
@@ -18,6 +21,17 @@
 
 #include "../xrCore/xrCore.h"
 #include "../Include/xrAPI/xrAPI.h"
+
+// Discord Rich Presence (Discord Game SDK + ICU) is a Windows feature. The Apple build leaves it out unless
+// cmake/targets/xrEngine.cmake is given -DANOMALY_XRENGINE_DISCORD=ON; the game still links against the stubs in x_ray.cpp.
+#if !defined(XR_PLATFORM_APPLE) || defined(ANOMALY_XRENGINE_DISCORD)
+# define XR_USE_DISCORD 1
+#endif
+
+// The debug-build mailslot console (mailSlot.cpp, msParse in EventAPI.cpp) is Windows IPC.
+#if defined(DEBUG) && !defined(XR_PLATFORM_APPLE)
+# define XR_USE_MAILSLOT 1
+#endif
 
 #ifdef _DEBUG
 # define D3D_DEBUG_INFO
