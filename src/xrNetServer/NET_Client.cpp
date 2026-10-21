@@ -49,7 +49,9 @@ const GUID XR_GUID(CLSID_DirectPlay8NATResolver) =
  *
  ****************************************************************************/
 
+#ifndef XR_NET_STUB_TRANSPORT
 typedef REFIID DP8REFIID;
+#endif
 
 
 // {5102DACD-241B-11d3-AEA7-006097B01411}
@@ -110,6 +112,7 @@ const GUID XR_GUID(IID_IDirectPlay8Address) =
 
 static INetLog* pClNetLog = NULL;
 
+#ifndef XR_NET_STUB_TRANSPORT
 void dump_URL(LPCSTR p, IDirectPlay8Address* A)
 {
 	string256 aaaa;
@@ -117,6 +120,7 @@ void dump_URL(LPCSTR p, IDirectPlay8Address* A)
 	R_CHK(A->GetURLA(aaaa,&aaaa_s));
 	Log(p, aaaa);
 }
+#endif
 
 // 
 INetQueue::INetQueue()
@@ -358,6 +362,9 @@ IPureClient::IPureClient(CTimer* timer): net_Statistic(timer)
 	NET = NULL;
 	net_Address_server = NULL;
 	net_Address_device = NULL;
+	net_Connected = EnmConnectionWait;
+	net_Syncronised = FALSE;
+	net_Disconnected = FALSE;
 	device_timer = timer;
 	net_TimeDelta_User = 0;
 	net_Time_LastUpdate = 0;
@@ -381,6 +388,15 @@ BOOL IPureClient::Connect(LPCSTR options)
 
 	if (!psNET_direct_connect)
 	{
+#ifdef XR_NET_STUB_TRANSPORT
+		// Single player (psNET_direct_connect) never gets here; anything else needs a network transport.
+		Msg("! IPureClient::Connect: network connections are not supported on this platform "
+		    "(DirectPlay is Windows-only); refusing to connect to [%s]. Only single player is available.", options);
+		net_Connected = EnmConnectionFails;
+		net_Syncronised = FALSE;
+		OnInvalidHost();
+		return FALSE;
+#else
 		//
 		string256 server_name = "";
 		//	xr_strcpy							(server_name,options);
@@ -755,6 +771,7 @@ BOOL IPureClient::Connect(LPCSTR options)
 		R_CHK			(NET->SetSPCaps(&sp_guid,&sp_caps,0));
 		R_CHK			(NET->GetSPCaps(&sp_guid,&sp_caps,0));
 		*/
+#endif // XR_NET_STUB_TRANSPORT
 	} //psNET_direct_connect
 	// Sync
 	net_TimeDelta = 0;
@@ -763,18 +780,23 @@ BOOL IPureClient::Connect(LPCSTR options)
 
 void IPureClient::Disconnect()
 {
+#ifndef XR_NET_STUB_TRANSPORT
 	if (NET) NET->Close(0);
+#endif
 
 	// Clean up Host _list_
 	net_csEnumeration.Enter();
 	for (u32 i = 0; i < net_Hosts.size(); i++)
 	{
 		HOST_NODE& N = net_Hosts[i];
+#ifndef XR_NET_STUB_TRANSPORT
 		_RELEASE(N.pHostAddress);
+#endif
 	}
 	net_Hosts.clear();
 	net_csEnumeration.Leave();
 
+#ifndef XR_NET_STUB_TRANSPORT
 	// Release interfaces
 	_SHOW_REF("cl_netADR_Server", net_Address_server);
 	_RELEASE(net_Address_server);
@@ -782,6 +804,7 @@ void IPureClient::Disconnect()
 	_RELEASE(net_Address_device);
 	_SHOW_REF("cl_netCORE", NET);
 	_RELEASE(NET);
+#endif
 
 	net_Connected = EnmConnectionWait;
 	net_Syncronised = FALSE;
@@ -789,6 +812,10 @@ void IPureClient::Disconnect()
 
 HRESULT IPureClient::net_Handler(u32 dwMessageType, PVOID pMessage)
 {
+#ifdef XR_NET_STUB_TRANSPORT
+	// Nothing delivers DirectPlay messages on this platform.
+	return S_OK;
+#else
 	// HRESULT     hr = S_OK;
 
 	switch (dwMessageType)
@@ -961,6 +988,7 @@ HRESULT IPureClient::net_Handler(u32 dwMessageType, PVOID pMessage)
 	}
 
 	return S_OK;
+#endif // XR_NET_STUB_TRANSPORT
 }
 
 void IPureClient::OnMessage(void* data, u32 size)
@@ -997,6 +1025,14 @@ void IPureClient::SendTo_LL(void* data, u32 size, u32 dwFlags, u32 dwTimeout)
 		if (pClNetLog)
 			pClNetLog->LogData(timeServer(), data, size);
 	}
+#ifdef XR_NET_STUB_TRANSPORT
+	// No wire: the in-process path (psNET_direct_connect) hands packets to the server directly and never gets here.
+	net_Statistic.dwBytesSended += size;
+	static u32 dropped_logged = 0;
+	if (dropped_logged++ < 8)
+		Msg("! IPureClient::SendTo_LL: no network transport on this platform, dropping %u bytes", size);
+	return;
+#else
 	DPN_BUFFER_DESC desc;
 
 	desc.dwBufferSize = size;
@@ -1023,6 +1059,7 @@ void IPureClient::SendTo_LL(void* data, u32 size, u32 dwFlags, u32 dwTimeout)
 	}
 
 	//	UpdateStatistic();
+#endif // XR_NET_STUB_TRANSPORT
 }
 
 void IPureClient::Send(NET_Packet& packet, u32 dwFlags, u32 dwTimeout)
@@ -1054,6 +1091,7 @@ BOOL IPureClient::net_HasBandwidth()
 		else
 			return FALSE;
 	}
+#ifndef XR_NET_STUB_TRANSPORT
 	else if (0 != psNET_ClientUpdate && (dwTime - net_Time_LastUpdate) > dwInterval)
 	{
 		HRESULT hr;
@@ -1075,11 +1113,15 @@ BOOL IPureClient::net_HasBandwidth()
 		net_Time_LastUpdate = dwTime;
 		return TRUE;
 	}
+#endif // XR_NET_STUB_TRANSPORT
 	return FALSE;
 }
 
 void IPureClient::UpdateStatistic()
 {
+#ifdef XR_NET_STUB_TRANSPORT
+	return; // no connection to query
+#else
 	// Query network statistic for this client
 	DPN_CONNECTION_INFO CI;
 	ZeroMemory(&CI, sizeof(CI));
@@ -1088,10 +1130,14 @@ void IPureClient::UpdateStatistic()
 	if (FAILED(hr)) return;
 
 	net_Statistic.Update(CI);
+#endif // XR_NET_STUB_TRANSPORT
 }
 
 void IPureClient::Sync_Thread()
 {
+#ifdef XR_NET_STUB_TRANSPORT
+	return; // nobody to ping
+#else
 	MSYS_PING clPing;
 
 	//***** Ping server
@@ -1153,6 +1199,7 @@ void IPureClient::Sync_Thread()
 			}
 		}
 	}
+#endif // XR_NET_STUB_TRANSPORT
 }
 
 void IPureClient::Sync_Average()
@@ -1185,7 +1232,13 @@ void IPureClient::net_Syncronize()
 {
 	net_Syncronised = FALSE;
 	net_DeltaArray.clear();
+#ifdef XR_NET_STUB_TRANSPORT
+	// Without a server to ping the time can never be synchronised: fail the waiters in CLevel::Connect2Server.
+	Msg("! IPureClient::net_Syncronize: no network transport on this platform");
+	net_Disconnected = TRUE;
+#else
 	thread_spawn(sync_thread, "network-time-sync", 0, this);
+#endif
 }
 
 void IPureClient::ClearStatistic()
@@ -1198,13 +1251,18 @@ BOOL IPureClient::net_IsSyncronised()
 	return net_Syncronised;
 }
 
+#ifndef XR_NET_STUB_TRANSPORT
 #include <WINSOCK2.H>
 #include <Ws2tcpip.h>
+#endif
 
 bool IPureClient::GetServerAddress(ip_address& pAddress, DWORD* pPort)
 {
 	*pPort = 0;
 	if (!net_Address_server) return false;
+#ifdef XR_NET_STUB_TRANSPORT
+	return false;
+#else
 
 	WCHAR wstrHostname[ 2048 ] = {0};
 	DWORD dwHostNameSize = sizeof(wstrHostname);
@@ -1235,4 +1293,5 @@ bool IPureClient::GetServerAddress(ip_address& pAddress, DWORD* pPort)
 	*pPort = dwPort;
 
 	return true;
+#endif // XR_NET_STUB_TRANSPORT
 };
