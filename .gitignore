@@ -47,3 +47,6 @@ __pycache__/
 # iOS port: CMake build trees and per-user presets (signing team)
 /build/
 /CMakeUserPresets.json
+
+# iOS port: read-only reference checkouts (OpenXRay)
+/reference/
