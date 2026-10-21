@@ -268,7 +268,7 @@ namespace xr_imgui
             return nullptr;
 
         char* lowstring = xr_strdup(name);
-        auto& pair = ImFonts.find(xr_strlwr(lowstring));
+        auto pair = ImFonts.find(xr_strlwr(lowstring));
         xr_free(lowstring);
 
         if (pair != ImFonts.end())
