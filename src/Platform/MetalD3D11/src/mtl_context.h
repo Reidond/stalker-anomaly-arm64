@@ -261,6 +261,9 @@ private:
     id<MTLDepthStencilState> defaultDss_ = nil;
 
     std::unordered_map<PipelineKey, id<MTLRenderPipelineState>, PipelineKeyHash> psoCache_;
+    // pixel shader variants for vertex shaders that do not write every interpolant the pixel shader reads
+    std::unordered_map<uint64_t, id<MTLFunction>> fragmentVariants_;
+    id<MTLFunction> fragmentFunctionFor(VertexShader* vs, PixelShader* ps);
 
     // queries
     Query* activeOcclusion_ = nullptr;

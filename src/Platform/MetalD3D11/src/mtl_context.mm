@@ -869,6 +869,52 @@ void Context::ClearState()
 // ---------------------------------------------------------------------------------------------------------
 // Pipeline state
 // ---------------------------------------------------------------------------------------------------------
+// D3D gives a pixel shader zero for a TEXCOORD the vertex shader never wrote; Metal fails the pipeline instead. The
+// stock set has 9 such vertex/pixel pairs (water_*, model_distort*, the scope lens, ...). The pixel function is rebuilt
+// from its MSL with those inputs declared as zero locals.
+id<MTLFunction> Context::fragmentFunctionFor(VertexShader* vs, PixelShader* ps)
+{
+    if (ps->interpolants.empty() || ps->msl.empty())
+        return ps->fn;
+    const uint64_t key = (vs->id << 32) ^ ps->id;
+    auto it = fragmentVariants_.find(key);
+    if (it != fragmentVariants_.end())
+        return it->second;
+
+    std::vector<Interpolant> missing;
+    for (const Interpolant& in : ps->interpolants)
+    {
+        bool written = false;
+        for (const Interpolant& out : vs->interpolants)
+            if (out.location == in.location)
+            {
+                written = true;
+                break;
+            }
+        if (!written)
+            missing.push_back(in);
+    }
+    id<MTLFunction> fn = ps->fn;
+    if (!missing.empty())
+    {
+        NSError* err = nil;
+        NSString* src = [NSString stringWithUTF8String:PatchFragmentInputs(ps->msl, missing).c_str()];
+        id<MTLLibrary> lib = dev_->newLibraryFromMsl(src, &err);
+        id<MTLFunction> patched = lib ? [lib newFunctionWithName:[NSString stringWithUTF8String:ps->refl.entryPoint.c_str()]] : nil;
+        if (patched)
+        {
+            fn = patched;
+            Log("pixel shader %llu reads %zu interpolant(s) vertex shader %llu does not write (first: location %u); zero-filled",
+                (unsigned long long)ps->id, missing.size(), (unsigned long long)vs->id, missing[0].location);
+        }
+        else
+            Log("pixel shader %llu: patching %zu unwritten input(s) failed: %s", (unsigned long long)ps->id, missing.size(),
+                err ? err.localizedDescription.UTF8String : "?");
+    }
+    fragmentVariants_.emplace(key, fn);
+    return fn;
+}
+
 id<MTLRenderPipelineState> Context::pipeline(MTLPrimitiveTopologyClass cls)
 {
     PipelineKey k;
@@ -917,7 +963,7 @@ id<MTLRenderPipelineState> Context::pipeline(MTLPrimitiveTopologyClass cls)
     MTLRenderPipelineDescriptor* d = [MTLRenderPipelineDescriptor new];
     d.label = [NSString stringWithFormat:@"vs%llu ps%llu", (unsigned long long)k.vs, (unsigned long long)k.ps];
     d.vertexFunction = vs_->fn;
-    d.fragmentFunction = ps_ ? ps_->fn : nil;
+    d.fragmentFunction = ps_ ? fragmentFunctionFor(vs_.get(), ps_.get()) : nil;
     d.rasterSampleCount = pass_.samples;
     d.inputPrimitiveTopology = cls;
 

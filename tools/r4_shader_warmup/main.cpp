@@ -2,7 +2,7 @@
 // pass/fail and timings.
 //
 //   r4_shader_warmup [--game-dir <dir>] [--run-dir <dir>] [--passes N] [--cold] [--jobs N] [--filter <text>]
-//                    [--no-metal] [--no-skin] [--json <file>] [--list] [--strict]
+//                    [--no-metal] [--no-skin] [--json <file>] [--dump-msl <dir>] [--list] [--strict]
 //
 // Why not CRender::shader_compile itself: it is a member of CRender, which needs the whole engine (xrEngine's Device,
 // console, resource manager, ...). docs/ios-port/RENDERER.md lists the 244 symbols the R4 archive still needs from
@@ -299,6 +299,7 @@ struct JobResult
     double ms_macros = 0, ms_compile = 0, ms_reflect = 0, ms_metal = 0;
     bool cache_hit = false;
     size_t msl_bytes = 0;
+    std::shared_ptr<mtl_d3d11::ShaderBlob> blob; // vertex/pixel shaders without skinning, for the pair check
 };
 
 std::string first_line(const std::string& s)
@@ -383,6 +384,7 @@ struct Context
 {
     ID3D11Device* device = nullptr;
     bool metal = true;
+    std::string dump_dir; // --dump-msl: every translated shader's MSL, for inspection
 };
 
 JobResult run_job(const Request& req, const Context& ctx)
@@ -474,6 +476,21 @@ JobResult run_job(const Request& req, const Context& ctx)
     if (errors)
         errors->Release();
     res.msl_bytes = code->GetBufferSize();
+    if (!ctx.dump_dir.empty() || ((req.kind == Kind::Vertex || req.kind == Kind::Pixel) && req.skinning < 0))
+    {
+        auto blob = std::make_shared<mtl_d3d11::ShaderBlob>();
+        if (mtl_d3d11::Deserialize(code->GetBufferPointer(), code->GetBufferSize(), blob.get()))
+        {
+            if (!ctx.dump_dir.empty())
+            {
+                std::string path = ctx.dump_dir + "/" + name + ext_of(req.kind) + ".metal";
+                std::ofstream(path, std::ios::binary).write(reinterpret_cast<const char*>(blob->payload.data()),
+                                                            std::streamsize(blob->payload.size()));
+            }
+            if ((req.kind == Kind::Vertex || req.kind == Kind::Pixel) && req.skinning < 0)
+                res.blob = blob;
+        }
+    }
 
     // D3DReflect + the constant-table expectations
     t = Clock::now();
@@ -616,6 +633,106 @@ void print_failures(const std::vector<JobResult>& results, bool show_missing)
     }
 }
 
+// The vertex/pixel pairs the engine builds: pixel inputs the vertex shader never writes are zero-filled by the shim
+// (Context::fragmentFunctionFor); build the same variant here and let Metal compile it.
+struct PairReport
+{
+    int pairs = 0, with_missing = 0, patched_ok = 0, patched_failed = 0, skipped = 0, stress = 0, stress_failed = 0;
+    std::vector<std::string> notes;
+};
+
+PairReport check_pairs(const std::vector<JobResult>& results, const Requests& found, const Context& ctx)
+{
+    std::map<std::string, std::shared_ptr<mtl_d3d11::ShaderBlob>> vs, ps;
+    for (const JobResult& r : results)
+    {
+        if (!r.blob)
+            continue;
+        (r.request.kind == Kind::Vertex ? vs : ps)[r.request.name] = r.blob;
+    }
+    PairReport rep;
+    // stress test of the patching itself: with the default settings no stock pair needs it, so drop every
+    // interpolant of every pixel shader (and, for a second variant, only the last one) and let Metal compile the result
+    if (ctx.metal)
+        for (const auto& entry : ps)
+        {
+            const std::string psrc(reinterpret_cast<const char*>(entry.second->payload.data()), entry.second->payload.size());
+            const auto ins = mtl_d3d11::ParseInterpolants(psrc, "main0_in");
+            if (ins.empty())
+                continue;
+            for (int variant = 0; variant < 2; ++variant)
+            {
+                std::vector<mtl_d3d11::Interpolant> drop =
+                    variant == 0 ? ins : std::vector<mtl_d3d11::Interpolant>{ins.back()};
+                mtl_d3d11::ShaderBlob patched = *entry.second;
+                const std::string text = mtl_d3d11::PatchFragmentInputs(psrc, drop);
+                patched.payload.assign(text.begin(), text.end());
+                const std::vector<uint8_t> container = mtl_d3d11::Serialize(patched);
+                ID3D11PixelShader* shader = nullptr;
+                ++rep.stress;
+                if (SUCCEEDED(ctx.device->CreatePixelShader(container.data(), container.size(), nullptr, &shader)))
+                    shader->Release();
+                else
+                {
+                    ++rep.stress_failed;
+                    rep.notes.push_back("patch stress failed: " + entry.first + ".ps (" + (variant ? "last input" : "all inputs") + ")");
+                }
+            }
+        }
+    for (const auto& pr : found.pairs)
+    {
+        auto v = vs.find(pr.first);
+        auto p = ps.find(pr.second);
+        if (v == vs.end() || p == ps.end())
+        {
+            ++rep.skipped;
+            continue;
+        }
+        ++rep.pairs;
+        const std::string vsrc(reinterpret_cast<const char*>(v->second->payload.data()), v->second->payload.size());
+        const std::string psrc(reinterpret_cast<const char*>(p->second->payload.data()), p->second->payload.size());
+        const auto outs = mtl_d3d11::ParseInterpolants(vsrc, "main0_out");
+        const auto ins = mtl_d3d11::ParseInterpolants(psrc, "main0_in");
+        std::vector<mtl_d3d11::Interpolant> missing;
+        for (const auto& in : ins)
+        {
+            bool written = false;
+            for (const auto& out : outs)
+                written |= out.location == in.location;
+            if (!written)
+                missing.push_back(in);
+        }
+        if (missing.empty())
+            continue;
+        ++rep.with_missing;
+        std::string note = pr.first + ".vs + " + pr.second + ".ps: " + std::to_string(missing.size()) + " unwritten input(s) at locn";
+        for (const auto& m : missing)
+            note += " " + std::to_string(m.location);
+        if (!ctx.metal)
+        {
+            rep.notes.push_back(note);
+            continue;
+        }
+        mtl_d3d11::ShaderBlob patched = *p->second;
+        const std::string text = mtl_d3d11::PatchFragmentInputs(psrc, missing);
+        patched.payload.assign(text.begin(), text.end());
+        const std::vector<uint8_t> container = mtl_d3d11::Serialize(patched);
+        ID3D11PixelShader* shader = nullptr;
+        if (SUCCEEDED(ctx.device->CreatePixelShader(container.data(), container.size(), nullptr, &shader)))
+        {
+            ++rep.patched_ok;
+            shader->Release();
+            rep.notes.push_back(note + " -> zero-filled variant compiles");
+        }
+        else
+        {
+            ++rep.patched_failed;
+            rep.notes.push_back(note + " -> PATCHED VARIANT FAILED TO COMPILE");
+        }
+    }
+    return rep;
+}
+
 std::string json_escape(const std::string& s)
 {
     std::string o;
@@ -656,6 +773,7 @@ int main(int argc, char** argv)
         else if (a == "--no-metal") ctx.metal = false;
         else if (a == "--no-skin") skin = false;
         else if (a == "--list") list_only = true;
+        else if (a == "--dump-msl") ctx.dump_dir = next();
         else if (a == "--strict") strict = true;
         else
         {
@@ -719,6 +837,9 @@ int main(int argc, char** argv)
         return 0;
     }
 
+    if (!ctx.dump_dir.empty())
+        make_dirs(with_trailing_slash(ctx.dump_dir));
+
     // the translator, with its cache under the run directory
     const std::string cache_dir = run_dir + "cache/xlat";
     if (cold)
@@ -760,8 +881,20 @@ int main(int argc, char** argv)
         print_pass(pass, results, ms_since(t0), shaderxlat_metal::stats());
     }
     print_failures(results, true);
+    const PairReport pairs = check_pairs(results, found, ctx);
+    printf("\nvertex/pixel pairs: %d checked (%d not compiled), %d have pixel inputs the vertex shader does not write",
+           pairs.pairs, pairs.skipped, pairs.with_missing);
+    if (ctx.metal)
+        printf("; zero-filled variants: %d compile, %d fail", pairs.patched_ok, pairs.patched_failed);
+    printf("\n");
+    if (ctx.metal)
+        printf("pixel-input patching stress test: %d variants compiled with Metal, %d failed\n", pairs.stress,
+               pairs.stress_failed);
+    for (const std::string& n : pairs.notes)
+        printf("    %s\n", n.c_str());
 
     int failed = 0, missing = 0;
+    failed += pairs.patched_failed + pairs.stress_failed;
     for (const JobResult& r : results)
     {
         if (r.outcome == Outcome::Missing)
