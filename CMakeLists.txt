@@ -28,3 +28,7 @@ endif()
 add_subdirectory(tools/platform_probe)
 add_subdirectory(src/xrCore)
 add_subdirectory(tools/xrcore_smoke)
+
+# App shell (paths, game-data validation, lifecycle, launcher) and the lab app that exercises it.
+add_subdirectory(src/Platform/Apple)
+add_subdirectory(tools/shell_lab)
