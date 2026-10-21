@@ -1,7 +1,9 @@
 #include "stdafx.h"
 #pragma hdrstop
 
+#ifndef XR_PLATFORM_APPLE
 #include <msacm.h>
+#endif
 
 #include "SoundRender_Core.h"
 #include "SoundRender_Source.h"

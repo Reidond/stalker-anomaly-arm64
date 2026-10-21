@@ -2,6 +2,9 @@
 #pragma hdrstop
 
 #include "SoundRender_CoreA.h"
+#ifdef XR_PLATFORM_APPLE
+#include "SoundRender_Apple.h"
+#endif
 
 XRSOUND_API xr_token* snd_devices_token = NULL;
 XRSOUND_API xr_string snd_device_name;
@@ -10,6 +13,9 @@ void CSound_manager_interface::_create(int stage)
 {
 	if (stage == 0)
 	{
+#ifdef XR_PLATFORM_APPLE
+		xr_sound_apple::prepare();
+#endif
 		SoundRenderA = xr_new<CSoundRender_CoreA>();
 		SoundRender = SoundRenderA;
 		Sound = SoundRender;
