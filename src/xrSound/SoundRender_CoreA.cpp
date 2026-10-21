@@ -41,14 +41,15 @@ namespace soundSmoothingParams {
 	float power = 1.8;
 	int steps = 15;
 	float alpha = getAlpha();
-	IC float getAlpha() {
+	// not inline: Sound.h declares these extern and other translation units call them
+	float getAlpha() {
 		return 2.0f / (steps + 1);
 	}
-	IC float getTimeDeltaSmoothing() {
+	float getTimeDeltaSmoothing() {
 		return alpha;
 		//return min(1.0f, alpha * (Device.fTimeDelta / steps));
 	}
-	IC float getSmoothedValue(float target, float current, float smoothing = getTimeDeltaSmoothing()) {
+	float getSmoothedValue(float target, float current, float smoothing = getTimeDeltaSmoothing()) {
 		return current + smoothing * (target - current);
 	}
 };
@@ -285,6 +286,10 @@ void CSoundRender_CoreA::default_device_changed()
     if (!pDeviceList)
         return;
 
+#ifdef XR_PLATFORM_APPLE
+    // "Default Device" resolves to the device that was the default when the list was built; build it again
+    pDeviceList->Enumerate();
+#endif
     if (pDeviceList->GetNumDevices() == 0)
         return;
 

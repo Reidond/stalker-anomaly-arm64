@@ -36,6 +36,14 @@ void CSoundRender_Core::update(const Fvector& P, const Fvector& D, const Fvector
 		bPendingDefaultDeviceSwitch = FALSE;
 		default_device_changed();
 	}
+#ifdef XR_PLATFORM_APPLE
+	if (bPendingDeviceReopen)
+	{
+		bPendingDeviceReopen = FALSE;
+		refresh_devices(); // the list the old device came from is stale as well
+		switch_device(snd_device_name.c_str());
+	}
+#endif
 
 	bLocked = TRUE;
 	float new_tm = Timer.GetElapsed_sec();

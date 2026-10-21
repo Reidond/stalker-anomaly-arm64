@@ -16,6 +16,9 @@ protected:
 public:
 	volatile BOOL bPendingDefaultDeviceSwitch = FALSE;
 	volatile BOOL bPendingDeviceListRefresh = FALSE;
+#ifdef XR_PLATFORM_APPLE
+	volatile BOOL bPendingDeviceReopen = FALSE; // reopen the selected device, default or not (iOS media services reset)
+#endif
 protected:
 	BOOL bListenerMoved;
 

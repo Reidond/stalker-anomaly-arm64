@@ -99,6 +99,9 @@ public:
 	virtual void set_master_volume(float f);
 
 	virtual const Fvector& listener_position() { return Listener.position; }
+#ifdef XR_PLATFORM_APPLE
+	ALCdevice* al_device() const { return pDevice; }
+#endif
 
 	// EFX listener
 	void set_listener(const CSoundRender_Environment& env);

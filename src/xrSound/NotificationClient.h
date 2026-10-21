@@ -1,4 +1,18 @@
 #pragma once
+#ifdef XR_PLATFORM_APPLE
+// Apple platforms have no IMMNotificationClient. Device changes come from OpenAL Soft (ALC_SOFT_system_events: macOS
+// default output device, device list) and, on iOS, from AVAudioSession (route changes and interruptions). The flags
+// it sets are the same ones the WASAPI client sets. Implemented in SoundRender_Apple.cpp.
+class CNotificationClient
+{
+public:
+    CNotificationClient();
+    ~CNotificationClient();
+
+private:
+    bool m_bSystemEvents;
+};
+#else
 #include <mmdeviceapi.h>
 #include <endpointvolume.h>
 
@@ -47,3 +61,4 @@ private:
     IMMDeviceEnumerator* m_pEnumerator;
     bool m_bComInitialized;
 };
+#endif // XR_PLATFORM_APPLE

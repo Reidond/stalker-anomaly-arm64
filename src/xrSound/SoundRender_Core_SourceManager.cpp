@@ -4,7 +4,9 @@
 #include "SoundRender_Core.h"
 #include "SoundRender_Source.h"
 #include "../xrCore/ScopeLock.hpp"
+#ifndef XR_PLATFORM_APPLE
 #include <tbb/parallel_for_each.h>
+#endif
 
 CSoundRender_Source* CSoundRender_Core::i_create_source(LPCSTR name)
 {
@@ -67,7 +69,14 @@ void CSoundRender_Core::i_create_all_sources()
 		lock.Leave();
 	};
 
+#ifdef XR_PLATFORM_APPLE
+	// no TBB here: GCD over a random-access copy of the (ordered) set
+	xr_vector<FS_File> files;
+	files.assign(flist.begin(), flist.end());
+	xr_parallel_foreach(files.begin(), files.end(), processFile);
+#else
 	tbb::parallel_for_each(flist, processFile);
+#endif
 
 	Msg("Finished creating %d sound sources. Duration: %d ms", s_sources.size() - sizeBefore, T.GetElapsed_ms());
 }
