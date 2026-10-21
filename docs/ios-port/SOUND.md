@@ -112,9 +112,23 @@ decode          : 1.28 ms for 3.13 s of 44100 Hz audio (2443x real time); engine
 3D: source x -8 -> +8, OpenAL position follows (z negated by the engine), no underrun
 ```
 
+Same tool on the iPad Air M3 (iPadOS 27, signed Debug app, bundled sample, default settings because there is no `alsoft.ini`):
+device `CoreAudio Default`, 48 kHz, EFX 1.0 with 2 sends and the engine's EAX slot, 255 mono sources, decode 5.3 ms for 3.13 s,
+2D and 3D phases with the source `AL_PLAYING`, cursor moving, no underrun, 3D position following the moving source; all checks
+passed, exit code 0. The EAX effect is created on the device only with the `MAC_OS_X_VERSION_MIN_REQUIRED` workaround above.
+
 A Debug build is much slower to initialize (4 to 7 s with HRTF on; the device list opens every device and each open builds the
 HRTF filters), so judge start-up from a Release build.
 
 On the iPad the archives are not available. The app bundles `sample.ogg` (written on the Mac with `--dump-ogg`, picked up by
 CMake from `build/<dir>/tools/xrsound_smoke/sample.ogg` or `XRSOUND_SMOKE_BUNDLE_OGG`), lays out a one-file game directory in
-its container and runs the same checks.
+its container and runs the same checks. The signing account is free: CMake takes the bundle suffix from
+`XRSOUND_SMOKE_BUNDLE_SUFFIX` (default `.soundlab`), so a suffix whose profile Xcode already holds can be reused when it
+cannot create a new one; the iPad run above used such a profile and the app was uninstalled afterwards.
+
+## Paths inside the iOS container
+
+Virtual paths are lower case, and the iOS sandbox does not let the resolver list the parents of the app container to find the
+capitals again (`Containers`, the UUID), so `fsgame.ltx` inside the container could not be opened on the iPad. The first
+iPad launch failed with "Cannot open file". `xr_native_path` now restores the spelling of `$HOME` (the container root) before
+resolving the rest (`src/xrCore/Platform/PlatformApple.cpp`, commit "shim: restore the app container's spelling ...").
