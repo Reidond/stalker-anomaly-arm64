@@ -269,7 +269,9 @@ implement `INavigationProvider::FindNeighbor` by walking the visible `CUIWindow`
 ## Verification
 
 Tests, run on both platforms: `gameinput_tests` (macOS, also built under ASan and UBSan) and
-`input_lab --selftest` (the same 624 checks on the iPad). They cover key names, filters, gyro,
+`input_lab --selftest` (the same 624 checks on the iPad; the trigger sweep that follows only finds a
+pad when the app is in front, so launched headless through `devicectl` it reports "no controllers").
+They cover key names, filters, gyro,
 bindings, radial, cursor, feedback, devices, profiles, gameplay and menu input, key capture and the
 adapter order.
 
