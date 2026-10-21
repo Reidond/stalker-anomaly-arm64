@@ -26,3 +26,11 @@
 	path = external/theora
 	url = https://github.com/xiph/theora.git
 	shallow = true
+[submodule "external/vkd3d"]
+	path = external/vkd3d
+	url = https://gitlab.winehq.org/wine/vkd3d.git
+	shallow = true
+[submodule "external/SPIRV-Cross"]
+	path = external/SPIRV-Cross
+	url = https://github.com/KhronosGroup/SPIRV-Cross.git
+	shallow = true

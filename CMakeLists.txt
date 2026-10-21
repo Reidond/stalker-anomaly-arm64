@@ -12,6 +12,8 @@ endif()
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
+enable_testing()
+
 include(AnomalyPlatform)
 include(Dependencies)
 
@@ -38,3 +40,6 @@ add_subdirectory(tools/metal_d3d11_test)
 add_subdirectory(src/Platform/GameInput)
 add_subdirectory(tools/input_lab)
 add_subdirectory(tools/jit_lab)
+add_subdirectory(tools/xrdb_unpack)
+add_subdirectory(src/Platform/ShaderXlat)
+add_subdirectory(tools/shader_batch)
