@@ -101,6 +101,16 @@ set(xrgame_include_dirs
     "${ANOMALY_SRC_DIR}/3rd party/imgui"
     "${ANOMALY_SRC_DIR}/3rd party/cximage"
 )
+# Diagnostics that only restate MSVC-isms the shards are not going to change (hundreds of hits each, no information).
+# Left visible on purpose: -Wnonnull, -Wundefined-bool-conversion, -Wreturn-type, -Wpointer-to-int-cast, -Wformat-security
+# (undefined behaviour or 64-bit truncation that MSVC compiled "as written").
+set(xrgame_compile_options
+    -Wno-unknown-warning-option         # -Wno-class-memaccess & co. in Anomaly::EngineConfig are GCC-only names
+    -Wno-comment                        # `// ... \` and `/*` inside comments
+    -Wno-explicit-specialization-storage-class   # `template <> static T f<true>()` inside a class (CWG 727)
+    -Wno-inline-new-delete -Wno-implicit-exception-spec-mismatch
+    -Wno-macro-redefined -Wno-builtin-macro-redefined -Wno-pragma-once-outside-header
+)
 set(xrgame_link_targets luabind LuaJIT::luajit ode xrAPI xrCDB xrNetServer xrPhysics xrXMLParser)
 
 # One OBJECT library per shard, configured like anomaly_add_module() configures a module.
@@ -126,6 +136,7 @@ foreach(shard IN LISTS XRGAME_SHARDS)
         target_compile_options(${tgt} PRIVATE "SHELL:-iquote \"${dir}\"")
     endforeach()
     target_compile_definitions(${tgt} PRIVATE XRGAME_EXPORTS)
+    target_compile_options(${tgt} PRIVATE ${xrgame_compile_options})
     if(ANOMALY_XRGAME_PCH)
         if(NOT xrgame_pch_owner)
             target_precompile_headers(${tgt} PRIVATE "$<$<COMPILE_LANGUAGE:CXX>:${ANOMALY_SRC_DIR}/xrGame/stdafx.h>")
