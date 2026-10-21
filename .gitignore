@@ -40,3 +40,5 @@ compressor/mod/
 *~
 
 __pycache__/
+# iOS port: local Anomaly game files (downloaded archive and extracted install)
+/game/
