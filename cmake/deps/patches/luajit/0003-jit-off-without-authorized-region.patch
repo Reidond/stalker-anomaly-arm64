@@ -1,0 +1,55 @@
+diff --git a/src/lib_jit.c b/src/lib_jit.c
+index 6e01e37..269f89e 100644
+--- a/src/lib_jit.c
++++ b/src/lib_jit.c
+@@ -24,6 +24,7 @@
+ #if LJ_HASJIT
+ #include "lj_ir.h"
+ #include "lj_jit.h"
++#include "lj_mcode.h"
+ #include "lj_ircall.h"
+ #include "lj_iropt.h"
+ #include "lj_target.h"
+@@ -374,7 +375,7 @@ LJLIB_CF(jit_util_tracemc)
+ {
+   GCtrace *T = jit_checktrace(L);
+   if (T && T->mcode != NULL) {
+-    setstrV(L, L->top-1, lj_str_new(L, (const char *)T->mcode, T->szmcode));
++    setstrV(L, L->top-1, lj_str_new(L, (const char *)LJ_MCW(T->mcode), T->szmcode));
+     setintptrV(L->top++, (intptr_t)(void *)T->mcode);
+     setintV(L->top++, T->mcloop);
+     return 3;
+@@ -735,6 +736,10 @@ static void jit_init(lua_State *L)
+ {
+   jit_State *J = L2J(L);
+   J->flags = jit_cpudetect() | JIT_F_ON | JIT_F_OPT_DEFAULT;
++#if LJ_TXM_DUALMAP
++  /* No authorized code region: stay in the interpreter. */
++  if (!lj_txm_mcode_ready()) J->flags &= ~(uint32_t)JIT_F_ON;
++#endif
+   memcpy(J->param, jit_param_default, sizeof(J->param));
+ #if LJ_TARGET_UNALIGNED
+   G(L)->tmptv.u64 = U64x(0000504d,4d500000);
+diff --git a/src/lj_dispatch.c b/src/lj_dispatch.c
+index 9879a95..1fd7df5 100644
+--- a/src/lj_dispatch.c
++++ b/src/lj_dispatch.c
+@@ -26,6 +26,7 @@
+ #include "lj_ccallback.h"
+ #endif
+ #include "lj_trace.h"
++#include "lj_mcode.h"
+ #include "lj_dispatch.h"
+ #if LJ_HASPROFILE
+ #include "lj_profile.h"
+@@ -266,6 +267,10 @@ int luaJIT_setmode(lua_State *L, int idx, int mode)
+     } else {
+       if (!(mode & LUAJIT_MODE_ON))
+ 	G2J(g)->flags &= ~(uint32_t)JIT_F_ON;
++#if LJ_TXM_DUALMAP
++      else if (!lj_txm_mcode_ready())
++	G2J(g)->flags &= ~(uint32_t)JIT_F_ON;  /* Silently stay off. */
++#endif
+       else
+ 	G2J(g)->flags |= (uint32_t)JIT_F_ON;
+       lj_dispatch_update(g, 0);

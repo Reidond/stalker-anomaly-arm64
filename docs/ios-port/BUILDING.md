@@ -47,3 +47,26 @@ shows:
 - Live DualSense state: buttons, sticks, triggers, gyro and touchpad.
 
 On the controller, Cross triggers rumble and the left stick tints the light bar.
+
+## JIT Lab and the iPad JIT
+
+`tools/jit_lab` is an SDL3 app that runs the LuaJIT benchmarks and a stability run and shows the log
+on screen. It is also how the iPad JIT is tested; see [IPAD-JIT.md](IPAD-JIT.md) for the mechanism and
+how to run it under lldb or StikDebug.
+
+```bash
+# iPad: LuaJIT patched to run its JIT from a debugger-authorized region (off by default)
+cmake --preset ios-arm64-local -DANOMALY_IOS_LUAJIT_JIT=ON
+xcodebuild -project build/ios-arm64/AnomalyPort.xcodeproj -scheme jit_lab \
+  -destination 'generic/platform=iOS' -allowProvisioningUpdates build
+tools/jit_lab/run_ipad.sh detach --exit
+
+# Mac: stock LuaJIT, JIT on. -DANOMALY_LUAJIT_TXM_EMULATE=ON runs the iPad code path (dual-mapped
+# code writer) on the Mac without a debugger, for testing.
+cmake --preset macos-arm64
+cmake --build --preset macos-arm64 --target jit_lab
+build/macos-arm64/tools/jit_lab/jit_lab.app/Contents/MacOS/jit_lab --headless
+```
+
+After changing `ANOMALY_IOS_LUAJIT_JIT` the LuaJIT build copy is recreated from the submodule, so the
+next build recompiles LuaJIT and relinks the apps.

@@ -1,0 +1,701 @@
+diff --git a/src/Makefile b/src/Makefile
+index 0b8c04f..eb0cfca 100644
+--- a/src/Makefile
++++ b/src/Makefile
+@@ -522,7 +522,7 @@ LJCORE_O= lj_assert.o lj_gc.o lj_err.o lj_char.o lj_bc.o lj_obj.o lj_buf.o \
+ 	  lj_lex.o lj_parse.o lj_bcread.o lj_bcwrite.o lj_load.o \
+ 	  lj_ir.o lj_opt_mem.o lj_opt_fold.o lj_opt_narrow.o \
+ 	  lj_opt_dce.o lj_opt_loop.o lj_opt_split.o lj_opt_sink.o \
+-	  lj_mcode.o lj_snap.o lj_record.o lj_crecord.o lj_ffrecord.o \
++	  lj_mcode.o lj_txm.o lj_snap.o lj_record.o lj_crecord.o lj_ffrecord.o \
+ 	  lj_asm.o lj_trace.o lj_gdbjit.o \
+ 	  lj_ctype.o lj_cdata.o lj_cconv.o lj_ccall.o lj_ccallback.o \
+ 	  lj_carith.o lj_clib.o lj_cparse.o \
+diff --git a/src/lj_mcode.c b/src/lj_mcode.c
+index f560a98..6e5dbcc 100644
+--- a/src/lj_mcode.c
++++ b/src/lj_mcode.c
+@@ -41,6 +41,9 @@ void sys_icache_invalidate(void *start, size_t len);
+ /* Synchronize data/instruction cache. */
+ void lj_mcode_sync(void *start, void *end)
+ {
++#if LJ_TXM_DUALMAP
++  if (lj_txm_mcode_sync(start, end)) return;
++#endif
+ #ifdef LUAJIT_USE_VALGRIND
+   VALGRIND_DISCARD_TRANSLATIONS(start, (char *)end-(char *)start);
+ #endif
+@@ -63,7 +66,7 @@ void lj_mcode_sync(void *start, void *end)
+ 
+ #if LJ_HASJIT
+ 
+-#if LUAJIT_SECURITY_MCODE != 0
++#if LUAJIT_SECURITY_MCODE != 0 && !LJ_TXM_DUALMAP
+ /* Protection twiddling failed. Probably due to kernel security. */
+ static LJ_NORET LJ_NOINLINE void mcode_protfail(jit_State *J)
+ {
+@@ -77,7 +80,30 @@ static LJ_NORET LJ_NOINLINE void mcode_protfail(jit_State *J)
+ }
+ #endif
+ 
+-#if LJ_TARGET_WINDOWS
++#if LJ_TXM_DUALMAP
++
++#if LJ_UNWIND_JIT
++#error "TXM dual-mapped mcode does not support external unwind info"
++#endif
++
++/* Areas are carved from the pre-authorized region (lj_txm.c). It stays
++** RX/RW forever, so there is nothing to protect or hint.
++*/
++#define MCPROT_RW	0
++#define MCPROT_RX	0
++#define MCPROT_RWX	0
++
++static void mcode_free(void *p, size_t sz)
++{
++  lj_txm_mcode_free(p, sz);
++}
++
++static void mcode_setprot(jit_State *J, void *p, size_t sz, int prot)
++{
++  UNUSED(J); UNUSED(p); UNUSED(sz); UNUSED(prot);
++}
++
++#elif LJ_TARGET_WINDOWS
+ 
+ #define MCPROT_RW	PAGE_READWRITE
+ #define MCPROT_RX	PAGE_EXECUTE_READ
+@@ -168,7 +194,7 @@ static void mcode_setprot(jit_State *J, void *p, size_t sz, int prot)
+ 
+ #endif
+ 
+-#ifdef LUAJIT_MCODE_TEST
++#if defined(LUAJIT_MCODE_TEST) && !LJ_TXM_DUALMAP
+ /* Test wrapper for mcode allocation. DO NOT ENABLE in production! Try:
+ **   LUAJIT_MCODE_TEST=hhhhhhhhhhhhhhhh luajit -jv main.lua
+ **   LUAJIT_MCODE_TEST=F luajit -jv main.lua
+@@ -213,7 +239,7 @@ static void *mcode_alloc_at_TEST(jit_State *J, uintptr_t hint, size_t sz, int pr
+ 
+ /* -- MCode area protection ----------------------------------------------- */
+ 
+-#if LUAJIT_SECURITY_MCODE == 0
++#if LUAJIT_SECURITY_MCODE == 0 || LJ_TXM_DUALMAP
+ 
+ /* Define this ONLY if page protection twiddling becomes a bottleneck.
+ **
+@@ -261,7 +287,17 @@ static void mcode_protect(jit_State *J, int prot)
+ 
+ /* -- MCode area allocation ----------------------------------------------- */
+ 
+-#ifdef LJ_TARGET_JUMPRANGE
++#if LJ_TXM_DUALMAP
++
++/* All areas live in one region, which is smaller than the branch range. */
++static void *mcode_alloc(jit_State *J, size_t sz)
++{
++  void *p = lj_txm_mcode_alloc(sz);
++  if (!p) lj_trace_err(J, LJ_TRERR_MCODEAL);
++  return p;
++}
++
++#elif defined(LJ_TARGET_JUMPRANGE)
+ 
+ #define MCODE_RANGE64	((1u << LJ_TARGET_JUMPRANGE) - 0x10000u)
+ 
+@@ -376,8 +412,8 @@ static void mcode_allocarea(jit_State *J)
+   J->mcprot = MCPROT_GEN;
+   J->mctop = (MCode *)((char *)J->mcarea + J->szmcarea);
+   J->mcbot = (MCode *)((char *)J->mcarea + sizeof(MCLink));
+-  ((MCLink *)J->mcarea)->next = oldarea;
+-  ((MCLink *)J->mcarea)->size = sz;
++  ((MCLink *)LJ_MCW(J->mcarea))->next = oldarea;
++  ((MCLink *)LJ_MCW(J->mcarea))->size = sz;
+   J->szallmcarea += sz;
+   J->mcbot = (MCode *)lj_err_register_mcode(J->mcarea, sz, (uint8_t *)J->mcbot);
+ }
+@@ -389,8 +425,8 @@ void lj_mcode_free(jit_State *J)
+   J->mcarea = NULL;
+   J->szallmcarea = 0;
+   while (mc) {
+-    MCode *next = ((MCLink *)mc)->next;
+-    size_t sz = ((MCLink *)mc)->size;
++    MCode *next = ((MCLink *)LJ_MCW(mc))->next;
++    size_t sz = ((MCLink *)LJ_MCW(mc))->size;
+     lj_err_deregister_mcode(mc, sz, (uint8_t *)mc + sizeof(MCLink));
+     mcode_free(mc, sz);
+     mc = next;
+@@ -431,7 +467,7 @@ MCode *lj_mcode_patch(jit_State *J, MCode *ptr, int finish)
+     if (J->mcarea == ptr)
+       mcode_protect(J, MCPROT_RUN);
+     else
+-      mcode_setprot(J, ptr, ((MCLink *)ptr)->size, MCPROT_RUN);
++      mcode_setprot(J, ptr, ((MCLink *)LJ_MCW(ptr))->size, MCPROT_RUN);
+     return NULL;
+   } else {
+     uintptr_t base = (uintptr_t)J->mcarea, addr = (uintptr_t)ptr;
+@@ -442,10 +478,10 @@ MCode *lj_mcode_patch(jit_State *J, MCode *ptr, int finish)
+     }
+     /* Otherwise search through the list of MCode areas. */
+     for (;;) {
+-      base = (uintptr_t)(((MCLink *)base)->next);
++      base = (uintptr_t)(((MCLink *)LJ_MCW(base))->next);
+       lj_assertJ(base != 0, "broken MCode area chain");
+-      if (addr >= base && addr < base + ((MCLink *)base)->size) {
+-	mcode_setprot(J, (MCode *)base, ((MCLink *)base)->size, MCPROT_GEN);
++      if (addr >= base && addr < base + ((MCLink *)LJ_MCW(base))->size) {
++	mcode_setprot(J, (MCode *)base, ((MCLink *)LJ_MCW(base))->size, MCPROT_GEN);
+ 	return (MCode *)base;
+       }
+     }
+diff --git a/src/lj_txm.c b/src/lj_txm.c
+new file mode 100644
+index 0000000..b947b9a
+--- /dev/null
++++ b/src/lj_txm.c
+@@ -0,0 +1,464 @@
++/*
++** Pre-authorized, dual-mapped machine code region for Apple TXM devices.
++**
++** Protocol (StikJIT INTEGRATION.md, "universal" script; same on Xcode/lldb
++** with tools/jit_lab/txm_jit_lldb.py):
++**
++**   1. Wait until the debugger is attached (CS_DEBUGGED).
++**   2. mmap an anonymous R-X region (below 64 GiB: StikDebug formats addresses
++**      as 9 hex digits). Placed within branch range of the VM if possible.
++**   3. brk #0xf00d, x16=1, x0=addr, x1=len (in 16 MiB granules). The debugger
++**      writes one byte into each 16 KB page; that write authorizes the page.
++**   4. vm_remap a second, writable alias of the same pages.
++**   5. Execute a tiny function through the RX alias (guarded) to prove it.
++**   6. brk #0xf00d, x16=0: the debugger detaches; the pages stay authorized.
++**
++** LuaJIT writes machine code through the RW alias only (LJ_MCW) and records
++** RX addresses everywhere, so branch offsets are computed for the address the
++** CPU executes.
++*/
++
++#define lj_txm_c
++#define LUA_CORE
++
++#include "lj_obj.h"
++#include "lj_mcode.h"
++#include "luajit_txm.h"
++
++#if LJ_TXM_DUALMAP && LJ_HASJIT
++
++#include "lj_vm.h"
++
++#include <errno.h>
++#include <stdarg.h>
++#include <mach/mach.h>
++#include <mach/mach_time.h>
++#include <pthread.h>
++#include <setjmp.h>
++#include <signal.h>
++#include <stdio.h>
++#include <stdlib.h>
++#include <string.h>
++#include <sys/mman.h>
++#include <unistd.h>
++#include <libkern/OSCacheControl.h>
++
++#define TXM_PAGE	0x4000u
++#define TXM_GRANULE	((size_t)16 << 20)
++#define TXM_DEF_SIZE	((size_t)32 << 20)
++#define TXM_MIN_SIZE	((size_t)4 * TXM_PAGE)
++/* All areas must reach each other with a 26-bit branch (see mcode_setrange). */
++#define TXM_MAX_SIZE	((size_t)120 << 20)
++/* The debugger can only address the first 64 GiB. */
++#define TXM_ADDR_LIMIT	((uintptr_t)1 << 36)
++#define TXM_NEAR_LIMIT	((uintptr_t)127 << 20)
++#define CS_DEBUGGED	0x10000000u
++
++extern int csops(pid_t pid, unsigned int ops, void *useraddr, size_t usersize);
++
++LJ_DATADEF ptrdiff_t lj_mcode_rwdelta = 0;
++
++static struct {
++  luajit_txm_info info;
++  uint8_t *rx, *rw;
++  size_t size;
++  size_t npages;
++  uint8_t *map;			/* One byte per page: 1 = in use. */
++  pthread_mutex_t lock;
++  unsigned flags;
++} R = { { 0 }, NULL, NULL, 0, 0, NULL, PTHREAD_MUTEX_INITIALIZER, 0 };
++
++static pthread_mutex_t txm_init_lock = PTHREAD_MUTEX_INITIALIZER;
++
++static void txm_log(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
++static void txm_log(const char *fmt, ...)
++{
++  va_list ap;
++  if (!(R.flags & LUAJIT_TXM_VERBOSE)) return;
++  fputs("[luajit-txm] ", stderr);
++  va_start(ap, fmt);
++  vfprintf(stderr, fmt, ap);
++  va_end(ap);
++  fputc('\n', stderr);
++  fflush(stderr);
++}
++
++static double txm_now_ms(void)
++{
++  static mach_timebase_info_data_t tb;
++  if (!tb.denom) mach_timebase_info(&tb);
++  return (double)mach_absolute_time() * tb.numer / tb.denom / 1e6;
++}
++
++static int txm_fail(int state, const char *fmt, ...) __attribute__((format(printf, 2, 3)));
++static int txm_fail(int state, const char *fmt, ...)
++{
++  va_list ap;
++  R.info.state = state;
++  va_start(ap, fmt);
++  vsnprintf(R.info.msg, sizeof(R.info.msg), fmt, ap);
++  va_end(ap);
++  txm_log("%s", R.info.msg);
++  return -state;
++}
++
++/* -- Debugger handshake -------------------------------------------------- */
++
++int luajit_txm_debugger_attached(void)
++{
++  uint32_t flags = 0;
++  if (csops(getpid(), 0 /* CS_OPS_STATUS */, &flags, sizeof(flags)) != 0)
++    return 0;
++  return (flags & CS_DEBUGGED) != 0;
++}
++
++#if !defined(LUAJIT_TXM_EMULATE)
++/* The debugger services these. Without one, brk raises an unhandled SIGTRAP. */
++__attribute__((noinline, naked))
++static void *txm_brk_prepare(void *addr __attribute__((unused)),
++			     size_t len __attribute__((unused)))
++{
++  __asm__ volatile("mov x16, #1\n\tbrk #0xf00d\n\tret");
++}
++
++__attribute__((noinline, naked))
++static void txm_brk_detach(void)
++{
++  __asm__ volatile("mov x16, #0\n\tbrk #0xf00d\n\tret");
++}
++#endif
++
++/* Fault net for the brk and for the execute self-test. */
++static sigjmp_buf txm_jmp;
++static volatile sig_atomic_t txm_faulted;
++
++static void txm_fault(int sig)
++{
++  txm_faulted = sig;
++  siglongjmp(txm_jmp, 1);
++}
++
++static const int txm_sigs[4] = { SIGBUS, SIGSEGV, SIGILL, SIGTRAP };
++
++static void txm_guard_on(struct sigaction *old)
++{
++  struct sigaction sa;
++  int i;
++  memset(&sa, 0, sizeof(sa));
++  sa.sa_handler = txm_fault;
++  sigemptyset(&sa.sa_mask);
++  for (i = 0; i < 4; i++) sigaction(txm_sigs[i], &sa, &old[i]);
++  txm_faulted = 0;
++}
++
++static void txm_guard_off(struct sigaction *old)
++{
++  int i;
++  for (i = 0; i < 4; i++) sigaction(txm_sigs[i], &old[i], NULL);
++}
++
++/* Execute `fn` through the RX alias and check its result. */
++static int txm_run_probe(void *fn, int expect)
++{
++  struct sigaction old[4];
++  int ok = 0;
++  txm_guard_on(old);
++  if (sigsetjmp(txm_jmp, 1) == 0)
++    ok = (((int (*)(void))fn)() == expect);
++  txm_guard_off(old);
++  return ok && !txm_faulted;
++}
++
++#if !defined(LUAJIT_TXM_EMULATE)
++/* Ask the debugger to authorize [addr, addr+len). Returns 1 on success. */
++static int txm_authorize(uint8_t *addr, size_t len)
++{
++  struct sigaction old[4];
++  size_t off;
++  int ok = 1;
++  txm_guard_on(old);
++  if (sigsetjmp(txm_jmp, 1) == 0) {
++    /* StikDebug authorizes less than asked for in one call: use granules. */
++    for (off = 0; off < len; off += TXM_GRANULE) {
++      size_t chunk = len - off < TXM_GRANULE ? len - off : TXM_GRANULE;
++      void *r = txm_brk_prepare(addr + off, chunk);
++      if (r != (void *)(addr + off)) { ok = 0; break; }
++    }
++  } else {
++    ok = 0;
++  }
++  txm_guard_off(old);
++  return ok && !txm_faulted;
++}
++#endif
++
++/* -- Region setup -------------------------------------------------------- */
++
++static uintptr_t txm_dist(uintptr_t a, size_t size, uintptr_t vm)
++{
++  return a > vm ? a + size - vm : vm - a;
++}
++
++/* Map the R-X region. Placing it within branch range of the VM lets exit stubs
++** and C calls use direct branches; LuaJIT works without (indirect branches,
++** about 1% slower in the benchmarks), so this is only a preference. The
++** address must be below 64 GiB for the debugger.
++*/
++static uint8_t *txm_map_rx(size_t size, long *near_vm)
++{
++  uintptr_t vm = (uintptr_t)(void *)lj_vm_exit_handler & ~(uintptr_t)(TXM_PAGE-1);
++  void *p;
++  int i;
++  *near_vm = 0;
++  for (i = 1; i <= 8; i++) {  /* The kernel treats the hint as a lower bound. */
++    p = mmap((void *)(vm + (uintptr_t)i * ((size_t)16 << 20)), size,
++	     PROT_READ|PROT_EXEC, MAP_ANON|MAP_PRIVATE, -1, 0);
++    if (p == MAP_FAILED) continue;
++    if ((uintptr_t)p + size <= TXM_ADDR_LIMIT &&
++	txm_dist((uintptr_t)p, size, vm) < TXM_NEAR_LIMIT) {
++      *near_vm = 1;
++      return (uint8_t *)p;
++    }
++    munmap(p, size);
++  }
++  p = mmap((void *)((uintptr_t)1 << 32), size, PROT_READ|PROT_EXEC,
++	   MAP_ANON|MAP_PRIVATE, -1, 0);
++  if (p == MAP_FAILED) return NULL;
++  if ((uintptr_t)p + size > TXM_ADDR_LIMIT) { munmap(p, size); return NULL; }
++  *near_vm = txm_dist((uintptr_t)p, size, vm) < TXM_NEAR_LIMIT;
++  return (uint8_t *)p;
++}
++
++static uint8_t *txm_map_rw(uint8_t *rx, size_t size)
++{
++  vm_address_t rw = 0;
++  vm_prot_t cur = 0, max = 0;
++  kern_return_t kr = vm_remap(mach_task_self(), &rw, size, 0, VM_FLAGS_ANYWHERE,
++			      mach_task_self(), (vm_address_t)rx, FALSE,
++			      &cur, &max, VM_INHERIT_DEFAULT);
++  if (kr != KERN_SUCCESS) return NULL;
++  if (mprotect((void *)rw, size, PROT_READ|PROT_WRITE) != 0) {
++    vm_deallocate(mach_task_self(), rw, size);
++    return NULL;
++  }
++  return (uint8_t *)rw;
++}
++
++/* movz w0, #n; ret */
++static void txm_put_probe(uint8_t *rw, uint8_t *rx, unsigned n)
++{
++  volatile uint32_t *p = (volatile uint32_t *)rw;
++  p[0] = 0x52800000u | (n << 5);
++  p[1] = 0xd65f03c0u;
++  sys_dcache_flush(rw, 8);
++  sys_icache_invalidate(rx, 8);
++}
++
++int luajit_txm_ready(void)
++{
++  return R.info.state == LUAJIT_TXM_READY;
++}
++
++int lj_txm_mcode_ready(void)
++{
++  return R.info.state == LUAJIT_TXM_READY;
++}
++
++void luajit_txm_get_info(luajit_txm_info *info)
++{
++  size_t i, used = 0;
++  pthread_mutex_lock(&R.lock);
++  for (i = 0; i < R.npages; i++) used += R.map[i];
++  R.info.used = used * TXM_PAGE;
++  *info = R.info;
++  pthread_mutex_unlock(&R.lock);
++}
++
++int luajit_txm_init(size_t size, unsigned flags, unsigned wait_ms)
++{
++  uint8_t *rx = NULL, *rw = NULL;
++  double t0;
++  long near_vm = 0;
++  int rc = 0;
++
++  pthread_mutex_lock(&txm_init_lock);
++  if (R.info.state == LUAJIT_TXM_READY) goto done;
++  R.flags = flags;
++  R.info.msg[0] = 0;
++
++  if (size == 0) size = TXM_DEF_SIZE;
++  size = (size + TXM_PAGE - 1) & ~(size_t)(TXM_PAGE - 1);
++  if (size < TXM_MIN_SIZE) size = TXM_MIN_SIZE;
++  if (size > TXM_MAX_SIZE) size = TXM_MAX_SIZE;
++
++  t0 = txm_now_ms();
++#if !defined(LUAJIT_TXM_EMULATE)
++  while (!luajit_txm_debugger_attached()) {
++    if (txm_now_ms() - t0 >= (double)wait_ms) {
++      R.info.wait_ms = txm_now_ms() - t0;
++      rc = txm_fail(LUAJIT_TXM_NO_DEBUGGER, "no debugger attached (waited %u ms)", wait_ms);
++      goto done;
++    }
++    usleep(20000);
++  }
++#else
++  UNUSED(wait_ms);
++#endif
++  R.info.wait_ms = txm_now_ms() - t0;
++  txm_log("debugger attached after %.0f ms; mapping %zu KiB", R.info.wait_ms, size >> 10);
++
++  rx = txm_map_rx(size, &near_vm);
++  if (!rx) {
++    rc = txm_fail(LUAJIT_TXM_MAP_FAILED, "mmap of the R-X region failed (errno %d)", errno);
++    goto done;
++  }
++  txm_log("RX region at %p (%s the VM)", (void *)rx, near_vm ? "near" : "far from");
++
++#if !defined(LUAJIT_TXM_EMULATE)
++  if (!(flags & LUAJIT_TXM_NO_BRK)) {
++    double t1 = txm_now_ms();
++    if (!txm_authorize(rx, size)) {
++      munmap(rx, size);
++      rc = txm_fail(LUAJIT_TXM_HANDSHAKE_FAILED,
++		    "debugger did not authorize the region (signal %d)", (int)txm_faulted);
++      goto done;
++    }
++    R.info.auth_ms = txm_now_ms() - t1;
++    txm_log("authorized %zu KiB in %.0f ms", size >> 10, R.info.auth_ms);
++  }
++#endif
++
++  rw = txm_map_rw(rx, size);
++  if (!rw) {
++    munmap(rx, size);
++    rc = txm_fail(LUAJIT_TXM_MAP_FAILED, "RW alias failed (errno %d)", errno);
++    goto done;
++  }
++  txm_log("RW alias at %p", (void *)rw);
++
++  if (!(flags & LUAJIT_TXM_NO_PROBE)) {
++    /* Execute a tiny function in sampled pages (first, last and 6 in between,
++    ** or all of them): an authorization that stops short would fail here.
++    */
++    size_t npages = size / TXM_PAGE, i, step = (flags & LUAJIT_TXM_PROBE_ALL) ? 1 : npages / 7;
++    int probe_ok = 1;
++    if (step == 0) step = 1;
++    for (i = 0; i < npages && probe_ok; i += step) {
++      txm_put_probe(rw + i * TXM_PAGE, rx + i * TXM_PAGE, 42);
++      probe_ok = txm_run_probe(rx + i * TXM_PAGE, 42);
++    }
++    if (probe_ok) {
++      i = npages - 1;
++      txm_put_probe(rw + i * TXM_PAGE, rx + i * TXM_PAGE, 42);
++      probe_ok = txm_run_probe(rx + i * TXM_PAGE, 42);
++    }
++    if (!probe_ok) {
++      int sig = (int)txm_faulted;
++      vm_deallocate(mach_task_self(), (vm_address_t)rw, size);
++      munmap(rx, size);
++      rc = txm_fail(LUAJIT_TXM_PROBE_FAILED, "page %zu does not execute (signal %d)", i, sig);
++      goto done;
++    }
++    txm_log("execute probe passed");
++  }
++
++#if !defined(LUAJIT_TXM_EMULATE)
++  if (!(flags & LUAJIT_TXM_KEEP_DEBUGGER) && !(flags & LUAJIT_TXM_NO_BRK)) {
++    struct sigaction old[4];
++    txm_guard_on(old);
++    if (sigsetjmp(txm_jmp, 1) == 0) {
++      txm_brk_detach();
++      R.info.detached = 1;
++    }
++    txm_guard_off(old);
++    txm_log("debugger detach %s", R.info.detached ? "requested" : "failed");
++  }
++#endif
++
++  R.rx = rx; R.rw = rw; R.size = size;
++  R.npages = size / TXM_PAGE;
++  free(R.map);
++  R.map = (uint8_t *)calloc(R.npages, 1);
++  if (!R.map) {
++    vm_deallocate(mach_task_self(), (vm_address_t)rw, size);
++    munmap(rx, size);
++    rc = txm_fail(LUAJIT_TXM_MAP_FAILED, "out of memory");
++    goto done;
++  }
++  R.map[0] = 1;  /* First page holds the probe. */
++  R.info.rx = rx; R.info.rw = rw; R.info.size = size; R.info.near_vm = near_vm;
++  lj_mcode_rwdelta = rw - rx;
++  R.info.state = LUAJIT_TXM_READY;
++  snprintf(R.info.msg, sizeof(R.info.msg), "ready: %zu KiB at %p, auth %.0f ms",
++	   size >> 10, (void *)rx, R.info.auth_ms);
++done:
++  pthread_mutex_unlock(&txm_init_lock);
++  return rc;
++}
++
++/* -- Area allocator ------------------------------------------------------ */
++
++void *lj_txm_mcode_alloc(size_t sz)
++{
++  size_t np = (sz + TXM_PAGE - 1) / TXM_PAGE, i, run = 0;
++  void *p = NULL;
++  pthread_mutex_lock(&R.lock);
++  if (R.info.state == LUAJIT_TXM_READY && np > 0) {
++    for (i = 0; i < R.npages; i++) {
++      run = R.map[i] ? 0 : run + 1;
++      if (run == np) {
++	size_t first = i + 1 - np;
++	memset(R.map + first, 1, np);
++	p = R.rx + first * TXM_PAGE;
++	break;
++      }
++    }
++  }
++  pthread_mutex_unlock(&R.lock);
++  return p;
++}
++
++void lj_txm_mcode_free(void *p, size_t sz)
++{
++  size_t np = (sz + TXM_PAGE - 1) / TXM_PAGE;
++  size_t first;
++  if ((uint8_t *)p < R.rx || (uint8_t *)p >= R.rx + R.size) return;
++  first = ((uint8_t *)p - R.rx) / TXM_PAGE;
++  pthread_mutex_lock(&R.lock);
++  if (first + np <= R.npages) memset(R.map + first, 0, np);
++  pthread_mutex_unlock(&R.lock);
++}
++
++/* Sync the caches after writing through the RW alias. Returns 0 for ranges
++** outside the region (the caller then uses the normal path).
++*/
++int lj_txm_mcode_sync(void *start, void *end)
++{
++  uint8_t *s = (uint8_t *)start;
++  size_t len = (size_t)((uint8_t *)end - s);
++  if (R.info.state != LUAJIT_TXM_READY || s < R.rx || s >= R.rx + R.size)
++    return 0;
++  sys_dcache_flush(s + lj_mcode_rwdelta, len);
++  sys_icache_invalidate(s, len);
++  return 1;
++}
++
++#else  /* No TXM support in this build: the API reports it. */
++
++int luajit_txm_init(size_t size, unsigned flags, unsigned wait_ms)
++{
++  UNUSED(size); UNUSED(flags); UNUSED(wait_ms);
++  return -LUAJIT_TXM_UNSUPPORTED;
++}
++
++int luajit_txm_ready(void) { return 0; }
++int luajit_txm_debugger_attached(void) { return 0; }
++
++void luajit_txm_get_info(luajit_txm_info *info)
++{
++  memset(info, 0, sizeof(*info));
++  info->state = LUAJIT_TXM_UNSUPPORTED;
++  strcpy(info->msg, "this LuaJIT build has no TXM support");
++}
++
++#endif
+diff --git a/src/luajit_txm.h b/src/luajit_txm.h
+new file mode 100644
+index 0000000..4475f37
+--- /dev/null
++++ b/src/luajit_txm.h
+@@ -0,0 +1,75 @@
++/*
++** LuaJIT JIT on Apple devices that enforce TXM (iPadOS 26+ on M-series and
++** A15+): public API of the pre-authorized machine code region.
++**
++** On those devices a process cannot make memory executable by itself. An
++** attached debugger has to write to every 16 KB page first. This API reserves
++** one region at startup, asks the debugger to authorize it (the StikDebug
++** "universal" brk #0xf00d protocol, or lldb with tools/jit_lab/txm_jit_lldb.py),
++** and lets LuaJIT carve all of its machine code areas out of it. Without an
++** authorized region the JIT stays off and LuaJIT runs as an interpreter.
++**
++** Call luajit_txm_init() once, before the first luaL_newstate()/luaL_openlibs().
++*/
++
++#ifndef _LUAJIT_TXM_H
++#define _LUAJIT_TXM_H
++
++#include <stddef.h>
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++/* Flags for luajit_txm_init(). */
++#define LUAJIT_TXM_KEEP_DEBUGGER	1u	/* Do not detach the debugger. */
++#define LUAJIT_TXM_NO_PROBE		2u	/* Skip the guarded execute self-test. */
++#define LUAJIT_TXM_NO_BRK		4u	/* Skip the brk handshake (non-TXM). */
++#define LUAJIT_TXM_VERBOSE		8u	/* Log each step to stderr. */
++#define LUAJIT_TXM_PROBE_ALL		16u	/* Execute-test every page, not a sample. */
++
++/* State of the region. */
++enum {
++  LUAJIT_TXM_UNINIT = 0,	/* luajit_txm_init() was not called. */
++  LUAJIT_TXM_READY = 1,		/* Region authorized and verified. */
++  LUAJIT_TXM_NO_DEBUGGER = 2,	/* No debugger attached (CS_DEBUGGED not set). */
++  LUAJIT_TXM_UNSUPPORTED = 3,	/* This LuaJIT build has no TXM support. */
++  LUAJIT_TXM_MAP_FAILED = 4,	/* mmap/vm_remap/mprotect failed. */
++  LUAJIT_TXM_HANDSHAKE_FAILED = 5,	/* The debugger did not service the brk. */
++  LUAJIT_TXM_PROBE_FAILED = 6	/* Region mapped but code does not execute. */
++};
++
++typedef struct luajit_txm_info {
++  int state;			/* LUAJIT_TXM_*. */
++  int detached;			/* The debugger was asked to detach. */
++  void *rx;			/* Executable alias (what LuaJIT records). */
++  void *rw;			/* Writable alias of the same pages. */
++  size_t size;			/* Region size in bytes. */
++  size_t used;			/* Bytes currently handed to LuaJIT. */
++  double wait_ms;		/* Time spent waiting for the debugger. */
++  double auth_ms;		/* Time spent in the authorization handshake. */
++  long near_vm;			/* Region within branch range of the VM? */
++  char msg[160];		/* Human readable reason for the state. */
++} luajit_txm_info;
++
++/* Reserve and authorize a code region of `size` bytes (0 = 32 MiB; clamped to
++** 64 KiB..120 MiB, a multiple of 16 KiB). If no debugger is attached yet, wait
++** up to `wait_ms` for one. Returns 0 on success, else minus the failing state;
++** LuaJIT then runs without its JIT. Safe to call again after a failure.
++*/
++int luajit_txm_init(size_t size, unsigned flags, unsigned wait_ms);
++
++/* 1 if the region is ready and the JIT can be used. */
++int luajit_txm_ready(void);
++
++/* Snapshot of the state, for display. */
++void luajit_txm_get_info(luajit_txm_info *info);
++
++/* True if a debugger is attached to this process (CS_DEBUGGED). */
++int luajit_txm_debugger_attached(void);
++
++#ifdef __cplusplus
++}
++#endif
++
++#endif
