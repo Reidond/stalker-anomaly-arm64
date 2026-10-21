@@ -209,13 +209,94 @@ Defaults, in `Config` (`GameInput/Config.h`). Each has a dotted name for profile
 | `radial` | `hold_seconds` 0.22, `deadzone` 0.45, `sticky` 0.18, `release_grace` 0.30 |
 | `feedback` | `rumble_scale` 1, `trigger_effects` 1, `lightbar` 1, `lightbar_brightness` 0.8 |
 
-## Hooking the layer into the engine
+## Engine input on SDL3 (`CInput`, Apple platforms)
 
-None of this is committed to engine files yet: it belongs to the session that ports `xrEngine` input
-to SDL3. The seam is small.
+`xrEngine`'s `CInput` has two implementations behind the same class: DirectInput in `Xr_input.cpp` (Windows, unchanged) and
+SDL3 in `xr_input_sdl.cpp` (`XR_PLATFORM_APPLE`). Every caller of `pInput` and every `IInputReceiver` keeps compiling. The
+controller layer above is plugged in here, so a pad press is a key event like any other.
 
-**1. Key names.** Append `EnginePadKeyTable(...)` to `keyboards[]` before its `{NULL, 0}` terminator.
-`remap_keys()` fills `key_local_name` from DirectInput; pad keys have no DIK name, so set it from the
+| File | What |
+|---|---|
+| `xr_input_sdl.cpp` | `CInput` on SDL3: events, keyboard, mouse, text input, the controller pump |
+| `xr_input_keymap.{h,cpp}` | `SDL_Scancode` <-> `DIK_*`, key names, `dik_to_text`, UTF-8 <-> Windows-1251. No engine dependencies |
+| `IInputReceiver.{h,cpp}` | new `IR_OnTextInput(const char*)`; `IR_GetMousePos*` read `CInput`'s pointer instead of `GetCursorPos` |
+| `line_edit_control.{h,cpp}` | new `on_text_input(text)`; caps/num lock from `CInput::iGetKeyToggleState`; no keyboard-layout switch |
+| `imgui_base_input.cpp` | pointer released while ImGui has input; typed characters come from `dik_to_text`; code page 1251 |
+| `MonitorList.cpp` | `SDL_GetDisplays` for the `vid_monitor` list; a monitor handle is the `SDL_DisplayID` carried in the pointer (`xr_display_from_monitor` in `xr_window.h`) |
+
+### Frame order
+
+`CInput::OnFrame` = `KeyUpdate()`, `MouseUpdate()`, `PadUpdate()`. Each of the first two reads its SDL events, then
+calls the top receiver (`cbStack.back()`) in the order the DirectInput loop did: edges first, then `Hold` for every
+key or button that is down, then the summed motion and wheel. `PadUpdate()` runs `SdlPadSource::Update(dt)` and
+`gameinput::DispatchFrame` with `CInput` itself as the `IEngineInputSink`.
+
+**Event ownership.** In the engine, `xr_window::PumpEvents()` (engine-core, `xr_window.h`) is the only consumer of the SDL queue. It passes every event to the
+handler `CInput` registers in its constructor (`xr_window::AddEventHandler`, removed in the destructor), which keeps the keyboard, mouse, text and gamepad ones
+and ignores the rest. `CInput` then never polls: `SetEventSourceExternal(true)`, set by that registration, keeps it off the queue. Without `xr_window.h` (tools,
+tests: `XR_INPUT_STANDALONE`) it peeks those event types from the queue itself, or takes events from a host's `HandleEvent`. It owns the `SdlPadSource`, so no one else
+should create one. `OnAppActivate()` / `OnAppDeactivate()` (window focus, from the window layer) reset key state and give the pointer back.
+A level load can leave seconds of events behind: consecutive motion merges and each list keeps the newest 4096.
+
+### Keyboard
+
+SDL scancodes are physical positions, like the DIK codes, so the table (`kTable`, 134 rows) is layout independent and
+translates to the DirectInput numbering, never the other way round: the Lua `DIK_keys`, MCM and `user.ltx` keep working. Every key
+DirectInput names is mapped (letters, digits, function keys to F15, numpad, navigation, media and browser keys, the Japanese and ISO extras); a scancode
+without a DIK number is dropped. Command (`LGUI`/`RGUI`) is `DIK_LWIN`/`DIK_RWIN`, Option is `DIK_LMENU`/`DIK_RMENU`. SDL auto-repeat is ignored: the
+engine makes its own from `Hold`. A release for a key `CInput` never saw pressed (focus came back with the key down) is dropped.
+
+`get_dik_name` names a key after the active layout ("A", ";", a Cyrillic letter) or SDL's name ("Left Shift"), in Windows-1251.
+Alt+F4 still defers `KERNEL:disconnect` and `KERNEL:quit`.
+
+### Mouse and pointer
+
+| Mode | When | Behaviour |
+|---|---|---|
+| Captured (default) | app active, `SetPointerCaptured(true)`, not `unacquire()`d | `SDL_SetWindowRelativeMouseMode`, OS pointer hidden. `SDL_EVENT_MOUSE_MOTION` `xrel/yrel` are summed per frame into whole counts for `IR_OnMouseMove`; the remainder carries to the next frame. A virtual pointer follows the deltas, clamped to the window |
+| Free | `SetPointerCaptured(false)` (ImGui while it has input), app inactive | the OS pointer is visible; `x/y` are the pointer; deltas still arrive |
+
+- **Buttons:** SDL left, right, middle, X1, X2 become engine buttons 0, 1, 2, 3, 4 (`MOUSE_1..`), with `IR_OnMouseHold` each frame.
+- **Wheel:** 120 per notch, DirectInput's unit (consumers use the sign; the HUD-tune mode uses the value). Fractional trackpad scrolls accumulate.
+- **Absolute position:** `iGetAsyncMousePos(p)` returns client pixels, the space of `RDEVICE.clientWidth/Height` (window points scaled to it), so
+  `IR_GetMousePosReal`, `IR_GetMousePosIndependent` and the ImGui code work unchanged. `iSetMousePos(p)` replaces `SetCursorPos`.
+- **UI cursor:** `CUICursor` with `m_b_use_win_cursor == false` adds the deltas to a position in 1024x768 UI units. While
+  `SetUiContext(true)`, `CInput` scales the deltas to UI units (1024 / window width), so the cursor follows the pointer one to one.
+- **Touch** (iPad; SDL turns touches and the Pencil into mouse events): in a dialog (`SetUiContext(true)`) a touch moves the cursor to the finger
+  and a tap is a left click; in the world touches are ignored, so a tap neither turns the view nor fires.
+
+### Text input and the on-screen keyboard
+
+`EnableTextInput(owner, area)` / `DisableTextInput(owner)` start and stop `SDL_StartTextInput` while any owner (a text field,
+passed as `this`; a second field can't unbalance a counter) holds it. On iPad this shows and hides the on-screen keyboard
+(`area`, in client pixels, keeps the field above it). While it is on, characters arrive as `IR_OnTextInput(text)` in Windows-1251 and `dik_to_text`
+returns false, so a hardware keyboard doesn't type everything twice. While it is off, a key press types through
+`dik_to_text` (`SDL_GetKeyFromScancode` with the modifiers, then Windows-1251), like `ToUnicodeEx` did.
+`line_edit_control::on_text_input` inserts at the cursor over the selection and applies the editor mode: nothing when read only, digits and
+signs when number only, no `/ \ : * ? " < > | ^ ( ) [ ] %` for file names, and the buffer size.
+
+### Controller
+
+Created with `CInput`: `pInput->Pad()` is the `gameinput::GameInput` (bindings, tuning, key capture, `feedback()`),
+`pInput->PadSource()` the SDL backend. Per frame:
+
+- Pad keys reach the receiver stack as `IR_OnKeyboardPress/Release/Hold(code)` with the codes from 1200; `iGetAsyncKeyState(code)` answers for them.
+- Right stick and gyro look arrive as `IR_OnMouseMove(dx, dy)`. The layer produces degrees, converted with the actor's own formula,
+  `scale = psMouseSens * psMouseSensScale / 50` radians per count by default (`SetLookRadiansPerCount` replaces it with the live value including FOV and the aim factor),
+  and the vertical `3/4 * psMouseSensVerticalK` and the invert flag are undone, so the layer's degrees per second and invert option hold at any mouse sensitivity.
+- In a dialog (`SetUiContext(true)` also sets the layer's `Menu` context) the stick and touchpad move the cursor as `IR_OnMouseMove` in UI units, buttons are
+  `MOUSE_1/2/3` and modifiers, and the right stick is the wheel (`notches * 120`).
+- `pad_hooks` carries what is not a key: `cursor_jump(ui_x, ui_y)` (D-pad widget jump), `ui_action(0|1)` (previous/next page), `connection(bool)` (pause with a
+  "reconnect the controller" message).
+- `CInput::feedback(s1, s2, t)`, which `CHUDManager::HitMarked` already calls, starts a rumble hit scaled by `max(s1, s2)`.
+
+## Hooks still needed in the engine and the game
+
+`CInput` (above) already does the pump, the look conversion, the pad key codes, the cursor deltas and text input. What is left is
+in files outside the input session, with the call to make in each:
+
+**1. Key names.** Append `EnginePadKeyTable(...)` to `keyboards[]` before its `{NULL, 0}` terminator
+(`xrGame/xr_level_controller.cpp`). `remap_keys()` fills `key_local_name` from `CInput::get_dik_name`; pad keys have no DIK name, so set it from the
 table's `label`.
 
 **2. A pad binding slot.** `_binding::m_keyboard[2]` becomes `[3]`, and the third slot is the pad
@@ -224,38 +305,49 @@ key:
 - `get_binded_action`, `is_binded`, `get_action_dik` and `CCC_Bind`'s conflict loop cover slot 2.
 - Register `CMD2(CCC_Bind, "bind_pad", 2)` and `CMD2(CCC_UnBind, "unbind_pad", 2)`; `CCC_Bind::Save`
   already writes per slot (`m_work_idx`).
+- Mirror every pad bind into the layer: `pInput->Pad()->bindings().Bind(action, key)` (or `Unbind`). The layer only emits keys that are in
+  its own `BindingMap`, which keeps unbound inputs from waking the Lua `level_input.on_key_press` callback; `ClearKeyFilter()` lifts that.
 - `CCC_DefControls` also runs the default pad layout: execute the lines of
   `BindingMap::Default().Serialize()`.
 - The Controls screen gets a third "Gamepad" column: one more `CUIEditKeyBind` per action with
-  `m_bPrimary` replaced by a slot index. Call `GameInput::SetKeyCapture(true/false)` from
+  `m_bPrimary` replaced by a slot index. Call `pInput->Pad()->SetKeyCapture(true/false)` from
   `CUIEditKeyBind::SetEditMode`.
 
-**3. The pump.** After `KeyUpdate()` and `MouseUpdate()` in `CInput::OnFrame`:
+**3. UI focus and context.** `pInput->SetUiContext(bool)` each frame (or when a dialog opens or closes) from `CurrentGameUI()->TopInputReceiver()` needing the
+cursor, or `GetUICursor().IsVisible()`. It switches the layer between Gameplay and Menu, and scales mouse deltas and touch to UI units.
+When a dialog opens, call `pInput->Pad()->SetCursorPosition(GetUICursor().GetCursorPosition())`. Once, at game start, set
+`pInput->pad_hooks`: `cursor_jump` -> `GetUICursor().SetUICursorPosition`, `ui_action` -> the dialog's previous/next tab, `connection(false)` -> `Device.Pause`
+with a "reconnect the controller" message. `m_b_use_win_cursor` must be false on Apple platforms (`CUICursor` uses the deltas, not an OS cursor). For
+D-pad widget navigation, implement `INavigationProvider::FindNeighbor` by walking the visible `CUIWindow` tree and pass it to `Pad()->SetNavigationProvider`.
 
-```cpp
-FrameOutput out = g_pad_source.Update(dt);         // SdlPadSource: polls the active pad, runs GameInput
-DispatchFrame(g_gameinput, out, g_engine_sink, counts_per_degree);
-```
+**4. Look scale.** Without help the pad look uses `psMouseSens`. For the exact figure, call
+`pInput->SetLookRadiansPerCount(scale)` every frame from `CActor` with the `scale` of `CActor::IR_OnMouseMove`
+(`(f_fov / g_fov) * psMouseSens * sens_multiple * psMouseSensScale / 50 / LookFactor`), so the layer's degrees per second hold while zoomed.
+Later, a `CActor::IR_OnPadLook(yaw_deg, pitch_deg)` that calls `cam_Active()->Move` directly would skip the integer rounding.
 
-`g_engine_sink` implements `IEngineInputSink` with one-line forwards: `KeyPress/Release/Hold` call
-`cbStack.back()->IR_OnKeyboardPress/Release/Hold`, `MouseMove` calls `IR_OnMouseMove`, `MouseWheel`
-calls `IR_OnMouseWheel`, `CursorJump` calls `GetUICursor().SetUICursorPosition`, and `PadDisconnected`
-pauses the game (`Device.Pause`) with a "reconnect the controller" message.
-`CInput::iGetAsyncKeyState` returns `GameInput::IsKeyDown(key)` for pad keys, and `COUNT_KB_BUTTONS`
-stays 256 because pad key `Hold` calls come from `DispatchFrame`, not from the `KBState` loop.
+**5. Text fields and the on-screen keyboard.** Nothing calls `EnableTextInput` yet, so on iPad no keyboard appears and a field takes only a hardware keyboard.
+- `CUICustomEdit`: where `m_bInputFocus` becomes true (`OnMouseAction`, `SetKeyboardCapture`) call `pInput->EnableTextInput(this, &rect)` (the field's rectangle in
+  client pixels); where it becomes false (`SendMessage(WINDOW_KEYBOARD_CAPTURE_LOST)`, `press_commit`, `OnFocusLost`) call `DisableTextInput(this)`.
+- `CConsole::Show`/`Hide`: the same, with `this`.
+- Forward `IR_OnTextInput(text)`: `CLevel` and `CMainMenu` -> `CDialogHolder::IR_UIOnTextInput` -> the top dialog -> the window that holds keyboard capture
+  -> `CUICustomEdit` -> `ec().on_text_input(text)`; `CConsole::IR_OnTextInput` -> `m_editor->on_text_input(text)`.
+- ImGui text: `ide::OnFrame` can call `EnableTextInput(this)` while `io.WantTextInput`. Hardware typing works today (the key's character goes to ImGui from `IR_OnKeyboardPress`).
 
-**4. Look scale.** The engine converts counts to radians with the `scale` formula above, so pass
-`counts_per_degree = (pi / 180) / scale` each frame, with the live FOV and sensitivity. Later, a
-`CActor::IR_OnPadLook(yaw_deg, pitch_deg)` that calls `cam_Active()->Move` directly would skip the
-integer rounding.
+**6. Win32 pointer calls** in files outside the input list, to move to `CInput`:
 
-**5. Context.** Each frame set `SetContext(Menu)` while `CurrentGameUI()->TopInputReceiver()` needs the
-cursor (or `GetUICursor().IsVisible()`), else `Gameplay`. When a dialog opens, call
-`SetCursorPosition(GetUICursor().GetCursorPosition())`. `m_b_use_win_cursor` must be false on Apple
-platforms so `CUICursor` uses the deltas instead of an OS cursor. For D-pad widget navigation,
-implement `INavigationProvider::FindNeighbor` by walking the visible `CUIWindow` tree.
+| Now | Use |
+|---|---|
+| `GetCursorPos` + `ScreenToClient` (`XR_IOConsole.cpp:682`, `device.cpp:296`, `xr_ioc_cmd.cpp:871`) | `IInputReceiver::IR_GetMousePosReal(p)` |
+| `SetCursorPos` (`XR_IOConsole.cpp:714`, `UICursor.cpp:135`, `imgui_base.cpp:173`, `Level_input.cpp:140`) | `pInput->iSetMousePos(p)`, or nothing: in captured mode the pointer needs no re-centring |
+| `ShowCursor`, `ClipCursor` (`device.cpp`, `Device_create.cpp`, `Device_destroy.cpp`, `xr_ioc_cmd.cpp`, `MainMenu.cpp`) | `pInput->SetPointerCaptured(bool)`; the window grab is SDL's |
+| `WM_CHAR` -> `ide::InputChar` (`Device_wndproc.cpp`) | not needed: text events reach `IR_OnTextInput` |
+| `WM_ACTIVATE` -> `OnAppActivate/Deactivate` | the same calls from `SDL_EVENT_WINDOW_FOCUS_GAINED/LOST` |
 
-**6. Feedback.** Where the events already exist in `xrGame`:
+**7. The window.** `RDEVICE.m_hWnd` is the `SDL_Window*` (engine-core, `xr_window.h`), which is where `CInput` takes its window from. Its Win32-named
+`GetCursorPos`/`SetCursorPos`/`ClipCursor`/`ShowCursor` shims (drawable pixels, client == screen) keep the files in table 6 compiling; `CInput` owns the relative mouse mode
+itself, so `ShowCursor`/`ClipCursor` calls can stay.
+
+**8. Feedback and weapon trigger profiles.** Where the events already exist in `xrGame`:
 
 | Layer call | Engine source |
 |---|---|
@@ -267,6 +359,24 @@ implement `INavigationProvider::FindNeighbor` by walking the visible `CUIWindow`
 | `SetBlowout` | The emission is script driven (`surge_manager`); expose an engine export the script calls while the blowout runs |
 
 ## Verification
+
+**`xrinput_smoke`** (macOS) drives the real `CInput` without the engine: it compiles `Xr_input.cpp`, `xr_input_sdl.cpp`, `IInputReceiver.cpp`,
+`line_edit_control.cpp` and `xrTheora_Stream.cpp` into its own translation units against a stub `Device`/`Engine`, creates a window with SDL's dummy video
+driver and feeds SDL events (`SDL_PushEvent`) and a virtual DualSense (`SDL_AttachVirtualJoystick`) to a recording `IInputReceiver`. It checks 42 keys
+end to end and the whole scancode table, mouse deltas with their carry, the five buttons, the wheel, the absolute position, the UI-unit and touch behaviour,
+text input and `line_edit_control` in each mode, the pad keys (Cross, the stick as strafe keys, analog look and its degrees per second at two sensitivities, Cross as
+`MOUSE_1` and the stick as cursor in a dialog), rumble from `feedback()`, unplugging and Alt+F4. Then it mounts the real archives (like `xrcore_smoke`) and decodes
+`ui\video_crow.ogm` (32x32, 25 fps, 334 frames) with `CTheoraStream`; the header of each of the 12 `.ogm` files (intro videos up to 1920x1080, 2417 frames) is
+parsed. The shipped data has no `.avi` or `.gif` files.
+
+```bash
+cmake --preset macos-arm64
+cmake --build --preset macos-arm64 --target xrinput_smoke
+build/macos-arm64/tools/xrinput_smoke/xrinput_smoke           # --game-dir <dir> or $ANOMALY_GAME_DIR; --no-video skips the archives
+```
+
+The input and media files also pass `-fsyntax-only` inside the real `xrEngine` target (`-DANOMALY_BUILD_XRENGINE=ON`) for `macos-arm64` and against the iPhoneOS SDK
+(`arm64-apple-ios17.0`). Not checked: the soft keyboard, touch, pointer capture and trackpad on the iPad, and the whole `xrEngine` target (engine-core's files).
 
 Tests, run on both platforms: `gameinput_tests` (macOS, also built under ASan and UBSan) and
 `input_lab --selftest` (the same 624 checks on the iPad; the trigger sweep that follows only finds a

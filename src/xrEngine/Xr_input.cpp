@@ -24,6 +24,11 @@ int KEYBOARDBUFFERSIZE = 128;
 
 #define _KEYDOWN(name,key) ( name[key] & 0x80 )
 
+#ifdef XR_PLATFORM_APPLE
+// CInput itself is the SDL3 implementation in xr_input_sdl.cpp; DirectInput stays below for Windows.
+bool g_exclusive = false;
+BOOL b_altF4 = FALSE;
+#else
 static bool g_exclusive = false;
 extern u32 g_screenmode;
 
@@ -781,3 +786,5 @@ void CInput::feedback(u16 s1, u16 s2, float time)
 	//. set_vibration (s1, s2);
 #endif
 }
+
+#endif // XR_PLATFORM_APPLE

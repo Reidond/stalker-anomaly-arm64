@@ -5,6 +5,14 @@
 
 #include "tntQAVI.h"
 
+#ifdef XR_PLATFORM_APPLE
+BOOL CAviPlayerCustom::Load(char* fname)
+{
+	Msg("! AVI texture '%s': AVI playback is not available on this platform", fname);
+	return FALSE;
+}
+#else // XR_PLATFORM_APPLE
+
 CAviPlayerCustom::CAviPlayerCustom()
 {
 	alpha = nullptr;
@@ -471,3 +479,5 @@ DWORD CAviPlayerCustom::CalcFrame()
 
 	return DWORD(floor((RDEVICE.dwTimeContinual - m_dwFirstFrameOffset) * m_fCurrentRate / 1000.0f)) % m_dwFrameTotal;
 }
+
+#endif // XR_PLATFORM_APPLE

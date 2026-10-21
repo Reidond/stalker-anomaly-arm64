@@ -65,6 +65,9 @@ namespace text_editor
 		void on_key_press(int dik);
 		void on_key_hold(int dik);
 		void on_key_release(int dik);
+		// Typed characters (Windows-1251) from an on-screen keyboard or IME, see IInputReceiver::IR_OnTextInput.
+		// Applies what the editor's mode allows (nothing when read only, digits when number only).
+		void on_text_input(LPCSTR text);
 		void on_frame();
 
 		void assign_callback(u32 const dik, key_state state, Callback const& callback);
@@ -168,6 +171,7 @@ namespace text_editor
 		bool m_cursor_view;
 		bool m_need_update;
 		bool m_unselected_mode;
+		init_mode m_mode;
 	}; // class line_edit_control
 } // namespace text_editor
 

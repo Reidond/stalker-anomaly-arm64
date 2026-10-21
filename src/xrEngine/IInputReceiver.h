@@ -58,6 +58,12 @@ public:
 	virtual void IR_OnKeyboardHold(int dik)
 	{
 	};
+
+	// Apple platforms: characters typed while CInput::EnableTextInput() is on (on-screen keyboard, IME), in
+	// Windows-1251. Never called on Windows, where WM_CHAR does this job.
+	virtual void IR_OnTextInput(const char* text)
+	{
+	};
 };
 
 ENGINE_API extern float psMouseSens;

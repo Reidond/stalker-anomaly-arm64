@@ -8,11 +8,16 @@
 #ifndef EDIT_ACTIONS_H_INCLUDED
 #define EDIT_ACTIONS_H_INCLUDED
 
-
+#ifdef XR_PLATFORM_APPLE
+// MSVC accepts `enum key_state;`; standard C++ wants the definition, which is in here.
+#include "line_edit_control.h"
+#endif
 
 namespace text_editor
 {
+#ifndef XR_PLATFORM_APPLE
 	enum key_state;
+#endif
 	class line_edit_control;
 
 	class base : private xray::noncopyable

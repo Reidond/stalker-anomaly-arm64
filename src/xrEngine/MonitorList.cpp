@@ -12,17 +12,23 @@
 #include "stdafx.h"
 #include "MonitorList.h"
 
+#ifdef XR_PLATFORM_APPLE
+# include <SDL3/SDL_video.h>
+#else
 #pragma comment(lib, "cfgmgr32.lib")
 #include <cfgmgr32.h>
 #include <initguid.h>
 #include <devpkey.h>
+#endif
 
 
 ENGINE_API xr_token* vid_monitor_token = nullptr;
 ENGINE_API xr_string  vid_monitor_name  = "Auto";
-ENGINE_API volatile long g_monitor_list_dirty = 0;
+ENGINE_API volatile LONG g_monitor_list_dirty = 0;
 
 static xr_vector<HMONITOR> s_monitor_handles;
+
+#ifndef XR_PLATFORM_APPLE
 
 typedef enum _DISPLAYCONFIG_VIDEO_OUTPUT_TECHNOLOGY_LOCAL
 {
@@ -380,6 +386,70 @@ void fill_vid_monitor_list()
 
     Msg("* vid_monitor: enumerated %u monitor(s)", N);
 }
+
+#else // XR_PLATFORM_APPLE
+
+// A monitor handle is an SDL_DisplayID (never 0) carried in the pointer.
+static HMONITOR DisplayToMonitor(SDL_DisplayID id) { return reinterpret_cast<HMONITOR>(static_cast<uintptr_t>(id)); }
+
+void fill_vid_monitor_list()
+{
+    if (vid_monitor_token != nullptr)
+        return;
+
+    int count = 0;
+    SDL_DisplayID* displays = SDL_GetDisplays(&count);
+    if (!displays || count <= 0)
+    {
+        Msg("! vid_monitor: SDL_GetDisplays returned no monitors, list will be Auto-only (%s)", SDL_GetError());
+        count = 0;
+    }
+
+    xr_vector<xr_string> labels;
+    for (int i = 0; i < count; ++i)
+    {
+        const char* name = SDL_GetDisplayName(displays[i]);
+        labels.push_back((name && name[0]) ? xr_string(name) : xr_string("Display"));
+    }
+
+    // Identical names ("Studio Display" twice) get an ordinal, like the connector suffix on Windows.
+    xr_map<xr_string, u32> label_count;
+    for (const auto& label : labels)
+        label_count[label]++;
+    xr_map<xr_string, u32> label_seen;
+    for (auto& label : labels)
+    {
+        if (label_count[label] > 1)
+        {
+            char suffix[16] = {};
+            xr_sprintf(suffix, sizeof(suffix), " (%u)", ++label_seen[label]);
+            label += suffix;
+        }
+    }
+
+    const u32 N = static_cast<u32>(labels.size());
+    vid_monitor_token = xr_alloc<xr_token>(N + 2);
+
+    vid_monitor_token[0].name = xr_strdup("Auto");
+    vid_monitor_token[0].id   = 0;
+    s_monitor_handles.push_back(NULL);
+
+    for (u32 i = 0; i < N; ++i)
+    {
+        vid_monitor_token[i + 1].name = xr_strdup(labels[i].c_str());
+        vid_monitor_token[i + 1].id   = static_cast<int>(i + 1);
+        s_monitor_handles.push_back(DisplayToMonitor(displays[i]));
+    }
+
+    vid_monitor_token[N + 1].name = nullptr;
+    vid_monitor_token[N + 1].id   = -1;
+
+    if (displays)
+        SDL_free(displays);
+    Msg("* vid_monitor: enumerated %u monitor(s)", N);
+}
+
+#endif // XR_PLATFORM_APPLE
 
 void free_vid_monitor_list()
 {

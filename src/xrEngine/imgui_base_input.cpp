@@ -23,11 +23,16 @@ namespace xr_imgui
 
     static void ImGui_UpdateKeyboardCodePage(UINT32& keyboard_code_page)
     {
+#ifdef XR_PLATFORM_APPLE
+        // The engine's text, and what CInput::dik_to_text returns, is Windows-1251 whatever the layout.
+        keyboard_code_page = 1251;
+#else
         // Retrieve keyboard code page, required for handling of non-Unicode Windows.
         HKL keyboard_layout = ::GetKeyboardLayout(0);
         LCID keyboard_lcid = MAKELCID(HIWORD(keyboard_layout), SORT_DEFAULT);
         if (::GetLocaleInfoA(keyboard_lcid, (LOCALE_RETURN_NUMBER | LOCALE_IDEFAULTANSICODEPAGE), (LPSTR)&keyboard_code_page, sizeof(keyboard_code_page)) == 0)
             keyboard_code_page = CP_ACP; // Fallback to default ANSI code page when fails.
+#endif
     }
 
     void ide::InitBackend()
@@ -91,6 +96,10 @@ namespace xr_imgui
 
         xray_cursor_state = GetUICursor().IsVisible();
         GetUICursor().Hide();
+
+#ifdef XR_PLATFORM_APPLE
+        pInput->SetPointerCaptured(false); // ImGui draws its own cursor at the OS pointer
+#endif
     }
 
     void ide::IR_Release()
@@ -109,6 +118,10 @@ namespace xr_imgui
 
         if (xray_cursor_state)
             GetUICursor().Show();
+
+#ifdef XR_PLATFORM_APPLE
+        pInput->SetPointerCaptured(true);
+#endif
     }
 
     void ide::IR_OnMousePress(int key)
@@ -188,6 +201,17 @@ namespace xr_imgui
             break;
         }
 
+#ifdef XR_PLATFORM_APPLE
+        // Windows types through WM_CHAR (Device_wndproc.cpp). Here the character comes from the key press.
+        if (io.WantTextInput && !io.KeyCtrl && !io.KeySuper)
+        {
+            char text[4] = {};
+            if (pInput->dik_to_text(key, io.KeyShift, pInput->iGetKeyToggleState(DIK_CAPITAL), false, io.KeyAlt,
+                    !!pInput->iGetAsyncKeyState(DIK_RALT), text, sizeof(text)))
+                InputChar(static_cast<WPARAM>(static_cast<unsigned char>(text[0])));
+        }
+#endif
+
         const auto imkey = xr_key_to_imgui_key(key);
         if (imkey == ImGuiKey_None)
             return;
@@ -233,7 +257,11 @@ namespace xr_imgui
         if (!io.WantTextInput) return;
 
         wchar_t wch = 0;
+#ifdef XR_PLATFORM_APPLE
+        ::MultiByteToWideChar(keyboard_code_page, 0, (char*)&param, 1, &wch, 1);
+#else
         ::MultiByteToWideChar(keyboard_code_page, MB_PRECOMPOSED, (char*)&param, 1, &wch, 1);
+#endif
         io.AddInputCharacter(wch);
     }
 

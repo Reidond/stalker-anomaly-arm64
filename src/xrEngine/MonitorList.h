@@ -10,7 +10,7 @@ ENGINE_API void     free_vid_monitor_list();
 ENGINE_API void     refresh_vid_monitor_list();
 ENGINE_API HMONITOR ResolveSelectedMonitor();
 
-ENGINE_API extern volatile long g_monitor_list_dirty;
+ENGINE_API extern volatile LONG g_monitor_list_dirty;
 
 ENGINE_API HMONITOR GetStartupMonitor();
 ENGINE_API void     SetStartupMonitor(HMONITOR h);
