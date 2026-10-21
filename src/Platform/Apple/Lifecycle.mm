@@ -29,6 +29,7 @@ struct LifecycleState
     ListenerId next_id = 1;
     bool paused = false;
     bool in_background = false;
+    bool foreground_pending = false; // WillEnterForeground seen, DidEnterForeground not yet
     bool keep_awake_requested = true;
 
     std::deque<EventRecord> history;
@@ -106,6 +107,7 @@ void DispatchLifecycle(LifecycleEvent event)
         break;
     case LifecycleEvent::DidEnterBackground:
         s.in_background = true;
+        s.paused = true;
         Internal::WriteSessionState("background");
         break;
     case LifecycleEvent::WillEnterForeground:
@@ -113,6 +115,7 @@ void DispatchLifecycle(LifecycleEvent event)
     case LifecycleEvent::DidEnterForeground:
         s.paused = false;
         s.in_background = false;
+        s.foreground_pending = false;
         Internal::WriteSessionState("running");
         ApplyKeepAwake();
         break;
@@ -159,14 +162,40 @@ void ReconcileMemory(MemorySource source)
     });
 }
 
+// SDL 3.4 on iPadOS reports each lifecycle transition twice (once from the scene delegate, once from the
+// UIApplication notifications), a few ms apart. Only forward a transition that changes our state.
+bool ShouldDispatch(LifecycleEvent event)
+{
+    auto& s = State();
+    switch (event)
+    {
+    case LifecycleEvent::WillEnterBackground: return !s.paused;
+    case LifecycleEvent::DidEnterBackground: return !s.in_background;
+    case LifecycleEvent::WillEnterForeground:
+        if (!s.in_background || s.foreground_pending)
+            return false;
+        s.foreground_pending = true;
+        return true;
+    case LifecycleEvent::DidEnterForeground:
+        s.foreground_pending = false;
+        return s.paused || s.in_background; // also drops the initial activation at launch
+    case LifecycleEvent::Terminating: return true;
+    }
+    return true;
+}
+
 bool WatchLifecycle(void* /*userdata*/, SDL_Event* event)
 {
+    auto lifecycle = [](LifecycleEvent e) {
+        if (ShouldDispatch(e))
+            DispatchLifecycle(e);
+    };
     switch (event->type)
     {
-    case SDL_EVENT_WILL_ENTER_BACKGROUND: DispatchLifecycle(LifecycleEvent::WillEnterBackground); break;
-    case SDL_EVENT_DID_ENTER_BACKGROUND: DispatchLifecycle(LifecycleEvent::DidEnterBackground); break;
-    case SDL_EVENT_WILL_ENTER_FOREGROUND: DispatchLifecycle(LifecycleEvent::WillEnterForeground); break;
-    case SDL_EVENT_DID_ENTER_FOREGROUND: DispatchLifecycle(LifecycleEvent::DidEnterForeground); break;
+    case SDL_EVENT_WILL_ENTER_BACKGROUND: lifecycle(LifecycleEvent::WillEnterBackground); break;
+    case SDL_EVENT_DID_ENTER_BACKGROUND: lifecycle(LifecycleEvent::DidEnterBackground); break;
+    case SDL_EVENT_WILL_ENTER_FOREGROUND: lifecycle(LifecycleEvent::WillEnterForeground); break;
+    case SDL_EVENT_DID_ENTER_FOREGROUND: lifecycle(LifecycleEvent::DidEnterForeground); break;
     case SDL_EVENT_TERMINATING: DispatchLifecycle(LifecycleEvent::Terminating); break;
     case SDL_EVENT_LOW_MEMORY:
         // UIKit's memory warning means the OS wants memory back now: report it as critical.

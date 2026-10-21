@@ -40,7 +40,7 @@ bool IsDirectory(const std::string& path)
 std::string FormatGB(uint64_t bytes)
 {
     char buffer[32];
-    std::snprintf(buffer, sizeof(buffer), "%.2f GB", double(bytes) / (1024.0 * 1024.0 * 1024.0));
+    std::snprintf(buffer, sizeof(buffer), "%.2f GiB", double(bytes) / (1024.0 * 1024.0 * 1024.0));
     return buffer;
 }
 

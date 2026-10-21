@@ -9,6 +9,7 @@
 //   --exit-after <sec>   quit after that many seconds, so runs on a shared iPad stay short
 //   --stress             allocate memory automatically until the budget watchdog reports Critical
 //   --screenshot <name>  save a PNG of the launcher after ~1.5 s into the shell directory
+//   --crash-after <sec>  crash on purpose (null write) to check the crash file; see anomaly-crash.log
 
 #define SDL_MAIN_USE_CALLBACKS 1
 #include <SDL3/SDL.h>
@@ -47,6 +48,7 @@ struct LabState
     int pending_chunks = 0; // chunks still to allocate, one per frame
     bool stress = false;
     uint64_t exit_after_ms = 0;
+    uint64_t crash_after_ms = 0;
     std::string screenshot_name;
     bool screenshot_requested = false;
     uint64_t start_ticks = 0;
@@ -80,6 +82,11 @@ void PrintReport()
     const AppleShell::Paths& paths = AppleShell::GetPaths();
     const AppleShell::GameDataStatus data = AppleShell::ValidateGameData(paths.data_root);
     const AppleShell::DeviceInfo device = AppleShell::QueryDeviceInfo();
+    // The report is space-separated key=value, so values must not contain spaces.
+    std::string os = device.os;
+    for (char& c : os)
+        if (c == ' ')
+            c = '_';
     const char* state = data.state == AppleShell::DataState::Ok ? "ok" : data.state == AppleShell::DataState::Incomplete ? "incomplete" : "missing";
     // One line, key=value, easy to grep out of devicectl's console output.
     printf("ANOMALY_REPORT data=%s files_ok=%u files_expected=%u bytes_present=%llu bytes_expected=%llu "
@@ -88,7 +95,7 @@ void PrintReport()
         state, data.files_ok, data.files_expected, (unsigned long long)data.bytes_present, (unsigned long long)data.bytes_expected,
         (unsigned long long)device.storage_free_raw, (unsigned long long)device.storage_free_important,
         (unsigned long long)device.storage_total, (unsigned long long)device.available_memory,
-        (unsigned long long)device.physical_memory, device.model.c_str(), device.os.c_str(), paths.data_root.c_str());
+        (unsigned long long)device.physical_memory, device.model.c_str(), os.c_str(), paths.data_root.c_str());
     fflush(stdout);
 }
 } // namespace
@@ -121,6 +128,8 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[])
             lab->stress = true;
         else if (!strcmp(argv[i], "--screenshot") && i + 1 < argc)
             lab->screenshot_name = argv[++i];
+        else if (!strcmp(argv[i], "--crash-after") && i + 1 < argc)
+            lab->crash_after_ms = uint64_t(atof(argv[++i]) * 1000.0);
         else if (!strcmp(argv[i], "--exit-after") && i + 1 < argc)
             lab->exit_after_ms = uint64_t(atof(argv[++i]) * 1000.0);
     }
@@ -149,7 +158,7 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[])
     config.allow_quit = true;
 #endif
     lab->launcher = std::make_unique<AppleShell::Launcher>(lab->window, lab->renderer, config);
-    lab->allocate_button = lab->launcher->AddButton("Alloc 512 MB");
+    lab->allocate_button = lab->launcher->AddButton("Alloc 512 MiB");
     lab->free_button = lab->launcher->AddButton("Free memory");
 
     AppleShell::Listener listener;
@@ -197,6 +206,12 @@ SDL_AppResult SDL_AppIterate(void* appstate)
     auto& lab = *static_cast<LabState*>(appstate);
     if (lab.exit_after_ms && SDL_GetTicks() - lab.start_ticks > lab.exit_after_ms)
         return SDL_APP_SUCCESS;
+
+    if (lab.crash_after_ms && SDL_GetTicks() - lab.start_ticks > lab.crash_after_ms)
+    {
+        AppleShell::Log("lab: crashing on purpose");
+        *static_cast<volatile int*>(nullptr) = 1;
+    }
 
     AppleShell::Update();
 

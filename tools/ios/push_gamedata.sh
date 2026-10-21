@@ -15,7 +15,7 @@
 #   --device <udid|name>   target device (default: $ANOMALY_IPAD_UDID, else the first connected iPad)
 #   --source <dir>         Anomaly folder to copy (default: <repo>/game/Anomaly, or the main checkout's)
 #   --bundle <id>          app whose Documents receives the data (default: com.andriishafar.anomaly)
-#   --min-free-gb <n>      refuse the full copy below this much free space (default: 40)
+#   --min-free-gb <n>      refuse the full copy below this much free space, in GiB (default: 40)
 #   --subset-only          stop after the throughput measurement
 #   --check-only           only report the iPad's free storage and the data status, copy nothing
 #   --dry-run              print what would be copied
@@ -62,8 +62,8 @@ done
 [[ -d $src/db ]] || { echo "error: no Anomaly data at $src (pass --source)" >&2; exit 1; }
 
 die() { echo "error: $*" >&2; exit 1; }
-gb() { printf '%.2f GB' "$(( $1 / 1073741824.0 ))"; }
-mb() { printf '%.0f MB' "$(( $1 / 1048576.0 ))"; }
+gb() { printf '%.2f GiB' "$(( $1 / 1073741824.0 ))"; }
+mb() { printf '%.0f MiB' "$(( $1 / 1048576.0 ))"; }
 size_of() { stat -f%z "$1"; }
 
 # ---- device ----------------------------------------------------------------------------------
@@ -105,33 +105,62 @@ if (( check_only )); then exit 0; fi
 
 # What is left to copy, in bytes (files that already match are skipped by devicectl).
 need=0
-while IFS= read -r -d '' f; do (( need += $(size_of "$f") )); done < <(
+while IFS= read -r -d '' f; do need=$(( need + $(size_of "$f") )); done < <(
     find "$src" -type f ! -path "$src/bin/*" ! -path "$src/tools/*" ! -name '*.exe' ! -name '.*' -print0)
 echo "  to copy (everything except bin/, tools/, *.exe): $(gb $need)"
 
-# ---- copy helper -----------------------------------------------------------------------------
-# copy_file <path relative to the source> -> copies one file, keeping its folder structure.
+# ---- copy helpers ----------------------------------------------------------------------------
+# What is already on the device: relative path -> size in bytes. Files with the right size are not
+# copied again, which makes a re-run after an interruption fast.
+typeset -A have
+load_have() {
+    have=()
+    local size rel
+    while IFS=$'\t' read -r size rel; do have[$rel]=$size; done < <(
+        xcrun devicectl device info files --device "$device" --domain-type appDataContainer --domain-identifier "$bundle" \
+            --subdirectory "$dest_root" -j - 2>/dev/null | python3 -I -c '
+import json, sys
+try:
+    files = json.load(sys.stdin)["result"]["files"]
+except Exception:
+    files = []
+for f in files:
+    if not f["resources"].get("isDirectory"):
+        print("%d\t%s" % (f["metadata"]["size"], f["relativePath"]))
+')
+}
+
+# copy_file <path relative to the source>: copies one file, keeping its folder structure.
+# Sets copied=1 if it was transferred, 0 if the device already had a file of the same size.
 copy_file() {
     local rel=$1
-    (( dry_run )) && { echo "  would copy $rel"; return 0; }
+    copied=0
+    [[ ${have[$rel]-} == $(size_of "$src/$rel") ]] && return 0
+    if (( dry_run )); then echo "  would copy $rel"; return 0; fi
     xcrun devicectl device copy to --device "$device" --domain-type appDataContainer --domain-identifier "$bundle" \
         --source "$src/$rel" --destination "$dest_root/$rel" --quiet >/dev/null
+    copied=1
 }
 
 # ---- 2. throughput subset --------------------------------------------------------------------
 echo "\n[2/4] Throughput subset"
-subset_bytes=0 t0=$EPOCHREALTIME
+load_have
+subset_bytes=0 subset_copied=0 t0=$EPOCHREALTIME
 for rel in $subset; do
     [[ -f $src/$rel ]] || die "subset file missing in the source: $rel"
     copy_file "$rel"
-    (( subset_bytes += $(size_of "$src/$rel") ))
+    if (( copied )); then subset_bytes=$(( subset_bytes + $(size_of "$src/$rel") )); subset_copied=$(( subset_copied + 1 )); fi
 done
 subset_secs=$(( EPOCHREALTIME - t0 ))
-subset_rate=$(( subset_secs > 0 ? subset_bytes / 1048576.0 / subset_secs : 0 ))
-printf '  %d files, %s in %.1f s = %.1f MB/s\n' ${#subset} "$(mb $subset_bytes)" $subset_secs $subset_rate
-if (( subset_rate > 0 )); then
-    eta=$(( (need - subset_bytes) / 1048576.0 / subset_rate ))
-    printf '  estimated time for the rest: %.0f min\n' $(( eta / 60 ))
+subset_rate=0
+if (( subset_copied )); then
+    subset_rate=$(( subset_secs > 0 ? subset_bytes / 1048576.0 / subset_secs : 0 ))
+    printf '  %d files, %s in %.1f s = %.1f MiB/s (including per-file overhead)\n' $subset_copied "$(mb $subset_bytes)" $subset_secs $subset_rate
+    # Only count what is still missing, so a resumed run gives a sensible estimate.
+    remaining=$(( need - subset_bytes ))
+    printf '  estimated time for the rest: about %.0f min\n' $(( remaining / 1048576.0 / subset_rate / 60 ))
+else
+    echo "  all ${#subset} subset files are already on the device, nothing to time (re-run on a fresh container to measure)"
 fi
 (( subset_only )) && { echo "\n--subset-only: done."; exit 0; }
 
@@ -150,20 +179,21 @@ entries=(fsgame.ltx default-44100.mhr default-48000.mhr gamedata db/configs db/f
 for e in $entries; do
     [[ -e $src/$e ]] || continue
     t0=$EPOCHREALTIME
-    bytes=0
+    bytes=0 skipped=0 nfiles=0
     files=("${(@f)$(cd "$src" && find "$e" -type f ! -name '.*' | LC_ALL=C sort)}")
     for rel in $files; do
         [[ -n $rel ]] || continue
-        # Skip files that are already complete on the device (devicectl also skips unchanged ones;
-        # this check just avoids a process launch per file for the subset).
-        if (( ${subset[(Ie)$rel]} )); then (( bytes += $(size_of "$src/$rel") )); continue; fi
+        nfiles=$(( nfiles + 1 ))
         copy_file "$rel"
-        (( bytes += $(size_of "$src/$rel") ))
+        if (( copied )); then bytes=$(( bytes + $(size_of "$src/$rel") )); else skipped=$(( skipped + 1 )); fi
     done
     secs=$(( EPOCHREALTIME - t0 ))
-    (( total_secs += secs, total_bytes += bytes ))
-    printf '  %-16s %3d files %10s in %7.1f s  %s\n' "$e" ${#files} "$(mb $bytes)" $secs \
-        "$( (( secs > 1 )) && printf '%.1f MB/s' $(( bytes / 1048576.0 / secs )) || echo '(skipped/cached)')"
+    total_secs=$(( total_secs + secs )); total_bytes=$(( total_bytes + bytes ))
+    if (( bytes > 0 )); then
+        printf '  %-20s %3d files, %3d copied %10s in %7.1f s = %.1f MiB/s\n' "$e" $nfiles $(( nfiles - skipped )) "$(mb $bytes)" $secs $(( bytes / 1048576.0 / secs ))
+    else
+        printf '  %-20s %3d files, already on the device\n' "$e" $nfiles
+    fi
 done
 
 # ---- 4. verify -------------------------------------------------------------------------------
@@ -171,6 +201,6 @@ echo "\n[4/4] Verify on the device"
 rep=$(report)
 echo "  data status: $(field "$rep" data) ($(field "$rep" files_ok)/$(field "$rep" files_expected) archives, $(gb $(field "$rep" bytes_present)))"
 echo "  iPad free storage now: $(gb $(field "$rep" storage_free))"
-printf '\nTimings: subset %.1f MB/s; full pass %s in %.0f s (%.1f MB/s overall, subset not re-timed).\n' \
-    $subset_rate "$(gb $total_bytes)" $total_secs $(( total_secs > 0 ? total_bytes / 1048576.0 / total_secs : 0 ))
+printf '\nTimings: subset %s; full pass copied %s in %.0f s (%.1f MiB/s).\n' \
+    "$( (( subset_copied )) && printf '%.1f MiB/s' $subset_rate || echo 'not measured')" "$(gb $total_bytes)" $total_secs $(( total_secs > 0 ? total_bytes / 1048576.0 / total_secs : 0 ))
 [[ $(field "$rep" data) == ok ]] || { echo "data is not complete yet: run the script again."; exit 4; }

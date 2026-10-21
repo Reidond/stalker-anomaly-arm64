@@ -306,7 +306,7 @@ void Launcher::Render()
     }
     if (PreviousCrashLogExists())
     {
-        Text(renderer_, left, y, "Crash report from an earlier run: anomaly-crash.log", kAmber);
+        Text(renderer_, left, y, "The previous run crashed: report in anomaly-crash.prev.log", kAmber);
         y += kLine;
     }
     if (!extra_.empty())

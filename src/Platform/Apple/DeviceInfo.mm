@@ -52,9 +52,9 @@ std::string FormatBytes(uint64_t bytes)
     char buffer[32];
     const double gb = double(bytes) / (1024.0 * 1024.0 * 1024.0);
     if (gb >= 1.0)
-        snprintf(buffer, sizeof(buffer), "%.2f GB", gb);
+        snprintf(buffer, sizeof(buffer), "%.2f GiB", gb);
     else
-        snprintf(buffer, sizeof(buffer), "%.0f MB", double(bytes) / (1024.0 * 1024.0));
+        snprintf(buffer, sizeof(buffer), "%.0f MiB", double(bytes) / (1024.0 * 1024.0));
     return buffer;
 }
 

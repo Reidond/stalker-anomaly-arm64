@@ -239,6 +239,7 @@ bool Init(const InitParams& params)
 #endif
         p.shell_log = p.shell_dir + "/anomaly-shell.log";
         p.crash_log = p.shell_dir + "/anomaly-crash.log";
+        p.crash_log_previous = p.shell_dir + "/anomaly-crash.prev.log";
         p.fsgame_ltx = p.app_support + "/fsgame.ltx";
 
         bool ok = true;
@@ -251,7 +252,10 @@ bool Init(const InitParams& params)
 #endif
 
         // Previous-session bookkeeping happens before this run overwrites anything.
+        // A crash file from the last run moves aside, so "the previous run crashed" is true for one launch only.
         s.previous_crash_log = FileExists(p.crash_log);
+        if (s.previous_crash_log)
+            rename(p.crash_log.c_str(), p.crash_log_previous.c_str());
         s.session_file = p.app_support + "/session.state";
         const std::string last_state = ReadFile(s.session_file);
         s.previous_session_unexpected = last_state.rfind("running", 0) == 0;
@@ -274,7 +278,7 @@ bool Init(const InitParams& params)
         if (s.previous_session_unexpected)
             Log("previous session ended unexpectedly (crash, jetsam or force quit)");
         if (s.previous_crash_log)
-            Log("a crash report from an earlier run exists: %s", p.crash_log.c_str());
+            Log("the previous run crashed, report kept in %s", p.crash_log_previous.c_str());
 
         DeviceInfo device = QueryDeviceInfo();
         Log("device %s, %s, %u cores, %s RAM, memory budget %s, storage free %s of %s", device.model.c_str(), device.os.c_str(),

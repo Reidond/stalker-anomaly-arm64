@@ -23,6 +23,7 @@ after `SDL_Init`.
 | `Paths::logs` (the engine's `$logs$`) | `…/appdata/logs` | same |
 | `Paths::caches`, `Paths::shader_cache` | `Library/Caches/Anomaly[/shaders]` | `~/Library/Caches/Anomaly[/shaders]` |
 | `Paths::shell_dir` (shell log, crash file) | `Documents` | `~/Library/Logs/Anomaly` |
+| `Paths::crash_log` / `crash_log_previous` | `Documents/anomaly-crash.log` / `.prev.log` | `~/Library/Logs/Anomaly/…` |
 | `Paths::fsgame_ltx` (generated) | `Library/Application Support/Anomaly/fsgame.ltx` | same |
 
 - `Documents` is visible in the Files app and Finder (`UIFileSharingEnabled`, `LSSupportsOpeningDocumentsInPlace`),
@@ -56,6 +57,9 @@ the case-insensitive APFS volume of an iPad or Mac (the container's UUID is uppe
 `$shader_cache$` are new aliases the shader-cache code can use.
 
 ## Game data discovery and validation
+
+Sizes in the app and the scripts are binary (GiB / MiB). The Anomaly archives are 17,149,484,207 bytes
+(17.1 GB in the decimal units Finder shows, 15.97 GiB here).
 
 `ValidateGameData(root)` stats the 67 required archives of an Anomaly 1.5.3 install against
 `GameDataManifest.inc` (exact byte sizes, 17,149,484,207 bytes / 15.97 GiB in all; the optional
@@ -93,7 +97,8 @@ AppleShell::AddListener(std::move(l));
 
 - **Pause / resume** come from SDL3 events, through an `SDL_AddEventWatch` so they run synchronously
   inside the OS callback (an iOS app is suspended right after `DidEnterBackground`; an event queue would be
-  too late). `on_pause` is `SDL_EVENT_WILL_ENTER_BACKGROUND`, which on iPadOS is `sceneWillResignActive`, so
+  too late). SDL 3.4 on iPadOS reports every transition twice, a few ms apart (scene delegate and UIApplication
+  notifications both fire), so the shell only forwards a transition that changes its state. `on_pause` is `SDL_EVENT_WILL_ENTER_BACKGROUND`, which on iPadOS is `sceneWillResignActive`, so
   it also fires for Control Center, system alerts and app-switcher peeks, not only for real backgrounding.
   `on_resume` is `SDL_EVENT_DID_ENTER_FOREGROUND` (`sceneDidBecomeActive`). `on_lifecycle` gets all five
   events (`Will/DidEnterBackground`, `Will/DidEnterForeground`, `Terminating`). No GPU work may be issued
@@ -134,11 +139,11 @@ AppleShell::AddListener(std::move(l));
   SDL's own log output is redirected into the same sink.
 - Crash capture, installed by `Init`: `SIGSEGV/BUS/ILL/FPE/ABRT/TRAP/SYS` on an alternate stack, `std::terminate`
   and uncaught Objective-C exceptions append a report to `anomaly-crash.log`: signal, fault address, available
-  memory, backtrace and the last 8 KB of log. The handlers use only async-signal-safe calls and then hand the
+  memory, backtrace and the last 8 KB of log. The next launch moves it to `anomaly-crash.prev.log`. The handlers use only async-signal-safe calls and then hand the
   signal back to the system, so Xcode and the OS crash reports still work.
 - Jetsam kills and force quits cannot be caught. `session.state` records `running`, `background` or `clean`;
   `PreviousSessionEndedUnexpectedly()` is true when the last run died while `running`, i.e. a crash or a
-  memory kill in the foreground. `PreviousCrashLogExists()` reports a leftover crash file.
+  memory kill in the foreground. `PreviousCrashLogExists()` is true when the previous run left a crash report.
 
 ## Launcher
 
@@ -173,7 +178,7 @@ launcher = std::make_unique<AppleShell::Launcher>(window, renderer, config);
 ## Shell lab
 
 `tools/shell_lab` (bundle id `com.andriishafar.anomaly`, shown as "Anomaly Shell Lab") runs the shell by itself:
-data status, device and display info, and the live event list. "Alloc 512 MB" / "Free memory" (or `--stress`)
+data status, device and display info, and the live event list. "Alloc 512 MiB" / "Free memory" (or `--stress`)
 allocate and touch memory in 128 MB chunks to watch the memory levels change, stopping 192 MB before the budget
 runs out. Launch arguments, passed with `devicectl device process launch … -- <args>` or on the Mac command line:
 
@@ -209,8 +214,47 @@ xcrun devicectl device process launch --device <udid> --terminate-existing --con
    (`--min-free-gb`).
 4. Launches shell_lab again to validate the data on the device, and prints the timings.
 
-`devicectl` skips files the device already has, so an interrupted run is resumed by running the script again.
-Options: `--device`, `--source`, `--subset-only`, `--check-only`, `--dry-run`. The target app must be installed.
+The script lists what is already in the app container (`devicectl device info files`) and only copies files
+that are missing or have another size, so an interrupted run is resumed by running it again (a complete data set
+re-checks in about 5 s). Options: `--device`, `--source`, `--subset-only`, `--check-only`, `--dry-run`. The
+target app must be installed and the iPad unlocked for the two `--print-report` launches (copying itself works
+while the iPad is locked).
+
+Measured on 2026-10-21 over USB to the iPad Air 13" M3 (512 GB, iPadOS 27.0.1), with other sessions loading the Mac:
+
+| Step | Result |
+|---|---|
+| Free storage before | 339.5 GiB of 475.9 GiB (above the 40 GiB threshold) |
+| Subset: 8 archives, 253 MiB | about 12.8 s, 20 MiB/s including 0.5 to 1 s of `devicectl` start-up per file; 26 to 27 MiB/s on the two 100+ MiB archives |
+| Full copy, 15.7 GiB still missing | 553 s (9 min 13 s), about 29 MiB/s overall |
+| per folder | `db/meshes` 1372 MiB in 43 s (31.6 MiB/s), `db/sounds` 1040 MiB in 31 s (33.6), `db/textures` 7090 MiB in 238 s (29.8), `db/levels` 6827 MiB in 239 s (28.6) |
+| Verification on the device | shell_lab: 67 of 67 archives with the exact sizes, 15.97 GiB |
+| Free storage after | 323.1 GiB |
+| Re-run on the complete set | 5.6 s, nothing copied |
+
+The one-file-per-`devicectl`-call overhead is only visible on the small archives; the large ones run at the link
+speed, which is USB-limited at about 30 MiB/s here.
+
+## Verified on the iPad Air M3
+
+shell_lab (bundle id `com.andriishafar.anomaly`, signed with the free Personal Team) on the iPad, 2026-10-21:
+
+| Area | Observed |
+|---|---|
+| Device | `iPad15,5`, iPadOS 27.0.1, 8 cores, 7.44 GiB RAM visible to the process |
+| Memory budget | `os_proc_available_memory()` 7.99 GiB at launch (about 7.8 GiB once the UI is up), so `increased-memory-limit` is active |
+| Display | native 2732x2048, 1366x1024 pt at 2x, 60 Hz, max 60 (no ProMotion on the Air), safe area bottom inset 20 pt |
+| Data | 67 of 67 archives valid after the copy; the container path changed on reinstall (`6EC14A93…` to `34D418F3…`) and the data came with it, `fsgame.ltx` was regenerated for the new path |
+| Lifecycle | launching another app gives `WillEnterBackground`, `DidEnterBackground` about 0.9 s later, then `WillEnterForeground` and `DidEnterForeground` on return, each exactly once |
+| Memory pressure | `--stress` (128 MiB chunks, touched) triggered `Normal -> Critical via system pressure` at 1.47 GiB still available, then the UIKit memory warning; the kernel jumped straight to critical, with no separate warning step |
+| Crash capture | `--crash-after 2` wrote `anomaly-crash.log` with signal, fault address, available memory, backtrace and recent log; the next launch reported "previous session ended unexpectedly" and moved the report to `anomaly-crash.prev.log` |
+| Thermal / Low Power | initial state read correctly (Nominal, off); change callbacks are registered but a transition was not provoked on the device |
+| Keep awake | idle timer disabled through SDL while active; not observed over a long idle period |
+
+Not tested: the 768 MiB / 384 MiB budget watchdog (the kernel signal arrived first), touch input on the launcher,
+and gamepad input on the launcher. On the Mac the memory-pressure callback fired on its own while the machine was
+under heavy build load, and crash capture, the data states (`Ok`, `Incomplete`, `NotFound`, nested folder) and the
+launcher were checked against the real data and against hand-made partial folders.
 
 ## What the engine has to call
 

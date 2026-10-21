@@ -24,10 +24,7 @@
 	<true/>
 	<key>LSApplicationCategoryType</key>
 	<string>public.app-category.games</string>
-	<key>UIDeviceFamily</key>
-	<array>
-		<integer>2</integer>
-	</array>
+	<!-- UIDeviceFamily (iPad only) comes from TARGETED_DEVICE_FAMILY in anomaly_configure_app(). -->
 	<key>UIRequiredDeviceCapabilities</key>
 	<array>
 		<string>arm64</string>
