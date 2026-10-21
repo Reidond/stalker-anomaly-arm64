@@ -28,6 +28,9 @@
 	<true/>
 	<key>UIStatusBarHidden</key>
 	<true/>
+	<!-- Lets SDL receive pointer events from a trackpad or mouse (Magic Keyboard). -->
+	<key>UIApplicationSupportsIndirectInputEvents</key>
+	<true/>
 	<key>UIDeviceFamily</key>
 	<array>
 		<integer>2</integer>

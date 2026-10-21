@@ -119,5 +119,9 @@ and limits for M4.
 - **Signing:** the current signing team is a free Personal Team.
   - Its builds expire every 7 days. SideStore can refresh them on the device, but the free
     account still caps installs at 3 apps.
-  - The memory entitlements may not be granted on a free account; check this at M4.
+  - Probe results on the iPad (2026-10-21):
+    - `increased-memory-limit` signs with the free team, and `os_proc_available_memory` reports
+      7.95 GB.
+    - `extended-virtual-addressing` is refused for Personal Teams, so archive reads must not rely
+      on mapping all ~17 GB.
   - The paid Apple Developer Program gives 1-year signing and the full set of entitlements.
