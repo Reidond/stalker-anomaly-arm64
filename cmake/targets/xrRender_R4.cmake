@@ -11,9 +11,15 @@ anomaly_add_module(xrRender_R4
     SOURCES
         ${xrrender_r4_sources}
         "${ANOMALY_SRC_DIR}/Layers/xrRender/AppleWindow.cpp"
+        "${ANOMALY_SRC_DIR}/Layers/xrRenderPC_R4/r4_shader_xlat.cpp"
     INCLUDE_DIRS
         "${ANOMALY_SRC_DIR}/Layers/xrRenderPC_R4"
         "${ANOMALY_SRC_DIR}/3rd party/imgui"
     DEFINES USE_DX11 XRRENDER_R4_EXPORTS
-    LINK xrAPI xrCPU_Pipe luabind LuaJIT::luajit SDL3::SDL3-static ShaderXlat
+    LINK xrAPI xrCPU_Pipe luabind LuaJIT::luajit SDL3::SDL3-static ShaderXlatMetal
 )
+
+# Shader warm-up tool (macOS): drives the renderer's D3DCompile path without the engine
+if(EXISTS "${PROJECT_SOURCE_DIR}/tools/r4_shader_warmup/CMakeLists.txt")
+    add_subdirectory("${PROJECT_SOURCE_DIR}/tools/r4_shader_warmup" "${CMAKE_BINARY_DIR}/tools/r4_shader_warmup")
+endif()

@@ -13,7 +13,9 @@
 #include "tss.h"
 #include "blenders\blender.h"
 #include "blenders\blender_recorder.h"
+#if !defined(XR_PLATFORM_APPLE) // GCD (xr_parallel_foreach) replaces TBB there
 #include <tbb\parallel_for_each.h>
+#endif
 
 //	Already defined in Texture.cpp
 void fix_texture_name(LPSTR fn);
@@ -385,7 +387,17 @@ void CResourceManager::DeferredUpload()
 	CTimer timer;
 	timer.Start();
 
+#if defined(XR_PLATFORM_APPLE)
+	{
+		xr_vector<CTexture*> textures; // xr_parallel_foreach needs random access iterators
+		textures.reserve(m_textures.size());
+		for (auto& m_tex : m_textures)
+			textures.push_back(m_tex.second);
+		xr_parallel_foreach(textures.begin(), textures.end(), [](CTexture* tex) { tex->Load(); });
+	}
+#else
 	tbb::parallel_for_each(m_textures, [&](auto m_tex) { m_tex.second->Load(); });
+#endif
 
 	Msg("texture loading time: %d", timer.GetElapsed_ms());
 }
@@ -395,7 +407,17 @@ void CResourceManager::DeferredUnload()
 	if (!RDEVICE.b_is_Ready)
 		return;
 
+#if defined(XR_PLATFORM_APPLE)
+	{
+		xr_vector<CTexture*> textures;
+		textures.reserve(m_textures.size());
+		for (auto& m_tex : m_textures)
+			textures.push_back(m_tex.second);
+		xr_parallel_foreach(textures.begin(), textures.end(), [](CTexture* tex) { tex->Unload(); });
+	}
+#else
 	tbb::parallel_for_each(m_textures, [&](auto m_tex) { m_tex.second->Unload(); });
+#endif
 }
 
 #ifdef _EDITOR
