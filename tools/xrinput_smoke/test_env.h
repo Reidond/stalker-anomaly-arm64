@@ -4,6 +4,7 @@
 #pragma once
 
 #define STDAFX_3DA
+#define XR_INPUT_STANDALONE // xr_input_sdl.cpp peeks the SDL queue itself instead of registering with xr_window
 #define ENGINE_API
 #define DLL_API
 

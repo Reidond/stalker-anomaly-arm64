@@ -222,7 +222,7 @@ controller layer above is plugged in here, so a pad press is a key event like an
 | `IInputReceiver.{h,cpp}` | new `IR_OnTextInput(const char*)`; `IR_GetMousePos*` read `CInput`'s pointer instead of `GetCursorPos` |
 | `line_edit_control.{h,cpp}` | new `on_text_input(text)`; caps/num lock from `CInput::iGetKeyToggleState`; no keyboard-layout switch |
 | `imgui_base_input.cpp` | pointer released while ImGui has input; typed characters come from `dik_to_text`; code page 1251 |
-| `MonitorList.cpp` | `SDL_GetDisplays` for the `vid_monitor` list; a monitor handle is the `SDL_DisplayID` (`MonitorToSdlDisplay`) |
+| `MonitorList.cpp` | `SDL_GetDisplays` for the `vid_monitor` list; a monitor handle is the `SDL_DisplayID` carried in the pointer (`xr_display_from_monitor` in `xr_window.h`) |
 
 ### Frame order
 
@@ -231,10 +231,12 @@ calls the top receiver (`cbStack.back()`) in the order the DirectInput loop did:
 key or button that is down, then the summed motion and wheel. `PadUpdate()` runs `SdlPadSource::Update(dt)` and
 `gameinput::DispatchFrame` with `CInput` itself as the `IEngineInputSink`.
 
-**Event ownership.** `CInput` takes keyboard, mouse, text and gamepad events from the SDL queue (`SDL_PeepEvents`)
-and owns the `SdlPadSource`. The host loop must not drain those: peek only the window events it needs, or pass every event
-it polls to `pInput->HandleEvent(e)`. `OnAppActivate()` / `OnAppDeactivate()` (window focus) must still be called;
-they reset key state and give the pointer back.
+**Event ownership.** In the engine, `xr_window::PumpEvents()` (engine-core, `xr_window.h`) is the only consumer of the SDL queue. It passes every event to the
+handler `CInput` registers in its constructor (`xr_window::AddEventHandler`, removed in the destructor), which keeps the keyboard, mouse, text and gamepad ones
+and ignores the rest. `CInput` then never polls: `SetEventSourceExternal(true)`, set by that registration, keeps it off the queue. Without `xr_window.h` (tools,
+tests: `XR_INPUT_STANDALONE`) it peeks those event types from the queue itself, or takes events from a host's `HandleEvent`. It owns the `SdlPadSource`, so no one else
+should create one. `OnAppActivate()` / `OnAppDeactivate()` (window focus, from the window layer) reset key state and give the pointer back.
+A level load can leave seconds of events behind: consecutive motion merges and each list keeps the newest 4096.
 
 ### Keyboard
 
@@ -341,8 +343,9 @@ Later, a `CActor::IR_OnPadLook(yaw_deg, pitch_deg)` that calls `cam_Active()->Mo
 | `WM_CHAR` -> `ide::InputChar` (`Device_wndproc.cpp`) | not needed: text events reach `IR_OnTextInput` |
 | `WM_ACTIVATE` -> `OnAppActivate/Deactivate` | the same calls from `SDL_EVENT_WINDOW_FOCUS_GAINED/LOST` |
 
-**7. The window.** `RDEVICE.m_hWnd` must be the `SDL_Window*` (or call `pInput->SetWindow`). The host loop leaves keyboard, mouse, text and gamepad
-events in the SDL queue or hands them to `pInput->HandleEvent`, and does not run its own `SdlPadSource`.
+**7. The window.** `RDEVICE.m_hWnd` is the `SDL_Window*` (engine-core, `xr_window.h`), which is where `CInput` takes its window from. Its Win32-named
+`GetCursorPos`/`SetCursorPos`/`ClipCursor`/`ShowCursor` shims (drawable pixels, client == screen) keep the files in table 6 compiling; `CInput` owns the relative mouse mode
+itself, so `ShowCursor`/`ClipCursor` calls can stay.
 
 **8. Feedback and weapon trigger profiles.** Where the events already exist in `xrGame`:
 

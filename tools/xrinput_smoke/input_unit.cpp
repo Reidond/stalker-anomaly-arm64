@@ -618,9 +618,45 @@ void test_pad(Recorder& rec)
 	pInput->pad_hooks.connection = nullptr;
 }
 
+void test_external_events(Recorder& rec)
+{
+	printf("\n[input 6] events handed over by the host (the engine's xr_window pump)\n");
+	rec.clear();
+	pInput->SetEventSourceExternal(true);
+
+	push_key(SDL_SCANCODE_X, true);
+	push_motion(0, 0, 3, 4);
+	push_motion(0, 0, 2, 1); // two motions in one frame merge
+	frame();
+	check(rec.log.empty(), "with an external source CInput leaves the SDL queue alone");
+
+	// the host polls the queue and hands every event over, as xr_window::PumpEvents does
+	SDL_Event e;
+	int handled = 0, other = 0;
+	while (SDL_PollEvent(&e))
+		(pInput->HandleEvent(e) ? handled : other)++;
+	frame();
+	check(handled >= 2 && rec.has("kp:45"), "HandleEvent takes keyboard events: X is DIK_X (0x2D)");
+	check(rec.has("mm:5,5"), "... and merged mouse motion (3,4 + 2,1)");
+	check(!pInput->HandleEvent(SDL_Event{.type = SDL_EVENT_WINDOW_FOCUS_GAINED}), "window events are not CInput's");
+
+	push_key(SDL_SCANCODE_X, false);
+	while (SDL_PollEvent(&e))
+		pInput->HandleEvent(e);
+	frame();
+	check(rec.has("kr:45"), "release arrives the same way");
+
+	pInput->SetEventSourceExternal(false);
+	push_key(SDL_SCANCODE_Y, true);
+	frame();
+	check(rec.has(Recorder::fmt("kp:%d", DIK_Y)), "and back to peeking the queue");
+	push_key(SDL_SCANCODE_Y, false);
+	frame();
+}
+
 void test_altf4_and_teardown(Recorder& rec)
 {
-	printf("\n[input 6] Alt+F4 and teardown\n");
+	printf("\n[input 7] Alt+F4 and teardown\n");
 	Engine.Event.deferred.clear();
 	push_key(SDL_SCANCODE_LALT, true);
 	push_key(SDL_SCANCODE_F4, true);
@@ -677,6 +713,7 @@ int run_input_tests()
 	test_ui_and_touch(rec);
 	test_text(rec);
 	test_pad(rec);
+	test_external_events(rec);
 	test_altf4_and_teardown(rec);
 
 	rec.IR_Release();

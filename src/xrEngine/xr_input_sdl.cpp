@@ -9,8 +9,9 @@
 //   controller the GameInput layer (src/Platform/GameInput) through gameinput/Adapter.h: pad keys, analog look as
 //              extra mouse deltas, the virtual cursor, rumble and adaptive triggers
 //
-// Event ownership: CInput reads keyboard, mouse, text and gamepad events from the SDL queue. The host loop must
-// leave them there (peek the window events it needs) or forward the ones it polls to HandleEvent().
+// Event ownership: in the engine, xr_window::PumpEvents() is the single consumer of the SDL queue and passes every event
+// to the handler CInput registers (xr_window.h); CInput never polls then. Without it (tools, tests) CInput peeks keyboard,
+// mouse, text and gamepad events from the queue itself, or takes what the host gives HandleEvent().
 #include "stdafx.h"
 #pragma hdrstop
 
@@ -21,6 +22,11 @@
 #include "xr_input_keymap.h"
 
 #include <SDL3/SDL.h>
+
+#if !defined(XR_INPUT_STANDALONE) && __has_include("xr_window.h")
+# include "xr_window.h" // engine-core's window layer: AddEventHandler/RemoveEventHandler
+# define XR_INPUT_USE_XR_WINDOW 1
+#endif
 
 #include <algorithm>
 #include <cmath>
@@ -101,6 +107,10 @@ struct XrInputSdl : public gameinput::IEngineInputSink
     Uint64 pad_last_ns = 0;
     float look_radians_per_count = 0.f;
     bool inited_events = false;
+    // The host feeds events (HandleEvent) and CInput leaves the SDL queue alone.
+    bool external_events = false;
+
+    static void EventThunk(const SDL_Event& e, void* user) { static_cast<XrInputSdl*>(user)->Accept(e); }
 
     // ---- window / pointer ----
     SDL_Window* Window() const
@@ -203,11 +213,29 @@ struct XrInputSdl : public gameinput::IEngineInputSink
     {
         if (IsKeyboardEvent(e.type))
         {
+            // A level load or a stall can leave seconds of events behind; keep the newest.
+            if (kb_events.size() >= 4096)
+                kb_events.erase(kb_events.begin(), kb_events.begin() + 2048);
             kb_events.push_back(e);
             return true;
         }
         if (IsMouseEvent(e.type))
         {
+            // Consecutive motion from one device is one motion (a high-rate mouse over a slow frame).
+            if (e.type == SDL_EVENT_MOUSE_MOTION && !mouse_events.empty())
+            {
+                SDL_Event& last = mouse_events.back();
+                if (last.type == SDL_EVENT_MOUSE_MOTION && last.motion.which == e.motion.which)
+                {
+                    last.motion.x = e.motion.x;
+                    last.motion.y = e.motion.y;
+                    last.motion.xrel += e.motion.xrel;
+                    last.motion.yrel += e.motion.yrel;
+                    return true;
+                }
+            }
+            if (mouse_events.size() >= 4096)
+                mouse_events.erase(mouse_events.begin(), mouse_events.begin() + 2048);
             mouse_events.push_back(e);
             return true;
         }
@@ -221,6 +249,8 @@ struct XrInputSdl : public gameinput::IEngineInputSink
 
     void Gather()
     {
+        if (external_events)
+            return;
         SDL_PumpEvents();
         SDL_Event buf[kMaxPeek];
         int n;
@@ -315,6 +345,11 @@ CInput::CInput(BOOL bExclusive, int deviceForInit)
     else
         sdl->inited_events = true;
 
+#ifdef XR_INPUT_USE_XR_WINDOW
+    xr_window::AddEventHandler(&XrInputSdl::EventThunk, sdl);
+    sdl->external_events = true;
+#endif
+
     sdl->pad_source.Init();
     sdl->pad_ready = true;
     sdl->pad_last_ns = SDL_GetTicksNS();
@@ -342,6 +377,9 @@ CInput::~CInput()
 #endif
     if (sdl)
     {
+#ifdef XR_INPUT_USE_XR_WINDOW
+        xr_window::RemoveEventHandler(&XrInputSdl::EventThunk, sdl);
+#endif
         sdl->text_owners.clear();
         sdl->SyncTextInput();
         sdl->captured = false;
@@ -380,6 +418,8 @@ void CInput::SetWindow(SDL_Window* window)
 SDL_Window* CInput::Window() const { return sdl->Window(); }
 
 bool CInput::HandleEvent(const SDL_Event& event) { return sdl->Accept(event); }
+
+void CInput::SetEventSourceExternal(bool external) { sdl->external_events = external; }
 
 void CInput::SetPointerCaptured(bool captured)
 {

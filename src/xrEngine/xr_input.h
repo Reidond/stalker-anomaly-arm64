@@ -132,9 +132,12 @@ public:
 	void SetWindow(SDL_Window* window);
 	SDL_Window* Window() const;
 
-	// Hosts that poll SDL events themselves hand the keyboard, mouse and text events to CInput instead of dropping
-	// them (it reads the SDL queue itself every frame otherwise). True if the event was one of those.
+	// Keyboard, mouse, text and gamepad events from a host that polls SDL itself (in the engine, xr_window's event
+	// pump, to which the constructor registers). True if the event was one of those.
 	bool HandleEvent(const SDL_Event& event);
+	// With true CInput never reads the SDL queue and only acts on what HandleEvent receives (the engine's setting);
+	// with false (the default without xr_window.h) it peeks the queue itself every frame.
+	void SetEventSourceExternal(bool external);
 
 	// The pointer is captured (relative mode, hidden) while the application is active. ImGui turns it off to
 	// get the OS pointer; the engine's own UI cursor works from the mouse deltas and needs it on.

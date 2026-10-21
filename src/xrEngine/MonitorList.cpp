@@ -24,7 +24,7 @@
 
 ENGINE_API xr_token* vid_monitor_token = nullptr;
 ENGINE_API xr_string  vid_monitor_name  = "Auto";
-ENGINE_API volatile long g_monitor_list_dirty = 0;
+ENGINE_API volatile LONG g_monitor_list_dirty = 0;
 
 static xr_vector<HMONITOR> s_monitor_handles;
 
@@ -391,8 +391,6 @@ void fill_vid_monitor_list()
 
 // A monitor handle is an SDL_DisplayID (never 0) carried in the pointer.
 static HMONITOR DisplayToMonitor(SDL_DisplayID id) { return reinterpret_cast<HMONITOR>(static_cast<uintptr_t>(id)); }
-
-ENGINE_API unsigned MonitorToSdlDisplay(HMONITOR h) { return static_cast<unsigned>(reinterpret_cast<uintptr_t>(h)); }
 
 void fill_vid_monitor_list()
 {
