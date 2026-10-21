@@ -30,7 +30,9 @@
 #		define LUABIND_NO_ERROR_CHECKING
 #	endif // LUABIND_NO_ERROR_CHECKING
 
-#	pragma warning(disable: 4251 577 297)
+#	ifdef _MSC_VER
+#		pragma warning(disable: 4251 577 297)
+#	endif
 #   define LUABIND_DTOR_NOEXCEPT noexcept
 #else
 #   define LUABIND_DTOR_NOEXCEPT
@@ -74,6 +76,11 @@
 #	define LUABIND_TYPE_INFO_EQUAL(i1, i2) *i1 == *i2
 #	define LUABIND_INVALID_TYPE_INFO &typeid(std::in_place_t)
 #	include <typeinfo>
+#endif
+
+// MSVC also declares type_info in the global namespace; libc++ only has std::type_info.
+#ifndef _MSC_VER
+using std::type_info;
 #endif
 
 // LUABIND_NO_EXCEPTIONS

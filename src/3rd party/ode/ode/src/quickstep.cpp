@@ -301,7 +301,7 @@ struct IndexError {
 
 #ifdef REORDER_CONSTRAINTS
 
-static  __cdecl  int compare_index_error (const void *a, const void *b)
+static  ODE_CDECL  int compare_index_error (const void *a, const void *b)
 {
 	const IndexError *i1 = (IndexError*) a;
 	const IndexError *i2 = (IndexError*) b;

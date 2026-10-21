@@ -227,10 +227,16 @@ namespace luabind
 			};
 
 		// if the proxy_member_caller returns void
+			// functor<void> is only forward-declared here; naming it through a dependent type
+			// defers member lookup to instantiation (MSVC does this implicitly, clang does not).
+			template<typename...>
+			struct functor_void_dependent { using type = void; };
+
 			template<typename... Ts>
 			class proxy_functor_void_caller
 			{
                 using tuple_t = std::tuple<Ts...>;
+                using functor_t = luabind::functor<typename functor_void_dependent<Ts...>::type>;
 			public:
 
 				proxy_functor_void_caller(luabind::functor<void>* o, const tuple_t& args)
@@ -344,7 +350,7 @@ namespace luabind
 
 			private:
 
-				luabind::functor<void>* m_func;
+				functor_t* m_func;
 				tuple_t m_args;
 				mutable bool m_called;
 			};

@@ -41,7 +41,15 @@ extern "C" {
 
 #include <stdarg.h>
 
+#if defined(_WIN32) || defined(WIN32)
 #include <malloc.h>		// for alloca under windows
+#else
+#include <stdlib.h>
+#include <alloca.h>
+#endif
+
+#include <stddef.h>
+#include <stdint.h>
 
 #include <string.h>
 
@@ -76,6 +84,24 @@ static union { unsigned char __c[8]; double __d; } __ode_huge_val =
 #else
 
 #define dInfinity _INFINITY8
+
+#endif
+
+
+
+/* MSVC-specific keywords used in the public headers. */
+
+#ifdef _MSC_VER
+
+#define ODE_CDECL _cdecl
+
+#define ODE_FORCEINLINE __forceinline
+
+#else
+
+#define ODE_CDECL
+
+#define ODE_FORCEINLINE inline __attribute__((always_inline))
 
 #endif
 

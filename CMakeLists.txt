@@ -15,4 +15,14 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 include(AnomalyPlatform)
 include(Dependencies)
 
+add_subdirectory("src/3rd party/luabind")
+add_subdirectory("src/3rd party/ode")
+
+# Host-side smoke tests of the engine libraries; the iOS build only checks that the libraries compile.
+enable_testing()
+if(NOT ANOMALY_IOS)
+    add_subdirectory(tools/ode_smoke)
+    add_subdirectory(tools/luabind_smoke)
+endif()
+
 add_subdirectory(tools/platform_probe)

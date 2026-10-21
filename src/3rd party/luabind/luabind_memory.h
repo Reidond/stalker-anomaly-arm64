@@ -22,7 +22,7 @@
 
 namespace luabind 
 {
-    static void* __cdecl luabind_allocator(const void* pointer, size_t const size) 
+    static void* LUABIND_CDECL luabind_allocator(const void* pointer, size_t const size) 
     {
         if (!size)
         {
@@ -40,7 +40,7 @@ namespace luabind
         return realloc(non_const_pointer, size);
     }
 
-    typedef void* (__cdecl* allocator_func_t)(const void* pointer, size_t const size);
+    typedef void* (LUABIND_CDECL* allocator_func_t)(const void* pointer, size_t const size);
     LUABIND_API extern allocator_func_t custom_allocator;
 
     inline void* call_allocator(void const* buffer, size_t const size)
