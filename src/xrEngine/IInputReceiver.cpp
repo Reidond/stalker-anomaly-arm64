@@ -52,6 +52,22 @@ BOOL IInputReceiver::IR_GetBtnState(int btn)
 	return pInput->iGetAsyncBtnState(btn);
 }
 
+#ifdef XR_PLATFORM_APPLE
+// One window, and a pointer that SDL3 reports in that window's coordinates (xr_input_sdl.cpp).
+void IInputReceiver::IR_GetMousePosScreen(Ivector2& p)
+{
+	p.set(0, 0);
+	VERIFY(pInput);
+	pInput->iGetAsyncMousePos(p, true);
+}
+
+void IInputReceiver::IR_GetMousePosReal(HWND hwnd, Ivector2& p)
+{
+	p.set(0, 0);
+	VERIFY(pInput);
+	pInput->iGetAsyncMousePos(p, false);
+}
+#else
 void IInputReceiver::IR_GetMousePosScreen(Ivector2& p)
 {
 	GetCursorPos((LPPOINT)&p);
@@ -62,6 +78,7 @@ void IInputReceiver::IR_GetMousePosReal(HWND hwnd, Ivector2& p)
 	IR_GetMousePosScreen(p);
 	if (hwnd) ScreenToClient(hwnd, (LPPOINT)&p);
 }
+#endif
 
 void IInputReceiver::IR_GetMousePosReal(Ivector2& p)
 {

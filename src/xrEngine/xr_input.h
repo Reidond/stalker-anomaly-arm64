@@ -4,6 +4,34 @@
 #define DIRECTINPUT_VERSION 0x0800
 #include <dinput.h>
 
+#ifdef XR_PLATFORM_APPLE
+# include <functional>
+// SDL3 backend (xr_input_sdl.cpp). The SDL and GameInput headers stay out of this one: it is included everywhere.
+struct SDL_Window;
+union SDL_Event;
+namespace gameinput
+{
+class GameInput;
+class SdlPadSource;
+} // namespace gameinput
+struct XrInputSdl;
+
+// TODO(shim): Common/dinput_compat.h has no DIMOFS_* yet. Same values as dinput.h.
+# ifndef DIMOFS_X
+#  define DIMOFS_X 0
+#  define DIMOFS_Y 4
+#  define DIMOFS_Z 8
+#  define DIMOFS_BUTTON0 12
+#  define DIMOFS_BUTTON1 13
+#  define DIMOFS_BUTTON2 14
+#  define DIMOFS_BUTTON3 15
+#  define DIMOFS_BUTTON4 16
+#  define DIMOFS_BUTTON5 17
+#  define DIMOFS_BUTTON6 18
+#  define DIMOFS_BUTTON7 19
+# endif
+#endif
+
 class ENGINE_API IInputReceiver;
 
 //\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
@@ -46,9 +74,11 @@ public:
 
 private:
 	BENCH_SEC_SCRAMBLEMEMBER1
+#ifndef XR_PLATFORM_APPLE
 	LPDIRECTINPUT8 pDI; // The DInput object
 	LPDIRECTINPUTDEVICE8 pMouse; // The DIDevice7 interface
 	LPDIRECTINPUTDEVICE8 pKeyboard; // The DIDevice7 interface
+#endif
 	//----------------------
 	u32 timeStamp[COUNT_MOUSE_AXIS];
 	u32 timeSave[COUNT_MOUSE_AXIS];
@@ -58,15 +88,22 @@ private:
 	//----------------------
 	BOOL KBState[COUNT_KB_BUTTONS];
 
+#ifndef XR_PLATFORM_APPLE
 	HRESULT CreateInputDevice(LPDIRECTINPUTDEVICE8* device, GUID guidDevice,
 	                          const DIDATAFORMAT* pdidDataFormat, u32 dwFlags,
 	                          u32 buf_size);
+#endif
 
 	// xr_stack<IInputReceiver*> cbStack;
 	xr_vector<IInputReceiver*> cbStack;
 
 	void MouseUpdate();
 	void KeyUpdate();
+
+#ifdef XR_PLATFORM_APPLE
+	XrInputSdl* sdl; // SDL3 state: window, pointer, text input, the controller layer
+	void PadUpdate();
+#endif
 
 public:
 	void resetMouseState();
@@ -103,6 +140,61 @@ public:
 	bool dik_to_text(int dik, bool shift, bool caps, bool ctrl, bool alt, bool altgr, LPSTR dest, int dest_sz);
 
 	void feedback(u16 s1, u16 s2, float time);
+
+#ifdef XR_PLATFORM_APPLE
+	// ---- Apple platforms (SDL3) ---------------------------------------------------------------------------
+	// The window events are read from. Defaults to RDEVICE.m_hWnd, which is the SDL_Window* there.
+	void SetWindow(SDL_Window* window);
+	SDL_Window* Window() const;
+
+	// Hosts that poll SDL events themselves hand the keyboard, mouse and text events to CInput instead of dropping
+	// them (it reads the SDL queue itself every frame otherwise). True if the event was one of those.
+	bool HandleEvent(const SDL_Event& event);
+
+	// The pointer is captured (relative mode, hidden) while the application is active. ImGui turns it off to
+	// get the OS pointer; the engine's own UI cursor works from the mouse deltas and needs it on.
+	void SetPointerCaptured(bool captured);
+	bool IsPointerCaptured() const;
+
+	// Pointer position in client pixels (the space of RDEVICE.clientWidth/Height), also while the pointer is
+	// captured for look: then it is the virtual position the mouse deltas have moved. `global` adds the
+	// window origin. False when there is no window.
+	bool iGetAsyncMousePos(Ivector2& p, bool global = false) const;
+	// Moves the tracked pointer (client pixels), and the OS pointer too while it is not captured.
+	void iSetMousePos(const Ivector2& p);
+	// Caps lock / num lock latch state (GetKeyState(VK_CAPITAL) & 1 on Windows). dik: DIK_CAPITAL, DIK_NUMLOCK.
+	bool iGetKeyToggleState(int dik) const;
+
+	// Text input: while any text field owns it, characters arrive as IR_OnTextInput (Windows-1251) and, on
+	// iPad, the on-screen keyboard is up. `owner` identifies the field, so several fields can't unbalance a
+	// counter; pass the field's `this`. `area` is the field's rectangle in client pixels, to keep it above the
+	// keyboard (may be null).
+	void EnableTextInput(const void* owner = nullptr, const Irect* area = nullptr);
+	void DisableTextInput(const void* owner = nullptr);
+	bool IsTextInputEnabled() const;
+
+	// UI/gameplay switch for touch: while a dialog with a cursor is on top, a touch moves the cursor to the
+	// finger; in gameplay it is ignored for look. Also forwarded to the controller layer's context.
+	void SetUiContext(bool ui);
+
+	// Radians of view rotation one mouse count makes right now (the actor's `scale`, with the live FOV and
+	// sensitivity). The controller's look is converted to counts with it, so its degrees per second hold at any
+	// sensitivity. 0 (default) derives it from psMouseSens.
+	void SetLookRadiansPerCount(float radians);
+
+	// What the engine side does with controller events that are not keys. Set from xrGame once.
+	struct PadHooks
+	{
+		std::function<void(float ui_x, float ui_y)> cursor_jump; // GetUICursor().SetUICursorPosition(...)
+		std::function<void(int command)> ui_action;              // 0 previous page, 1 next page (tabs)
+		std::function<void(bool connected)> connection;          // pause + "reconnect the controller"
+	};
+	PadHooks pad_hooks;
+
+	// The controller layer (DualSense): bindings, tuning, feedback, key capture. Created with CInput.
+	gameinput::GameInput* Pad();
+	gameinput::SdlPadSource* PadSource();
+#endif
 };
 
 extern ENGINE_API CInput* pInput;

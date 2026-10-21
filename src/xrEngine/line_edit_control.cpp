@@ -103,18 +103,35 @@ namespace text_editor
 			),
 			actions.end()
 		);
+#ifdef XR_PLATFORM_APPLE
+		// delete_data() is a dependent template call without `template` (xrServerEntities/object_destroyer.h:150),
+		// which clang rejects; this is what it does for a container of pointers.
+		for (Base* action : actions)
+		{
+			xr_delete(action);
+		}
+#else
 		delete_data(actions);
+#endif
 	}
 
 	static inline bool get_caps_lock_state()
 	{
+#ifdef XR_PLATFORM_APPLE
+		return pInput->iGetKeyToggleState(DIK_CAPITAL);
+#else
 		return (GetKeyState(VK_CAPITAL) & 1) != 0;
+#endif
 	}
 
     // demonized: use DISABLED numlock for scrolling, like in normal apps
     bool line_edit_control::get_num_lock_state()
     {
+#ifdef XR_PLATFORM_APPLE
+        return !pInput->iGetKeyToggleState(DIK_NUMLOCK);
+#else
         return (GetKeyState(VK_NUMLOCK) & 1) == 0;
+#endif
     }
 
 	void line_edit_control::update_key_states()
@@ -167,6 +184,7 @@ namespace text_editor
 
 	void line_edit_control::init(u32 str_buffer_size, init_mode mode)
 	{
+		m_mode = mode;
 		m_buffer_size = str_buffer_size;
 		clamp(m_buffer_size, (int)MIN_BUF_SIZE, (int)MAX_BUF_SIZE);
 
@@ -472,6 +490,78 @@ namespace text_editor
 
 		add_inserted_text();
 		if (m_mark && (!get_key_state(ks_Shift) || !empty_inserted()))
+		{
+			m_select_start = m_cur_pos;
+		}
+		compute_positions();
+
+		m_repeat_mode = false;
+		m_rep_time = 0.0f;
+
+		update_key_states();
+		update_bufs();
+	}
+
+	// -------------------------------------------------------------------------------------------------
+
+	static bool text_char_allowed(init_mode mode, unsigned char c)
+	{
+		if (c < 0x20)
+		{
+			return false;
+		}
+		switch (mode)
+		{
+		case im_read_only:
+			return false;
+		case im_number_only:
+			return (c >= '0' && c <= '9') || c == '-' || c == '+';
+		case im_file_name_mode:
+			// the keys the mode offers: letters (Windows-1251 letters included), digits and - _ . + ` ~ space
+			return c >= 0x80 || (c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+				c == ' ' || c == '-' || c == '_' || c == '.' || c == '+' || c == '`' || c == '~';
+		}
+		return true;
+	}
+
+	void line_edit_control::on_text_input(LPCSTR text)
+	{
+		if (!text || !text[0])
+		{
+			return;
+		}
+
+		PSTR filtered = (PSTR)_alloca((m_buffer_size + 1) * sizeof(char));
+		int n = 0;
+		for (; *text && n < m_buffer_size - 1; ++text)
+		{
+			if (text_char_allowed(m_mode, (unsigned char)*text))
+			{
+				filtered[n++] = *text;
+			}
+		}
+		filtered[n] = 0;
+		if (n == 0)
+		{
+			return;
+		}
+
+		// What on_key_press does around a typed character, without a key to look up.
+		m_last_key_time = 0.0f;
+		m_accel = 1.0f;
+		m_mark = true;
+
+		clamp_cur_pos();
+		clear_inserted();
+		compute_positions();
+
+		insert_text(filtered);
+
+		m_edit_str[m_buffer_size - 1] = 0;
+		clamp_cur_pos();
+
+		add_inserted_text();
+		if (m_mark)
 		{
 			m_select_start = m_cur_pos;
 		}
@@ -801,7 +891,9 @@ namespace text_editor
 
 	void line_edit_control::SwitchKL()
 	{
+#ifndef XR_PLATFORM_APPLE
 		ActivateKeyboardLayout((HKL)HKL_NEXT, 0);
+#endif // the layout is switched by the system on Apple platforms
 	}
 
 	// -------------------------------------------------------------------------------------------------
