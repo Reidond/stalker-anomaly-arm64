@@ -32,6 +32,8 @@
 
 #include <d3d11.h>
 #include <dxgi1_4.h>
+#include <d3dcompiler.h>
+#include <d3dx11.h>
 #include <mtl_d3d11/mtl_d3d11.h>
 
 using namespace mtl_d3d11;
@@ -357,6 +359,8 @@ struct App
                              *srvBC1 = nullptr, *srvStageDst = nullptr, *srvDynamic = nullptr, *srvUAV = nullptr,
                              *srvCopy = nullptr;
     ID3D11UnorderedAccessView* uavFill = nullptr;
+    ID3D11Texture2D *texDDS = nullptr, *texDDSStaged = nullptr;
+    ID3D11ShaderResourceView *srvDDS = nullptr, *srvDDSStaged = nullptr;
     // render targets
     RT albedo, normal, scene, small, resolved;
     ID3D11Texture2D *depthTex = nullptr, *msaaTex = nullptr;
@@ -528,6 +532,28 @@ MipChain makeBC1(int size, const uint8_t a[3], const uint8_t b[3])
     for (size_t m = 0; m < sizes.size(); ++m)
         c.init.push_back({c.mips[m].data(), UINT(std::max((sizes[m] + 3) / 4, 1) * 8), 0});
     return c;
+}
+
+// A legacy-header DXT1 .dds file with a full mip chain of one colour (what Anomaly's textures look like).
+std::vector<uint8_t> makeDDS(int size, const uint8_t col[3])
+{
+    MipChain c = makeBC1(size, col, col);
+    std::vector<uint8_t> f(4 + 124, 0);
+    auto put = [&](size_t off, uint32_t v) { std::memcpy(&f[off], &v, 4); };
+    put(0, 0x20534444);
+    put(4, 124);
+    put(8, 0x1 | 0x2 | 0x4 | 0x1000 | 0x20000);
+    put(12, size);
+    put(16, size);
+    put(20, uint32_t(c.mips[0].size()));
+    put(28, uint32_t(c.mips.size()));
+    put(4 + 72, 32);                 // DDS_PIXELFORMAT.size
+    put(4 + 76, 0x4);                // DDPF_FOURCC
+    put(4 + 80, 0x31545844);         // 'DXT1'
+    put(4 + 108, 0x1000 | 0x8 | 0x400000);
+    for (auto& m : c.mips)
+        f.insert(f.end(), m.begin(), m.end());
+    return f;
 }
 
 // ---- device setup -------------------------------------------------------------------------------------------
@@ -778,6 +804,53 @@ bool createResources(App& a)
         d.Usage = D3D11_USAGE_DEFAULT; d.BindFlags = D3D11_BIND_SHADER_RESOURCE;
         CHECK_HR(a.dev->CreateTexture2D(&d, nullptr, &a.texCopy));
         CHECK_HR(a.dev->CreateShaderResourceView(a.texCopy, nullptr, &a.srvCopy));
+    }
+
+    // DDS through the D3DX11 replacement, the way R4's texture_load does it (skip the top mip, IMMUTABLE)
+    {
+        const uint8_t col[3] = {0, 200, 100};
+        std::vector<uint8_t> dds = makeDDS(64, col);
+        D3DX11_IMAGE_INFO info{};
+        CHECK_HR(D3DX11GetImageInfoFromMemory(dds.data(), dds.size(), nullptr, &info, nullptr));
+        if (info.Width != 64 || info.MipLevels != 7 || info.Format != DXGI_FORMAT_BC1_UNORM)
+        {
+            SDL_Log("DDS header probe returned %ux%u mips %u fmt %d", info.Width, info.Height, info.MipLevels, int(info.Format));
+            return false;
+        }
+        D3DX11_IMAGE_LOAD_INFO li;
+        li.FirstMipLevel = 1;
+        li.MipLevels = info.MipLevels - 1;
+        li.Width = info.Width / 2;
+        li.Height = info.Height / 2;
+        li.pSrcInfo = &info;
+        li.Usage = D3D11_USAGE_IMMUTABLE;
+        li.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+        ID3D11Resource* r = nullptr;
+        CHECK_HR(D3DX11CreateTextureFromMemory(a.dev, dds.data(), dds.size(), &li, nullptr, &r, nullptr));
+        a.texDDS = static_cast<ID3D11Texture2D*>(r);
+        D3D11_TEXTURE2D_DESC td;
+        a.texDDS->GetDesc(&td);
+        if (td.Width != 32 || td.MipLevels != 6)
+        {
+            SDL_Log("DDS load produced %ux%u with %u mips", td.Width, td.Height, td.MipLevels);
+            return false;
+        }
+        CHECK_HR(a.dev->CreateShaderResourceView(a.texDDS, nullptr, &a.srvDDS));
+        // staging path (R4 loads as STAGING and copies to a DEFAULT texture on first use)
+        D3DX11_IMAGE_LOAD_INFO ls = li;
+        ls.Usage = D3D11_USAGE_STAGING;
+        ls.BindFlags = 0;
+        ls.CpuAccessFlags = D3D11_CPU_ACCESS_WRITE;
+        CHECK_HR(D3DX11CreateTextureFromMemory(a.dev, dds.data(), dds.size(), &ls, nullptr, &r, nullptr));
+        ID3D11Texture2D* stage = static_cast<ID3D11Texture2D*>(r);
+        stage->GetDesc(&td);
+        td.Usage = D3D11_USAGE_DEFAULT;
+        td.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+        td.CPUAccessFlags = 0;
+        CHECK_HR(a.dev->CreateTexture2D(&td, nullptr, &a.texDDSStaged));
+        a.ctx->CopyResource(a.texDDSStaged, stage);
+        stage->Release();
+        CHECK_HR(a.dev->CreateShaderResourceView(a.texDDSStaged, nullptr, &a.srvDDSStaged));
     }
 
     D3D11_QUERY_DESC qd{D3D11_QUERY_OCCLUSION, 0};
@@ -1162,6 +1235,9 @@ bool renderFrame(App& a)
         drawQuad(a, sx(8), sy, 64, 64, 0.5f, white, a.srvDynamic, a.smpPoint);
         // 9: BC1
         drawQuad(a, sx(9), sy, 64, 64, 0.5f, white, a.srvBC1, a.smpPoint);
+        // 10: DDS loaded through D3DX11CreateTextureFromMemory (first mip skipped), 11: same via a STAGING copy
+        drawQuad(a, sx(10), sy, 64, 64, 0.5f, white, a.srvDDS, a.smpLinear);
+        drawQuad(a, sx(11), sy, 64, 64, 0.5f, white, a.srvDDSStaged, a.smpLinear);
     }
 
     // sync point for the CPU throttle
@@ -1184,6 +1260,44 @@ void clearSmallRT(App& a)
     a.ctx->OMSetRenderTargets(1, &a.small.rtv, nullptr);
     a.ctx->ClearRenderTargetView(a.small.rtv, c);
     a.ctx->OMSetRenderTargets(0, nullptr, nullptr);
+}
+
+// R4's R_constant_table::parse reads shaders through ID3D11ShaderReflection; make sure the container answers it.
+bool checkReflection(App&)
+{
+    ShaderReflection r;
+    r.cbuffers = {cbuf("ObjPS", 0, 32, {var("tint", 0, 16, D3D_SVC_VECTOR, 1, 4), var("uvScale", 16, 16, D3D_SVC_VECTOR, 1, 4)})};
+    r.resources = {texBind("s_base", 0), smpBind("smp_base", 0)};
+    std::vector<uint8_t> bytes = shaderBytes(ShaderStage::Pixel, "gbuffer_ps", r);
+    ID3D11ShaderReflection* refl = nullptr;
+    if (FAILED(D3DReflect(bytes.data(), bytes.size(), IID_PPV_ARGS(&refl))))
+    {
+        report("reflection: D3DReflect failed  FAIL");
+        return false;
+    }
+    D3D11_SHADER_DESC sd;
+    refl->GetDesc(&sd);
+    ID3D11ShaderReflectionConstantBuffer* cb = refl->GetConstantBufferByIndex(0);
+    D3D11_SHADER_BUFFER_DESC bd{};
+    cb->GetDesc(&bd);
+    ID3D11ShaderReflectionVariable* v = cb->GetVariableByIndex(1);
+    D3D11_SHADER_VARIABLE_DESC vd{};
+    v->GetDesc(&vd);
+    D3D11_SHADER_TYPE_DESC td{};
+    v->GetType()->GetDesc(&td);
+    bool tex = false, smp = false;
+    for (UINT i = 0; i < sd.BoundResources; ++i)
+    {
+        D3D11_SHADER_INPUT_BIND_DESC b;
+        refl->GetResourceBindingDesc(i, &b);
+        tex |= b.Type == D3D10_SIT_TEXTURE && !strcmp(b.Name, "s_base") && b.BindPoint == 0;
+        smp |= b.Type == D3D10_SIT_SAMPLER && !strcmp(b.Name, "smp_base");
+    }
+    const bool ok = sd.ConstantBuffers == 1 && bd.Size == 32 && bd.Variables == 2 && !strcmp(bd.Name, "ObjPS") && vd.StartOffset == 16 &&
+                    !strcmp(vd.Name, "uvScale") && td.Class == D3D10_SVC_VECTOR && td.Type == D3D10_SVT_FLOAT && td.Columns == 4 && tex && smp;
+    report("reflection: ID3D11ShaderReflection answers R4's constant-table queries  %s", ok ? "PASS" : "FAIL");
+    refl->Release();
+    return ok;
 }
 
 bool writePNG(const std::string& path, const CaptureResult& r)
@@ -1220,6 +1334,8 @@ void verifyCapture(App& a, const CaptureResult& cap)
         {"staging texture -> CopyResource", {0, 255, 255}, 3},
         {"dynamic texture Map(DISCARD)", {255, 0, 255}, 3},
         {"BC1 texture", {255, 130, 0}, 10},
+        {"DDS via D3DX11CreateTextureFromMemory", {0, 203, 99}, 10},
+        {"DDS loaded as STAGING then CopyResource", {0, 203, 99}, 10},
     };
     const int sy = a.H - 88;
     int bad = 0;
@@ -1321,6 +1437,8 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[])
     if (!createPipeline(*a) || !createResources(*a) || !createTargets(*a))
         return SDL_APP_FAILURE;
     clearSmallRT(*a);
+    if (!checkReflection(*a))
+        a->failures++;
     report("Metal D3D11 Lab: %dx%d, device %s", a->W, a->H, [((__bridge id<MTLDevice>)GetNativeDevice(a->dev)).name UTF8String]);
     return SDL_APP_CONTINUE;
 }
