@@ -1,0 +1,370 @@
+diff --git a/src/lj_asm_arm64.h b/src/lj_asm_arm64.h
+index d068b15..fb40fb6 100644
+--- a/src/lj_asm_arm64.h
++++ b/src/lj_asm_arm64.h
+@@ -62,17 +62,17 @@ static void asm_exitstub_setup(ASMState *as, ExitNo nexits)
+   **          bl <1; bl <1; ...
+   */
+   for (i = nexits-1; (int32_t)i >= 0; i--)
+-    *--mxp = A64I_LE(A64I_BL | A64F_S26(-3-ind-i));
++    *LJ_MCW(--mxp) = A64I_LE(A64I_BL | A64F_S26(-3-ind-i));
+   as->mcexit = mxp;
+-  *--mxp = A64I_LE(A64I_MOVZw | A64F_U16(as->T->traceno));
++  *LJ_MCW(--mxp) = A64I_LE(A64I_MOVZw | A64F_U16(as->T->traceno));
+   if (ind) {
+-    *--mxp = A64I_LE(A64I_BLR_AUTH | A64F_N(RID_LR));
+-    *--mxp = A64I_LE(A64I_LDRx | A64F_D(RID_LR) | A64F_N(RID_GL) | A64F_U12(glofs(as, &as->J->k64[LJ_K64_VM_EXIT_HANDLER]) >> 3));
++    *LJ_MCW(--mxp) = A64I_LE(A64I_BLR_AUTH | A64F_N(RID_LR));
++    *LJ_MCW(--mxp) = A64I_LE(A64I_LDRx | A64F_D(RID_LR) | A64F_N(RID_GL) | A64F_U12(glofs(as, &as->J->k64[LJ_K64_VM_EXIT_HANDLER]) >> 3));
+   } else {
+     mxp--;
+-    *mxp = A64I_LE(A64I_BL | A64F_S26(target-mxp));
++    *LJ_MCW(mxp) = A64I_LE(A64I_BL | A64F_S26(target-mxp));
+   }
+-  *--mxp = A64I_LE(A64I_STRx | A64F_D(RID_LR) | A64F_N(RID_SP));
++  *LJ_MCW(--mxp) = A64I_LE(A64I_STRx | A64F_D(RID_LR) | A64F_N(RID_SP));
+   as->mctop = mxp;
+ }
+ 
+@@ -89,7 +89,7 @@ static void asm_guardcc(ASMState *as, A64CC cc)
+   MCode *p = as->mcp;
+   if (LJ_UNLIKELY(p == as->invmcp)) {
+     as->loopinv = 1;
+-    *p = A64I_B | A64F_S26(target-p);
++    *LJ_MCW(p) = A64I_B | A64F_S26(target-p);
+     emit_cond_branch(as, cc^1, p-1);
+     return;
+   }
+@@ -105,7 +105,7 @@ static int asm_guardtnb(ASMState *as, A64Ins ai, Reg r, uint32_t bit)
+   if (LJ_UNLIKELY(p == as->invmcp)) {
+     if (as->orignins > 1023) return 0;  /* Delta might end up too large. */
+     as->loopinv = 1;
+-    *p = A64I_B | A64F_S26(delta);
++    *LJ_MCW(p) = A64I_B | A64F_S26(delta);
+     ai ^= 0x01000000u;
+     target = p-1;
+   } else if (LJ_UNLIKELY(delta >= 0x1fff)) {
+@@ -122,7 +122,7 @@ static void asm_guardcnb(ASMState *as, A64Ins ai, Reg r)
+   MCode *p = as->mcp;
+   if (LJ_UNLIKELY(p == as->invmcp)) {
+     as->loopinv = 1;
+-    *p = A64I_B | A64F_S26(target-p);
++    *LJ_MCW(p) = A64I_B | A64F_S26(target-p);
+     emit_cnb(as, ai^0x01000000u, r, p-1);
+     return;
+   }
+@@ -856,7 +856,7 @@ static void asm_href(ASMState *as, IRIns *ir, IROp merge)
+   if (!destused)
+     emit_lso(as, A64I_LDRx, dest, dest, offsetof(Node, next));
+   emit_lso(as, A64I_LDRx, tmp, dest, offsetof(Node, key));
+-  *l_loop = A64I_X | A64I_CBNZ | A64F_S19(as->mcp - l_loop) | dest;
++  *LJ_MCW(l_loop) = A64I_X | A64I_CBNZ | A64F_S19(as->mcp - l_loop) | dest;
+ 
+   /* Construct tkey as canonicalized or tagged key. */
+   if (!isk) {
+@@ -1852,7 +1852,7 @@ static void asm_gc_check(ASMState *as)
+   l_end = emit_label(as);
+   /* Exit trace if in GCSatomic or GCSfinalize. Avoids syncing GC objects. */
+   asm_guardcnb(as, A64I_CBNZ, RID_RET); /* Assumes asm_snap_prep() is done. */
+-  *--as->mcp = ARM64_NOPATCH_GC_CHECK;
++  *LJ_MCW(--as->mcp) = ARM64_NOPATCH_GC_CHECK;
+   args[0] = ASMREF_TMP1;  /* global_State *g */
+   args[1] = ASMREF_TMP2;  /* MSize steps     */
+   asm_gencall(as, ci, args);
+@@ -1876,13 +1876,13 @@ static void asm_loop_fixup(ASMState *as)
+   MCode *p = as->mctop;
+   MCode *target = as->mcp;
+   if (as->loopinv) {  /* Inverted loop branch? */
+-    uint32_t mask = (p[-2] & 0x7e000000) == 0x36000000 ? 0x3fffu : 0x7ffffu;
++    uint32_t mask = (LJ_MCW(p)[-2] & 0x7e000000) == 0x36000000 ? 0x3fffu : 0x7ffffu;
+     ptrdiff_t delta = target - (p - 2);
+     /* asm_guard* already inverted the bcc/tnb/cnb and patched the final b. */
+-    p[-2] |= ((uint32_t)delta & mask) << 5;
++    LJ_MCW(p)[-2] |= ((uint32_t)delta & mask) << 5;
+   } else {
+     ptrdiff_t delta = target - (p - 1);
+-    p[-1] = A64I_B | A64F_S26(delta);
++    LJ_MCW(p)[-1] = A64I_B | A64F_S26(delta);
+   }
+ }
+ 
+@@ -1942,17 +1942,17 @@ static void asm_tail_fixup(ASMState *as, TraceNo lnk)
+   if (spadj) {  /* Emit stack adjustment. */
+     uint32_t k = emit_isk12(spadj);
+     lj_assertA(k, "stack adjustment %d does not fit in K12", spadj);
+-    *mcp++ = (A64I_ADDx^k) | A64F_D(RID_SP) | A64F_N(RID_SP);
++    *LJ_MCW(mcp++) = (A64I_ADDx^k) | A64F_D(RID_SP) | A64F_N(RID_SP);
+   }
+   /* Emit exit branch. */
+   target = lnk ? traceref(as->J, lnk)->mcode : (MCode *)(void *)lj_vm_exit_interp;
+   if (lnk || A64F_S_OK(target - mcp, 26)) {
+-    *mcp = A64I_B | A64F_S26(target - mcp); mcp++;
++    *LJ_MCW(mcp) = A64I_B | A64F_S26(target - mcp); mcp++;
+   } else {
+-    *mcp++ = A64I_LDRx | A64F_D(RID_LR) | A64F_N(RID_GL) | A64F_U12(glofs(as, &as->J->k64[LJ_K64_VM_EXIT_INTERP]) >> 3);
+-    *mcp++ = A64I_BR_AUTH | A64F_N(RID_LR);
++    *LJ_MCW(mcp++) = A64I_LDRx | A64F_D(RID_LR) | A64F_N(RID_GL) | A64F_U12(glofs(as, &as->J->k64[LJ_K64_VM_EXIT_INTERP]) >> 3);
++    *LJ_MCW(mcp++) = A64I_BR_AUTH | A64F_N(RID_LR);
+   }
+-  while (as->mctop > mcp) *--as->mctop = A64I_LE(A64I_NOP);
++  while (as->mctop > mcp) *LJ_MCW(--as->mctop) = A64I_LE(A64I_NOP);
+ }
+ 
+ /* Prepare tail of code. */
+@@ -1971,7 +1971,7 @@ static void asm_tail_prep(ASMState *as, TraceNo lnk)
+     as->invmcp = NULL;
+   }
+   as->mctail = p;
+-  *p = 0;  /* Prevent load/store merging. */
++  *LJ_MCW(p) = 0;  /* Prevent load/store merging. */
+ }
+ 
+ /* -- Trace setup --------------------------------------------------------- */
+@@ -2056,34 +2056,34 @@ void lj_asm_patchexit(jit_State *J, GCtrace *T, ExitNo exitno, MCode *target)
+   for (; p < pe; p++) {
+     /* Look for exitstub branch, replace with branch to target. */
+     ptrdiff_t delta = target - p;
+-    MCode ins = A64I_LE(*p);
++    MCode ins = A64I_LE(*LJ_MCW(p));
+     if ((ins & 0xff000000u) == 0x54000000u &&
+ 	((ins ^ ((px-p)<<5)) & 0x00ffffe0u) == 0) {
+       /* Patch bcc, if within range. */
+       if (A64F_S_OK(delta, 19)) {
+-	*p = A64I_LE((ins & 0xff00001fu) | A64F_S19(delta));
++	*LJ_MCW(p) = A64I_LE((ins & 0xff00001fu) | A64F_S19(delta));
+ 	if (!cstart) cstart = p;
+       }
+     } else if ((ins & 0xfc000000u) == 0x14000000u &&
+ 	       ((ins ^ (px-p)) & 0x03ffffffu) == 0) {
+       /* Patch b. */
+       lj_assertJ(A64F_S_OK(delta, 26), "branch target out of range");
+-      *p = A64I_LE((ins & 0xfc000000u) | A64F_S26(delta));
++      *LJ_MCW(p) = A64I_LE((ins & 0xfc000000u) | A64F_S26(delta));
+       if (!cstart) cstart = p;
+     } else if ((ins & 0x7e000000u) == 0x34000000u &&
+ 	       ((ins ^ ((px-p)<<5)) & 0x00ffffe0u) == 0) {
+       /* Patch cbz/cbnz, if within range. */
+-      if (p[-1] == ARM64_NOPATCH_GC_CHECK) {
++      if (LJ_MCW(p)[-1] == ARM64_NOPATCH_GC_CHECK) {
+ 	patchlong = 0;
+       } else if (A64F_S_OK(delta, 19)) {
+-	*p = A64I_LE((ins & 0xff00001fu) | A64F_S19(delta));
++	*LJ_MCW(p) = A64I_LE((ins & 0xff00001fu) | A64F_S19(delta));
+ 	if (!cstart) cstart = p;
+       }
+     } else if ((ins & 0x7e000000u) == 0x36000000u &&
+ 	       ((ins ^ ((px-p)<<5)) & 0x0007ffe0u) == 0) {
+       /* Patch tbz/tbnz, if within range. */
+       if (A64F_S_OK(delta, 14)) {
+-	*p = A64I_LE((ins & 0xfff8001fu) | A64F_S14(delta));
++	*LJ_MCW(p) = A64I_LE((ins & 0xfff8001fu) | A64F_S14(delta));
+ 	if (!cstart) cstart = p;
+       }
+     }
+@@ -2092,7 +2092,7 @@ void lj_asm_patchexit(jit_State *J, GCtrace *T, ExitNo exitno, MCode *target)
+   if (patchlong) {
+     ptrdiff_t delta = target - px;
+     lj_assertJ(A64F_S_OK(delta, 26), "branch target out of range");
+-    *px = A64I_B | A64F_S26(delta);
++    *LJ_MCW(px) = A64I_B | A64F_S26(delta);
+     if (!cstart) cstart = px;
+   }
+   if (cstart) lj_mcode_sync(cstart, px+1);
+diff --git a/src/lj_emit_arm64.h b/src/lj_emit_arm64.h
+index 481e49c..01abaaa 100644
+--- a/src/lj_emit_arm64.h
++++ b/src/lj_emit_arm64.h
+@@ -81,42 +81,42 @@ static uint32_t emit_isfpmovi(uint64_t n)
+ 
+ static void emit_dnma(ASMState *as, A64Ins ai, Reg rd, Reg rn, Reg rm, Reg ra)
+ {
+-  *--as->mcp = ai | A64F_D(rd) | A64F_N(rn) | A64F_M(rm) | A64F_A(ra);
++  *LJ_MCW(--as->mcp) = ai | A64F_D(rd) | A64F_N(rn) | A64F_M(rm) | A64F_A(ra);
+ }
+ 
+ static void emit_dnm(ASMState *as, A64Ins ai, Reg rd, Reg rn, Reg rm)
+ {
+-  *--as->mcp = ai | A64F_D(rd) | A64F_N(rn) | A64F_M(rm);
++  *LJ_MCW(--as->mcp) = ai | A64F_D(rd) | A64F_N(rn) | A64F_M(rm);
+ }
+ 
+ static void emit_dm(ASMState *as, A64Ins ai, Reg rd, Reg rm)
+ {
+-  *--as->mcp = ai | A64F_D(rd) | A64F_M(rm);
++  *LJ_MCW(--as->mcp) = ai | A64F_D(rd) | A64F_M(rm);
+ }
+ 
+ static void emit_dn(ASMState *as, A64Ins ai, Reg rd, Reg rn)
+ {
+-  *--as->mcp = ai | A64F_D(rd) | A64F_N(rn);
++  *LJ_MCW(--as->mcp) = ai | A64F_D(rd) | A64F_N(rn);
+ }
+ 
+ static void emit_nm(ASMState *as, A64Ins ai, Reg rn, Reg rm)
+ {
+-  *--as->mcp = ai | A64F_N(rn) | A64F_M(rm);
++  *LJ_MCW(--as->mcp) = ai | A64F_N(rn) | A64F_M(rm);
+ }
+ 
+ static void emit_d(ASMState *as, A64Ins ai, Reg rd)
+ {
+-  *--as->mcp = ai | A64F_D(rd);
++  *LJ_MCW(--as->mcp) = ai | A64F_D(rd);
+ }
+ 
+ static void emit_dl(ASMState *as, A64Ins ai, Reg rd, uint32_t l)
+ {
+-  *--as->mcp = ai | A64F_D(rd) | A64F_S19(l >> 2);
++  *LJ_MCW(--as->mcp) = ai | A64F_D(rd) | A64F_S19(l >> 2);
+ }
+ 
+ static void emit_n(ASMState *as, A64Ins ai, Reg rn)
+ {
+-  *--as->mcp = ai | A64F_N(rn);
++  *LJ_MCW(--as->mcp) = ai | A64F_N(rn);
+ }
+ 
+ static int emit_checkofs(A64Ins ai, int64_t ofs)
+@@ -148,28 +148,28 @@ static void emit_lso(ASMState *as, A64Ins ai, Reg rd, Reg rn, int64_t ofs64)
+   if ((sc == 2 || sc == 3) &&
+       (!(ai & 0x400000) || rd != rn) &&
+       as->mcp != as->mcloop) {
+-    uint32_t prev = *as->mcp & ~A64F_D(31);
++    uint32_t prev = *LJ_MCW(as->mcp) & ~A64F_D(31);
+     int ofsm = ofs - (1<<sc), ofsp = ofs + (1<<sc);
+     A64Ins aip;
+     if (prev == emit_lso_pair_candidate(ai | A64F_N(rn), ofsm, sc)) {
+-      aip = (A64F_A(rd) | A64F_D(*as->mcp & 31));
++      aip = (A64F_A(rd) | A64F_D(*LJ_MCW(as->mcp) & 31));
+     } else if (prev == emit_lso_pair_candidate(ai | A64F_N(rn), ofsp, sc)) {
+-      aip = (A64F_D(rd) | A64F_A(*as->mcp & 31));
++      aip = (A64F_D(rd) | A64F_A(*LJ_MCW(as->mcp) & 31));
+       ofsm = ofs;
+     } else {
+       goto nopair;
+     }
+     if (lj_ror((unsigned int)ofsm + (64u<<sc), sc) <= 127u) {
+-      *as->mcp = aip | A64F_N(rn) | (((ofsm >> sc) & 0x7f) << 15) |
++      *LJ_MCW(as->mcp) = aip | A64F_N(rn) | (((ofsm >> sc) & 0x7f) << 15) |
+ 	(ai ^ ((ai == A64I_LDRx || ai == A64I_STRx) ? 0x50000000 : 0x90000000));
+       return;
+     }
+   }
+ nopair:
+   if (ot == 1)
+-    *--as->mcp = ai | A64F_D(rd) | A64F_N(rn) | A64F_U12(ofs >> sc);
++    *LJ_MCW(--as->mcp) = ai | A64F_D(rd) | A64F_N(rn) | A64F_U12(ofs >> sc);
+   else
+-    *--as->mcp = (ai^A64I_LS_U) | A64F_D(rd) | A64F_N(rn) | A64F_S9(ofs & 0x1ff);
++    *LJ_MCW(--as->mcp) = (ai^A64I_LS_U) | A64F_D(rd) | A64F_N(rn) | A64F_S9(ofs & 0x1ff);
+ }
+ 
+ /* -- Emit loads/stores --------------------------------------------------- */
+@@ -359,7 +359,7 @@ static void emit_cond_branch(ASMState *as, A64CC cond, MCode *target)
+   MCode *p = --as->mcp;
+   ptrdiff_t delta = target - p;
+   lj_assertA(A64F_S_OK(delta, 19), "branch target out of range");
+-  *p = A64I_BCC | A64F_S19(delta) | cond;
++  *LJ_MCW(p) = A64I_BCC | A64F_S19(delta) | cond;
+ }
+ 
+ static void emit_branch(ASMState *as, A64Ins ai, MCode *target)
+@@ -367,7 +367,7 @@ static void emit_branch(ASMState *as, A64Ins ai, MCode *target)
+   MCode *p = --as->mcp;
+   ptrdiff_t delta = target - p;
+   lj_assertA(A64F_S_OK(delta, 26), "branch target out of range");
+-  *p = ai | A64F_S26(delta);
++  *LJ_MCW(p) = ai | A64F_S26(delta);
+ }
+ 
+ static void emit_tnb(ASMState *as, A64Ins ai, Reg r, uint32_t bit, MCode *target)
+@@ -377,7 +377,7 @@ static void emit_tnb(ASMState *as, A64Ins ai, Reg r, uint32_t bit, MCode *target
+   lj_assertA(bit < 63, "bit number out of range");
+   lj_assertA(A64F_S_OK(delta, 14), "branch target out of range");
+   if (bit > 31) ai |= A64I_X;
+-  *p = ai | A64F_BIT(bit & 31) | A64F_S14(delta) | r;
++  *LJ_MCW(p) = ai | A64F_BIT(bit & 31) | A64F_S14(delta) | r;
+ }
+ 
+ static void emit_cnb(ASMState *as, A64Ins ai, Reg r, MCode *target)
+@@ -385,7 +385,7 @@ static void emit_cnb(ASMState *as, A64Ins ai, Reg r, MCode *target)
+   MCode *p = --as->mcp;
+   ptrdiff_t delta = target - p;
+   lj_assertA(A64F_S_OK(delta, 19), "branch target out of range");
+-  *p = ai | A64F_S19(delta) | r;
++  *LJ_MCW(p) = ai | A64F_S19(delta) | r;
+ }
+ 
+ #define emit_jmp(as, target)	emit_branch(as, A64I_B, (target))
+@@ -401,18 +401,18 @@ static void emit_call(ASMState *as, ASMFunction target)
+ #endif
+   ptrdiff_t delta = targetp - (char *)p;
+   if (A64F_S_OK(delta>>2, 26)) {
+-    *p = A64I_BL | A64F_S26(delta>>2);
++    *LJ_MCW(p) = A64I_BL | A64F_S26(delta>>2);
+   } else {  /* Target out of range: need indirect call. But don't use R0-R7. */
+     Reg r = ra_allock(as, i64ptr(target),
+ 		      RSET_RANGE(RID_X8, RID_MAX_GPR)-RSET_FIXED);
+-    *p = A64I_BLR_AUTH | A64F_N(r);
++    *LJ_MCW(p) = A64I_BLR_AUTH | A64F_N(r);
+   }
+ }
+ 
+ #if LJ_ABI_BRANCH_TRACK
+ static void emit_branch_track(ASMState *as)
+ {
+-  *--as->mcp = A64I_BTI_J;
++  *LJ_MCW(--as->mcp) = A64I_BTI_J;
+ }
+ #endif
+ 
+@@ -427,12 +427,12 @@ static void emit_movrr(ASMState *as, IRIns *ir, Reg dst, Reg src)
+     return;
+   }
+   if (as->mcp != as->mcloop) {  /* Swap early registers for loads/stores. */
+-    MCode ins = *as->mcp, swp = (src^dst);
++    MCode ins = *LJ_MCW(as->mcp), swp = (src^dst);
+     if ((ins & 0xbf800000) == 0xb9000000) {
+       if (!((ins ^ (dst << 5)) & 0x000003e0))
+-	*as->mcp = ins ^ (swp << 5);  /* Swap N in load/store. */
++	*LJ_MCW(as->mcp) = ins ^ (swp << 5);  /* Swap N in load/store. */
+       if (!(ins & 0x00400000) && !((ins ^ dst) & 0x0000001f))
+-	*as->mcp = ins ^ swp;  /* Swap D in store. */
++	*LJ_MCW(as->mcp) = ins ^ swp;  /* Swap D in store. */
+     }
+   }
+   emit_dm(as, A64I_MOVx, dst, src);
+diff --git a/src/lj_mcode.h b/src/lj_mcode.h
+index 64320fd..5e9697d 100644
+--- a/src/lj_mcode.h
++++ b/src/lj_mcode.h
+@@ -8,6 +8,29 @@
+ 
+ #include "lj_obj.h"
+ 
++/* TXM dual-mapped machine code (Apple devices where only a debugger can
++** authorize executable pages). The code area is mapped twice: an RX alias
++** (the address the CPU executes and LuaJIT records) and an RW alias at a
++** fixed distance (the only address code is written through). Every store
++** into machine code goes through LJ_MCW(). See lj_txm.c.
++*/
++#if defined(LUAJIT_TXM_DUALMAP) && LJ_TARGET_ARM64 && LJ_TARGET_POSIX
++#define LJ_TXM_DUALMAP	1
++#else
++#define LJ_TXM_DUALMAP	0
++#endif
++
++#if LJ_TXM_DUALMAP
++LJ_DATA ptrdiff_t lj_mcode_rwdelta;	/* RW alias minus RX address. */
++#define LJ_MCW(p)	((MCode *)((char *)(p) + lj_mcode_rwdelta))
++LJ_FUNC int lj_txm_mcode_ready(void);
++LJ_FUNC void *lj_txm_mcode_alloc(size_t sz);
++LJ_FUNC void lj_txm_mcode_free(void *p, size_t sz);
++LJ_FUNC int lj_txm_mcode_sync(void *start, void *end);
++#else
++#define LJ_MCW(p)	(p)
++#endif
++
+ #if LJ_HASJIT || LJ_HASFFI
+ LJ_FUNC void lj_mcode_sync(void *start, void *end);
+ #endif
