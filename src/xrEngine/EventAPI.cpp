@@ -167,7 +167,7 @@ void CEventAPI::Defer(LPCSTR N, u64 P1, u64 P2)
 	CS.Leave();
 }
 
-#ifdef DEBUG
+#ifdef XR_USE_MAILSLOT
 void msParse(LPCSTR c)
 {
     if (0 == stricmp(c, "exit"))
@@ -184,7 +184,7 @@ void msParse(LPCSTR c)
 
 void CEventAPI::OnFrame()
 {
-#ifdef DEBUG
+#ifdef XR_USE_MAILSLOT
     msRead();
 #endif
 	CS.Enter();

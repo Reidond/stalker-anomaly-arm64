@@ -28,6 +28,11 @@
 # define XR_USE_DISCORD 1
 #endif
 
+// The debug-build mailslot console (mailSlot.cpp, msParse in EventAPI.cpp) is Windows IPC.
+#if defined(DEBUG) && !defined(XR_PLATFORM_APPLE)
+# define XR_USE_MAILSLOT 1
+#endif
+
 #ifdef _DEBUG
 # define D3D_DEBUG_INFO
 #endif

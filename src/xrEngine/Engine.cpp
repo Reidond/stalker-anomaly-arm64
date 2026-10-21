@@ -39,7 +39,7 @@ PROTECT_API void CEngine::Initialize(void)
 	// Other stuff
 	Engine.Sheduler.Initialize();
 	//
-#ifdef DEBUG
+#ifdef XR_USE_MAILSLOT
     msCreate("game");
 #endif
 }

@@ -31,7 +31,7 @@ the Windows solution has projects for: `xrImGui` (Dear ImGui without its DX back
 | `cmake/targets/xrEngine_input.cmake` | the engine-input session's fragment. The root glob includes it after `xrEngine.cmake`, so it can `target_sources(xrEngine ...)` and `target_link_libraries(xrEngine ...)` directly. |
 
 `stdafx.h` includes `Common/Platform.h` first and no longer defines `INGAME_EDITOR` in non-`NDEBUG` builds on Apple (that
-is `editor.dll`, Windows only). `OutOfVirtError.RES`, `resource.rc` and the splash bitmaps are not compiled.
+is `editor.dll`, Windows only). The `-DANOMALY_ENGINE_DEBUG=ON` flavour (`DEBUG` defined) builds too. `OutOfVirtError.RES`, `resource.rc` and the splash bitmaps are not compiled.
 
 ## The window and the device
 
@@ -159,7 +159,7 @@ Keep-awake is the shell's (`SetKeepScreenAwake` is on after `Init`, released whi
 | `x_ray.cpp` | Discord/ICU behind `XR_USE_DISCORD`; `Startup()` split; `WinMain`, the splash dialog, `damn_keys_filter` (sticky keys, screensaver), Optimus exports, the stack-overflow SEH filter and the single-instance mutex are Windows only; `PostQuitMessage` -> `RequestQuit`; `LoadDraw` pumps events |
 | `Engine.cpp`, `EngineAPI.cpp` | unchanged: the PSGP pipeline (`xrBind_PSGP`, `ttapi_Done`) and the renderer/game entry points are already static calls |
 | `Environment*.cpp`, `xrSheduler.h`, `xr_object.cpp`, `imgui_base.cpp`, `pure_relcase.h` | clang-only fixes (const heap comparator, `nullptr` for `false` as a `CInifile*`, `IUnknown` from the shim's base header, `volatile LONG*` for the interlocked compare, a named iterator, a C-style cast to a private derived class) |
-| not compiled | `Text_Console*.cpp`, the in-game editor (`INGAME_EDITOR`), the Discord SDK glue, OpenAutomate is compiled but cannot load its DLL, `mailSlot.cpp` is compiled and unused |
+| not compiled | `Text_Console*.cpp`, the in-game editor (`INGAME_EDITOR`), the Discord SDK glue, the debug-build mailslot console (`mailSlot.cpp`, `msParse`; behind `XR_USE_MAILSLOT`, i.e. `DEBUG` on Windows only). OpenAutomate (`xrSASH.cpp`) is compiled but `-openautomate` is not a flag of the Apple entry point. |
 
 ReShade is a Windows add-on (`src/ReShadeCompat`); `xr_platform_stubs_apple.cpp` defines `init_reshade()`,
 `unregister_reshade()` and `render_reshade_effects()` as no-ops, and `use_reshade` stays false.
