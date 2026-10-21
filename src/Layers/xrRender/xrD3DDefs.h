@@ -2,10 +2,6 @@
 #define	xrD3DDefs_included
 #pragma once
 
-#if defined(XR_PLATFORM_APPLE)
-#	include "AppleD3D9Gaps.h"
-#endif
-
 #if defined(USE_DX11) || defined(USE_DX10)
 
 #	include "..\xrRenderDX10\DXCommonTypes.h"
