@@ -4,10 +4,11 @@
 # luabind::set_allocator(); the only external headers it needs are lua.hpp (LuaJIT) and the
 # sm_boost shims in sdk/include.
 
-# These mirror the two engine configurations (see xrEngine/stdafx.h): the release engine builds
-# luabind without exceptions and without error checking, the debug engine with both.
+# The engine builds luabind with LUABIND_NO_EXCEPTIONS (errors go to luabind::set_error_callback) and,
+# through config.hpp, without argument/overload error checking. The exceptions mode is kept compilable
+# for platforms where C++ exceptions must not cross Lua frames (LuaJIT is built without unwind tables
+# on iOS); luabind's error-checking mode (LUA_DEBUG) is bit-rotted upstream and is not supported here.
 option(ANOMALY_LUABIND_EXCEPTIONS "Build luabind with C++ exceptions (luabind::error) instead of error callbacks" OFF)
-option(ANOMALY_LUABIND_ERROR_CHECKING "Build luabind with argument/overload error checking (engine DEBUG behaviour)" OFF)
 
 # Headers include <sm_boost/...>, which lives in sdk/include next to the Windows-only SDK headers
 # (ogg, vorbis, DirectX...). Expose just sm_boost so those do not shadow the pinned submodules.
@@ -39,19 +40,16 @@ add_library(luabind STATIC
 )
 
 # Headers are included as <luabind/...>, so the include root is the directory holding luabind/.
-target_include_directories(luabind PUBLIC
+target_include_directories(luabind SYSTEM PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/.."
     "${luabind_sm_boost_dir}"
 )
 target_compile_definitions(luabind PRIVATE LUABIND_BUILDING)
 target_link_libraries(luabind PUBLIC LuaJIT::luajit)
 
-# These change the layout/behaviour of header-only templates, so every consumer must see them.
+# This changes the behaviour of header-only templates, so every consumer must see it.
 if(NOT ANOMALY_LUABIND_EXCEPTIONS)
     target_compile_definitions(luabind PUBLIC LUABIND_NO_EXCEPTIONS)
-endif()
-if(ANOMALY_LUABIND_ERROR_CHECKING)
-    target_compile_definitions(luabind PUBLIC LUA_DEBUG)
 endif()
 
 # Third-party code: keep the build log readable.

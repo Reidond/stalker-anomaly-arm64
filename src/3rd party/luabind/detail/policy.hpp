@@ -814,8 +814,12 @@ namespace luabind { namespace detail
                 // Add error handling there
                 if (obj == nullptr)
                 {
+#ifndef LUABIND_NO_EXCEPTIONS
+                    throw cast_failed(L, LUABIND_TYPEID(T));
+#else
                     error_callback_fun e = get_error_callback_not_crash();
                     if (e) e(L);
+#endif
                 }
 
 				crep = obj->crep();
