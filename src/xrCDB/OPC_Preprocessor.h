@@ -16,6 +16,8 @@
 #if defined( _WIN32 ) || defined( WIN32 )
 #pragma message("Compiling on Windows...")
 #define PLATFORM_WINDOWS
+#elif defined(XR_PLATFORM_APPLE)
+// macOS / iOS: nothing in OPCODE keys off the platform
 #else
 		#pragma message("Compiling on unknown platform...")
 #endif
@@ -24,6 +26,8 @@
 #if defined(_MSC_VER)
 #pragma message("Compiling with VC++...")
 #define COMPILER_VISUAL_CPP
+#elif defined(XR_PLATFORM_APPLE)
+// clang
 #else
 		#pragma message("Compiling with unknown compiler...")
 #endif

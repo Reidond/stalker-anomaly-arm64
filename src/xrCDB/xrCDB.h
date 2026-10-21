@@ -211,6 +211,7 @@ namespace CDB
 
 		non_copyable& operator=(const non_copyable&)
 		{
+			return *this;
 		}
 	};
 
