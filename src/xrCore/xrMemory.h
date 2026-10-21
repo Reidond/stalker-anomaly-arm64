@@ -93,6 +93,7 @@ extern XRCORE_API xrMemory Memory;
 #ifdef __BORLANDC__
 #include "xrMemory_subst_borland.h"
 #else
+#include "_type_traits.h" // is_polymorphic, needed by xr_delete below at its point of definition (two-phase lookup)
 #include "xrMemory_subst_msvc.h"
 #endif
 

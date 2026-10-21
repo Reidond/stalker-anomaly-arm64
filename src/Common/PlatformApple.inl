@@ -57,6 +57,9 @@
 #define PASCAL
 #define STDMETHODCALLTYPE
 #define __interface struct
+#if defined(__cplusplus) && !defined(__OBJC__) && !defined(XR_NO_INTERFACE_MACRO)
+#	define interface struct // objbase.h defines it on Windows; ph_shell_interface.h relies on it
+#endif
 #define __int64 long long
 #define __int32 int
 #define __int16 short
@@ -92,7 +95,9 @@
 // ---------------------------------------------------------------------------------------------
 #define XR_WIN32_COMPAT_TYPES 1
 
-typedef int BOOL;
+#ifndef __OBJC__
+typedef int BOOL; // Objective-C already owns BOOL (a bool on arm64)
+#endif
 typedef unsigned char BYTE;
 typedef unsigned short WORD;
 typedef uint32_t DWORD;
@@ -137,6 +142,7 @@ typedef void* PVOID;
 typedef void* LPVOID;
 typedef const void* LPCVOID;
 typedef void* HANDLE;
+typedef HANDLE* LPHANDLE;
 typedef void* HMODULE;
 typedef void* HINSTANCE;
 typedef void* HWND;
@@ -234,6 +240,178 @@ typedef struct _EXCEPTION_POINTERS
 	void* ContextRecord;
 } EXCEPTION_POINTERS, *PEXCEPTION_POINTERS;
 
+// ---------------------------------------------------------------------------------------------
+// More Win32 vocabulary used by the engine modules (xrSound, xrEngine, xrGame, the renderer headers, ...)
+// ---------------------------------------------------------------------------------------------
+typedef uint8_t UINT8;
+typedef uint16_t UINT16;
+typedef int8_t INT8;
+typedef int16_t INT16;
+typedef unsigned short ATOM;
+typedef void* HMONITOR;
+typedef void* HGDIOBJ;
+typedef void* HFONT;
+typedef void* HBRUSH;
+typedef void* HPEN;
+typedef void* HBITMAP;
+typedef void* HMENU;
+typedef void* HRGN;
+typedef void* HGLOBAL;
+typedef void* HLOCAL;
+typedef void* HRSRC;
+typedef void* HPALETTE;
+typedef void* HKL;
+typedef intptr_t (*FARPROC)(void);
+typedef const wchar_t* PCWSTR;
+typedef wchar_t* PWSTR;
+typedef BOOL* PBOOL;
+typedef WORD* LPWORD;
+typedef UINT* PUINT;
+typedef UINT* LPUINT;
+typedef char* PCHAR;
+typedef unsigned char UCHAR;
+typedef unsigned char* PUCHAR;
+typedef unsigned char BOOLEAN;
+typedef long long* PLONGLONG;
+
+typedef struct _GUID
+{
+	uint32_t Data1;
+	uint16_t Data2;
+	uint16_t Data3;
+	uint8_t Data4[8];
+} GUID, IID, CLSID, *LPGUID;
+
+typedef struct _LUID
+{
+	DWORD LowPart;
+	LONG HighPart;
+} LUID, *PLUID;
+
+typedef struct _FILETIME
+{
+	DWORD dwLowDateTime;
+	DWORD dwHighDateTime;
+} FILETIME, *LPFILETIME;
+
+typedef struct _SYSTEMTIME
+{
+	WORD wYear;
+	WORD wMonth;
+	WORD wDayOfWeek;
+	WORD wDay;
+	WORD wHour;
+	WORD wMinute;
+	WORD wSecond;
+	WORD wMilliseconds;
+} SYSTEMTIME, *LPSYSTEMTIME;
+
+typedef struct tagSIZE
+{
+	LONG cx;
+	LONG cy;
+} SIZE, *PSIZE, *LPSIZE;
+
+#pragma pack(push, 1)
+typedef struct tWAVEFORMATEX
+{
+	WORD wFormatTag;
+	WORD nChannels;
+	DWORD nSamplesPerSec;
+	DWORD nAvgBytesPerSec;
+	WORD nBlockAlign;
+	WORD wBitsPerSample;
+	WORD cbSize;
+} WAVEFORMATEX, *PWAVEFORMATEX, *LPWAVEFORMATEX;
+#pragma pack(pop)
+typedef const WAVEFORMATEX* LPCWAVEFORMATEX;
+#define WAVE_FORMAT_PCM 1
+#define WAVE_FORMAT_IEEE_FLOAT 3
+#define WAVE_FORMAT_EXTENSIBLE 0xFFFE
+
+typedef struct _SYSTEM_INFO
+{
+	WORD wProcessorArchitecture;
+	WORD wReserved;
+	DWORD dwPageSize;
+	void* lpMinimumApplicationAddress;
+	void* lpMaximumApplicationAddress;
+	DWORD_PTR dwActiveProcessorMask;
+	DWORD dwNumberOfProcessors;
+	DWORD dwProcessorType;
+	DWORD dwAllocationGranularity;
+	WORD wProcessorLevel;
+	WORD wProcessorRevision;
+} SYSTEM_INFO, *LPSYSTEM_INFO;
+
+typedef struct _MEMORYSTATUSEX
+{
+	DWORD dwLength;
+	DWORD dwMemoryLoad;
+	ULONGLONG ullTotalPhys;
+	ULONGLONG ullAvailPhys;
+	ULONGLONG ullTotalPageFile;
+	ULONGLONG ullAvailPageFile;
+	ULONGLONG ullTotalVirtual;
+	ULONGLONG ullAvailVirtual;
+	ULONGLONG ullAvailExtendedVirtual;
+} MEMORYSTATUSEX, *LPMEMORYSTATUSEX;
+
+#define E_NOINTERFACE ((HRESULT)0x80004002)
+#define E_POINTER ((HRESULT)0x80004003)
+#define E_ABORT ((HRESULT)0x80004004)
+#define E_UNEXPECTED ((HRESULT)0x8000FFFF)
+#define E_ACCESSDENIED ((HRESULT)0x80070005)
+#define MAKE_HRESULT(sev, fac, code) ((HRESULT)(((uint32_t)(sev) << 31) | ((uint32_t)(fac) << 16) | ((uint32_t)(code))))
+#define HRESULT_FROM_WIN32(x) ((HRESULT)(x) <= 0 ? ((HRESULT)(x)) : ((HRESULT)(((x) & 0x0000FFFF) | (7 << 16) | 0x80000000)))
+#define IS_ERROR(status) (((uint32_t)(status)) >> 31 == 1)
+
+#define MAXLONG 0x7fffffff
+#define MAXDWORD 0xffffffffu
+#define MAXWORD 0xffff
+#define MAXBYTE 0xff
+#define WAIT_OBJECT_0 0x00000000
+#define WAIT_ABANDONED 0x00000080
+#define WAIT_TIMEOUT 0x00000102
+#define WAIT_FAILED 0xFFFFFFFFu
+#define STILL_ACTIVE 0x00000103
+#define THREAD_PRIORITY_LOWEST (-2)
+#define THREAD_PRIORITY_BELOW_NORMAL (-1)
+#define THREAD_PRIORITY_NORMAL 0
+#define THREAD_PRIORITY_ABOVE_NORMAL 1
+#define THREAD_PRIORITY_HIGHEST 2
+#define THREAD_PRIORITY_TIME_CRITICAL 15
+#define THREAD_PRIORITY_IDLE (-15)
+#define NORMAL_PRIORITY_CLASS 0x00000020
+#define HIGH_PRIORITY_CLASS 0x00000080
+#define IDLE_PRIORITY_CLASS 0x00000040
+#define CREATE_SUSPENDED 0x00000004
+#define DLL_PROCESS_DETACH 0
+#define DLL_PROCESS_ATTACH 1
+#define DLL_THREAD_ATTACH 2
+#define DLL_THREAD_DETACH 3
+#define SEM_FAILCRITICALERRORS 0x0001
+#define SEM_NOGPFAULTERRORBOX 0x0002
+#define LOAD_LIBRARY_AS_DATAFILE 0x00000002
+#define MAX_COMPUTERNAME_LENGTH 15
+#define UNLEN 256
+#define GENERIC_READ 0x80000000u
+#define GENERIC_WRITE 0x40000000u
+#define FILE_SHARE_READ 0x00000001
+#define FILE_SHARE_WRITE 0x00000002
+#define OPEN_EXISTING 3
+#define CREATE_ALWAYS 2
+#define SW_HIDE 0
+#define SW_SHOWNORMAL 1
+#define SW_SHOW 5
+#define SW_SHOWMINNOACTIVE 7
+#define PROCESSOR_ARCHITECTURE_ARM64 12
+
+#ifdef __cplusplus
+// Calling conventions of thread entry points.
+typedef DWORD (*LPTHREAD_START_ROUTINE)(void*);
+#endif
+
 #ifdef __cplusplus
 extern "C++" {
 
@@ -299,10 +477,13 @@ BOOL GetUserName(char* buffer, DWORD* size);
 BOOL GetComputerName(char* buffer, DWORD* size);
 inline BOOL IsBadReadPtr(const void* p, size_t) { return p == nullptr; }
 inline BOOL IsBadWritePtr(void* p, size_t) { return p == nullptr; }
-inline void ZeroMemory(void* p, size_t n) { memset(p, 0, n); }
-inline void CopyMemory(void* d, const void* s, size_t n) { memcpy(d, s, n); }
-inline void MoveMemory(void* d, const void* s, size_t n) { memmove(d, s, n); }
-inline void FillMemory(void* d, size_t n, int v) { memset(d, v, n); }
+#ifndef ZeroMemory
+#	define ZeroMemory(p, n) memset((p), 0, (n))
+#	define SecureZeroMemory(p, n) memset((p), 0, (n))
+#	define CopyMemory(d, s, n) memcpy((d), (s), (n))
+#	define MoveMemory(d, s, n) memmove((d), (s), (n))
+#	define FillMemory(d, n, v) memset((d), (v), (n))
+#endif
 
 // Interlocked*, on 32-bit LONG like Win32.
 inline LONG InterlockedIncrement(volatile LONG* p) { return __atomic_add_fetch(p, 1, __ATOMIC_SEQ_CST); }
@@ -694,6 +875,193 @@ BOOL SetFileAttributes(const char* path, DWORD attr);
 #ifndef __min
 #	define __min(a, b) (((a) < (b)) ? (a) : (b))
 #	define __max(a, b) (((a) > (b)) ? (a) : (b))
+#endif
+
+// ---------------------------------------------------------------------------------------------
+// GUIDs
+// ---------------------------------------------------------------------------------------------
+typedef const GUID& REFGUID;
+typedef const GUID& REFCLSID;
+inline bool operator==(const GUID& a, const GUID& b) { return memcmp(&a, &b, sizeof(GUID)) == 0; }
+inline bool operator!=(const GUID& a, const GUID& b) { return !(a == b); }
+inline bool IsEqualGUID(const GUID& a, const GUID& b) { return a == b; }
+
+// ---------------------------------------------------------------------------------------------
+// Synchronisation. CRITICAL_SECTION is recursive, like the Win32 one. Handles returned by CreateEvent/CreateThread/...
+// are heap objects released by CloseHandle (implemented in src/xrCore/Platform/PlatformApple.cpp).
+// ---------------------------------------------------------------------------------------------
+struct CRITICAL_SECTION
+{
+	pthread_mutex_t mutex;
+};
+typedef CRITICAL_SECTION* LPCRITICAL_SECTION;
+inline void InitializeCriticalSection(CRITICAL_SECTION* cs)
+{
+	pthread_mutexattr_t attr;
+	pthread_mutexattr_init(&attr);
+	pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);
+	pthread_mutex_init(&cs->mutex, &attr);
+	pthread_mutexattr_destroy(&attr);
+}
+inline BOOL InitializeCriticalSectionAndSpinCount(CRITICAL_SECTION* cs, DWORD)
+{
+	InitializeCriticalSection(cs);
+	return TRUE;
+}
+inline void DeleteCriticalSection(CRITICAL_SECTION* cs) { pthread_mutex_destroy(&cs->mutex); }
+inline void EnterCriticalSection(CRITICAL_SECTION* cs) { pthread_mutex_lock(&cs->mutex); }
+inline BOOL TryEnterCriticalSection(CRITICAL_SECTION* cs) { return pthread_mutex_trylock(&cs->mutex) == 0; }
+inline void LeaveCriticalSection(CRITICAL_SECTION* cs) { pthread_mutex_unlock(&cs->mutex); }
+
+HANDLE CreateEvent(void* attributes, BOOL manual_reset, BOOL initial_state, const char* name);
+BOOL SetEvent(HANDLE event);
+BOOL ResetEvent(HANDLE event);
+HANDLE CreateMutex(void* attributes, BOOL initial_owner, const char* name);
+BOOL ReleaseMutex(HANDLE mutex);
+HANDLE CreateSemaphore(void* attributes, LONG initial_count, LONG maximum_count, const char* name);
+BOOL ReleaseSemaphore(HANDLE semaphore, LONG release_count, LONG* previous_count);
+DWORD WaitForSingleObject(HANDLE handle, DWORD milliseconds);
+DWORD WaitForMultipleObjects(DWORD count, const HANDLE* handles, BOOL wait_all, DWORD milliseconds);
+BOOL CloseHandle(HANDLE handle);
+HANDLE CreateThread(void* attributes, size_t stack_size, LPTHREAD_START_ROUTINE start, void* parameter, DWORD flags,
+                    DWORD* thread_id);
+uintptr_t _beginthread(void (*start)(void*), unsigned stack_size, void* arg);
+uintptr_t _beginthreadex(void* security, unsigned stack_size, unsigned (*start)(void*), void* arg, unsigned flags,
+                         unsigned* thread_id);
+inline void _endthread() { pthread_exit(nullptr); }
+HANDLE GetCurrentThread();
+BOOL GetExitCodeThread(HANDLE thread, DWORD* exit_code);
+BOOL SetThreadPriority(HANDLE thread, int priority);
+int GetThreadPriority(HANDLE thread);
+DWORD_PTR SetThreadAffinityMask(HANDLE thread, DWORD_PTR mask);
+DWORD SetThreadIdealProcessor(HANDLE thread, DWORD processor);
+inline BOOL SetPriorityClass(HANDLE, DWORD) { return TRUE; }
+inline DWORD GetPriorityClass(HANDLE) { return NORMAL_PRIORITY_CLASS; }
+inline BOOL SetProcessAffinityMask(HANDLE, DWORD_PTR) { return TRUE; }
+inline BOOL SetProcessWorkingSetSize(HANDLE, SIZE_T, SIZE_T) { return TRUE; }
+inline void ExitProcess(unsigned code) { exit((int)code); }
+inline UINT SetErrorMode(UINT) { return 0; }
+
+// More Interlocked*: 64-bit, pointer and bit operations.
+inline LONGLONG InterlockedIncrement64(volatile LONGLONG* p) { return __atomic_add_fetch(p, 1, __ATOMIC_SEQ_CST); }
+inline LONGLONG InterlockedDecrement64(volatile LONGLONG* p) { return __atomic_sub_fetch(p, 1, __ATOMIC_SEQ_CST); }
+inline LONGLONG InterlockedExchange64(volatile LONGLONG* p, LONGLONG v) { return __atomic_exchange_n(p, v, __ATOMIC_SEQ_CST); }
+inline LONGLONG InterlockedExchangeAdd64(volatile LONGLONG* p, LONGLONG v) { return __atomic_fetch_add(p, v, __ATOMIC_SEQ_CST); }
+inline LONGLONG InterlockedCompareExchange64(volatile LONGLONG* p, LONGLONG exchange, LONGLONG comparand)
+{
+	__atomic_compare_exchange_n(p, &comparand, exchange, false, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST);
+	return comparand;
+}
+inline void* InterlockedExchangePointer(void* volatile* p, void* v) { return __atomic_exchange_n(p, v, __ATOMIC_SEQ_CST); }
+inline void* InterlockedCompareExchangePointer(void* volatile* p, void* exchange, void* comparand)
+{
+	__atomic_compare_exchange_n(p, &comparand, exchange, false, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST);
+	return comparand;
+}
+inline LONG InterlockedAnd(volatile LONG* p, LONG v) { return __atomic_fetch_and(p, v, __ATOMIC_SEQ_CST); }
+inline LONG InterlockedOr(volatile LONG* p, LONG v) { return __atomic_fetch_or(p, v, __ATOMIC_SEQ_CST); }
+inline LONG InterlockedXor(volatile LONG* p, LONG v) { return __atomic_fetch_xor(p, v, __ATOMIC_SEQ_CST); }
+inline void MemoryBarrier() { __atomic_thread_fence(__ATOMIC_SEQ_CST); }
+// MSVC compiler intrinsics: _Interlocked*() are clang builtins under -fms-extensions (32-bit, like LONG).
+#define __debugbreak() __builtin_debugtrap()
+#define _ReadWriteBarrier() __atomic_signal_fence(__ATOMIC_SEQ_CST)
+inline void YieldProcessor() { __asm__ __volatile__("yield"); }
+
+// ---------------------------------------------------------------------------------------------
+// Time of day, system information
+// ---------------------------------------------------------------------------------------------
+inline DWORD timeGetTime() { return GetTickCount(); }
+void GetLocalTime(SYSTEMTIME* st);
+void GetSystemTime(SYSTEMTIME* st);
+void GetSystemInfo(SYSTEM_INFO* info);
+BOOL GlobalMemoryStatusEx(MEMORYSTATUSEX* status);
+DWORD GetEnvironmentVariable(const char* name, char* buffer, DWORD size);
+inline BOOL SetEnvironmentVariable(const char* name, const char* value)
+{
+	return (value ? setenv(name, value, 1) : unsetenv(name)) == 0;
+}
+
+// Dynamic libraries (dlopen). The engine's DLL plugin boundary does not exist here; these serve the few optional
+// debug backends and always fail on the Windows module names.
+HMODULE LoadLibrary(const char* name);
+BOOL FreeLibrary(HMODULE module);
+FARPROC GetProcAddress(HMODULE module, const char* name);
+
+// Opens a URL or file with the default application; the instance handle follows the Win32 convention (> 32 = success).
+HINSTANCE ShellExecute(HWND window, const char* operation, const char* file, const char* parameters,
+                       const char* directory, int show);
+
+// ---------------------------------------------------------------------------------------------
+// CRT: more of the MSVC secure and underscore-prefixed functions
+// ---------------------------------------------------------------------------------------------
+// sscanf_s takes an extra size argument after each %s, %c and %[ conversion; this removes them and calls sscanf.
+int xr_sscanf_s(const char* buffer, const char* format, ...);
+#define sscanf_s xr_sscanf_s
+inline errno_t memcpy_s(void* dest, size_t dest_size, const void* src, size_t count)
+{
+	if (count == 0) return 0;
+	if (!dest) return EINVAL;
+	if (!src) { memset(dest, 0, dest_size); return EINVAL; }
+	if (dest_size < count) { memset(dest, 0, dest_size); return ERANGE; }
+	memcpy(dest, src, count);
+	return 0;
+}
+inline errno_t memmove_s(void* dest, size_t dest_size, const void* src, size_t count)
+{
+	if (count == 0) return 0;
+	if (!dest || !src) return EINVAL;
+	if (dest_size < count) return ERANGE;
+	memmove(dest, src, count);
+	return 0;
+}
+inline errno_t strerror_s(char* buffer, size_t size, int errnum)
+{
+	return strerror_r(errnum, buffer, size) == 0 ? 0 : ERANGE;
+}
+inline int _vscprintf(const char* format, va_list args)
+{
+	va_list copy;
+	va_copy(copy, args);
+	int n = vsnprintf(nullptr, 0, format, copy);
+	va_end(copy);
+	return n;
+}
+inline int _fileno(FILE* f) { return fileno(f); }
+inline int _isatty(int fd) { return isatty(fd); }
+inline int _getpid() { return (int)getpid(); }
+inline int _setmode(int, int) { return 0; }
+inline int _fseeki64(FILE* f, long long offset, int origin) { return fseeko(f, (off_t)offset, origin); }
+inline long long _ftelli64(FILE* f) { return (long long)ftello(f); }
+inline wchar_t* _wcsdup(const wchar_t* s) { return wcsdup(s); }
+typedef time_t __time64_t; // time_t is already 64-bit here; keeps `time_t*` and `__time64_t*` interchangeable like MSVC
+typedef int32_t __time32_t;
+#define _TRUNCATE ((size_t)-1)
+inline void _tzset() { tzset(); }
+inline __time64_t _time64(__time64_t* t) { return (__time64_t)time((time_t*)t); }
+inline struct tm* _localtime64(const __time64_t* t) { time_t tt = (time_t)*t; return localtime(&tt); }
+inline errno_t _localtime64_s(struct tm* result, const __time64_t* t)
+{
+	time_t tt = (time_t)*t;
+	return localtime_r(&tt, result) ? 0 : EINVAL;
+}
+inline errno_t localtime_s(struct tm* result, const time_t* t) { return localtime_r(t, result) ? 0 : EINVAL; }
+inline errno_t _strlwr_s(char* s, size_t) { strlwr(s); return 0; }
+inline errno_t _strupr_s(char* s, size_t) { strupr(s); return 0; }
+inline char* strtok_s(char* str, const char* delim, char** context) { return strtok_r(str, delim, context); }
+inline int _wtoi(const wchar_t* s) { return (int)wcstol(s, nullptr, 10); }
+
+// _aligned_* heap functions. Memory from these must go back through _aligned_free.
+inline void* _aligned_malloc(size_t size, size_t alignment)
+{
+	void* p = nullptr;
+	if (alignment < sizeof(void*)) alignment = sizeof(void*);
+	return posix_memalign(&p, alignment, size) == 0 ? p : nullptr;
+}
+inline void _aligned_free(void* p) { free(p); }
+
+// min/max: also available as functions for code that avoids the macros.
+#ifndef _MAX_ENV
+#	define _MAX_ENV 32767
 #endif
 
 } // extern "C++"
