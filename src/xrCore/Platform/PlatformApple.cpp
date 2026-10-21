@@ -336,8 +336,19 @@ BOOL QueryPerformanceFrequency(LARGE_INTEGER* freq)
 // ---------------------------------------------------------------------------------------------
 // Process / thread / environment
 // ---------------------------------------------------------------------------------------------
+static std::string g_command_line_override;
+static bool g_command_line_overridden = false;
+
+void xr_set_command_line(const char* line)
+{
+	g_command_line_override = line ? line : "";
+	g_command_line_overridden = true;
+}
+
 const char* GetCommandLine()
 {
+	if (g_command_line_overridden)
+		return g_command_line_override.c_str();
 	static std::string cmdline = []
 	{
 		std::string r;

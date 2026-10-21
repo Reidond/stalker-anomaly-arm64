@@ -462,6 +462,9 @@ int MessageBox(HWND window, const char* text, const char* caption, unsigned type
 // Process / thread / environment
 // ---------------------------------------------------------------------------------------------
 const char* GetCommandLine();
+// Replaces the string GetCommandLine() returns (the process argv otherwise). For platforms without a command line:
+// the iPad app reads its flags from Documents/commandline.txt. Call it before Core._initialize.
+void xr_set_command_line(const char* line);
 DWORD GetCurrentThreadId();
 inline DWORD GetCurrentProcessId() { return (DWORD)getpid(); }
 inline HANDLE GetCurrentProcess() { return (HANDLE)(intptr_t)-1; }
