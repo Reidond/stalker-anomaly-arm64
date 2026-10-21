@@ -16,3 +16,5 @@ include(AnomalyPlatform)
 include(Dependencies)
 
 add_subdirectory(tools/platform_probe)
+add_subdirectory(src/Platform/MetalD3D11)
+add_subdirectory(tools/metal_d3d11_test)
