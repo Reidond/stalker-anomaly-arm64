@@ -33,7 +33,7 @@ public:
 #endif
             if (handle==-1)
                 Msg("!Can't create file: '%s'. Error: '%s'.", fName.c_str(), _sys_errlist[errno]);
-			hf = fdopen(handle, "wb");
+			hf = _fdopen(handle, "wb");
 		}
 		else
 		{

@@ -612,6 +612,7 @@ inline void _splitpath(const char* path, char* drive, char* dir, char* fname, ch
 #define S_IREAD S_IRUSR
 #define S_IWRITE S_IWUSR
 #define _stat stat
+#define _fdopen fdopen
 #define _stat64 stat
 #define _fstat fstat
 #define _S_IFDIR S_IFDIR
