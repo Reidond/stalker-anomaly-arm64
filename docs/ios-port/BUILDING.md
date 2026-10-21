@@ -9,7 +9,7 @@ uses `src/engine-vs2022.sln`.
 - Submodules:
 
   ```bash
-  git submodule update --init --depth 1 external/SDL external/openal-soft external/LuaJIT external/ogg external/vorbis external/theora
+  git submodule update --init --depth 1 external/SDL external/openal-soft external/LuaJIT external/ogg external/vorbis external/theora external/SPIRV-Cross external/vkd3d
   ```
 
 ## macOS
@@ -47,3 +47,17 @@ shows:
 - Live DualSense state: buttons, sticks, triggers, gyro and touchpad.
 
 On the controller, Cross triggers rumble and the left stick tints the light bar.
+
+## Shader tools
+
+`xrdb_unpack`, `shader_batch` and the `ShaderXlat` library build with the normal presets and need no
+extra tools (vkd3d's generated parsers are checked in):
+
+```bash
+cmake --build --preset macos-arm64 --target xrdb_unpack shader_batch shaderxlat_selftest
+ctest --test-dir build/macos-arm64
+```
+
+Usage and results are in [SHADERS.md](SHADERS.md). The shader submodules are
+`external/vkd3d` (tag `vkd3d-2.1`) and `external/SPIRV-Cross` (`vulkan-sdk-1.4.363.0`); initialise
+them with the other submodules.
