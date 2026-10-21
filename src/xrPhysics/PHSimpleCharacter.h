@@ -6,10 +6,15 @@
 #include "IColisiondamageInfo.h"
 #include "../xrEngine/gamemtllib.h"
 
+#ifdef XR_PLATFORM_APPLE
+// an enum without a fixed underlying type cannot be forward declared outside MSVC
+#include "../xrServerEntities/alife_space.h"
+#else
 namespace ALife
 {
 	enum EHitType;
 };
+#endif
 #ifdef DEBUG
 #include "debug_output.h"
 #endif
