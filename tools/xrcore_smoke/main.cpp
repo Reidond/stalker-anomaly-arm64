@@ -1,6 +1,10 @@
 // xrcore_smoke: headless check that xrCore works on Apple platforms against the real Anomaly game data.
 //
-//   xrcore_smoke [--game-dir <dir>] [--run-dir <dir>]
+//   xrcore_smoke [--game-dir <dir>] [--run-dir <dir>] [--crash-test segv|assert|abort]
+//
+// --crash-test skips the checks and, right after initialization, triggers a fault to exercise the crash reporting:
+// the process must print a stack trace, leave a report next to the log and die with the original signal (or exit 1 for
+// assert).
 //
 // What it does:
 //   1. Writes a fsgame.ltx into the run directory that points $fs_root$ at the (read-only) game directory and
@@ -135,12 +139,14 @@ int main(int argc, char** argv)
 	setvbuf(stdout, nullptr, _IOLBF, 0); // keep output ordered if an assert ends the process
 	std::string game_dir = XRCORE_SMOKE_DEFAULT_GAME_DIR;
 	std::string run_dir = XRCORE_SMOKE_RUN_DIR;
+	std::string crash_test;
 	if (const char* env = getenv("ANOMALY_GAME_DIR"))
 		game_dir = env;
 	for (int i = 1; i + 1 < argc; ++i)
 	{
 		if (!strcmp(argv[i], "--game-dir")) game_dir = argv[++i];
 		else if (!strcmp(argv[i], "--run-dir")) run_dir = argv[++i];
+		else if (!strcmp(argv[i], "--crash-test")) crash_test = argv[++i];
 	}
 	game_dir = with_trailing_slash(game_dir);
 	run_dir = with_trailing_slash(run_dir);
@@ -158,8 +164,18 @@ int main(int argc, char** argv)
 
 	// ---------------------------------------------------------------------------------------------
 	printf("\n[1] initialize xrCore (scan + mount archives)\n");
+	// Like the engine's entry point: crash handlers first, then the core.
+	Debug._initialize(false);
 	// Params are taken from the command line; the generated fsgame.ltx is passed explicitly instead.
 	Core._initialize("xrcore_smoke", engine_log, TRUE, fsgame.c_str());
+	if (!crash_test.empty())
+	{
+		printf("triggering '%s'\n", crash_test.c_str());
+		if (crash_test == "assert") { R_ASSERT2(false, "deliberate assertion from xrcore_smoke"); }
+		else if (crash_test == "abort") abort();
+		else { volatile int* p = nullptr; *p = 1; }
+		return 3; // not reached
+	}
 	check(FS.m_Flags.is(CLocatorAPI::flReady), "file system ready");
 	check(xr_FS != nullptr && FS.path_exist("$app_data_root$"), "app data root registered");
 	string_path appdata;

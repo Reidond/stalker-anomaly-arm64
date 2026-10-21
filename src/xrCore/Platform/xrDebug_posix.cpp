@@ -416,7 +416,7 @@ static void fatal_signal_handler(int sig, siginfo_t* info, void*)
 
 	// Everything below is best effort: the heap or the log may be what crashed.
 	std::string trace;
-	backtrace_to_string(trace, 1);
+	backtrace_to_string(trace, 2); // drop this handler and _sigtramp
 	(void)!write(STDERR_FILENO, trace.data(), trace.size());
 
 	if (shared_str_initialized)

@@ -13,9 +13,15 @@ cmake --build --preset macos-arm64 --target xrcore_smoke
 build/macos-arm64/tools/xrcore_smoke/xrcore_smoke
 ```
 
+`xrcore_smoke --crash-test segv|assert|abort` checks the crash reporting instead: stack trace to stderr and the log,
+`<log name>_<timestamp>.crash.txt` next to the log, and the process still dies with the original signal.
+
 It finds the game data through `--game-dir`, `$ANOMALY_GAME_DIR` or the CMake cache variable
 `XRCORE_SMOKE_GAME_DIR` (auto-detected next to the main checkout). It writes only into
 `build/macos-arm64/tools/xrcore_smoke/run/` (generated `fsgame.ltx`, `appdata/`, logs).
+
+`-DANOMALY_ENGINE_DEBUG=ON` defines `DEBUG` for the engine (the shipped Windows Release leaves it undefined, and so
+does this build by default); xrCore and the smoke tool pass in both modes.
 
 ## The shim: `src/Common/Platform.h`
 
