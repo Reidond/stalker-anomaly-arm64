@@ -17,29 +17,29 @@ enable_testing()
 include(AnomalyPlatform)
 include(Dependencies)
 
+# Engine libraries.
 add_subdirectory("src/3rd party/luabind")
 add_subdirectory("src/3rd party/ode")
+add_subdirectory(src/xrCore)
+
+# Port platform layer: app shell, controller input, shader translation, D3D11 subset on Metal.
+add_subdirectory(src/Platform/Apple)
+add_subdirectory(src/Platform/GameInput)
+add_subdirectory(src/Platform/ShaderXlat)
+add_subdirectory(src/Platform/MetalD3D11)
 
 # Host-side smoke tests of the engine libraries; the iOS build only checks that the libraries compile.
-enable_testing()
 if(NOT ANOMALY_IOS)
     add_subdirectory(tools/ode_smoke)
     add_subdirectory(tools/luabind_smoke)
 endif()
-
-add_subdirectory(tools/platform_probe)
-add_subdirectory(src/xrCore)
 add_subdirectory(tools/xrcore_smoke)
 
-# App shell (paths, game-data validation, lifecycle, launcher) and the lab app that exercises it.
-add_subdirectory(src/Platform/Apple)
+# Device and tooling apps.
+add_subdirectory(tools/platform_probe)
 add_subdirectory(tools/shell_lab)
-
-add_subdirectory(src/Platform/MetalD3D11)
-add_subdirectory(tools/metal_d3d11_test)
-add_subdirectory(src/Platform/GameInput)
 add_subdirectory(tools/input_lab)
 add_subdirectory(tools/jit_lab)
+add_subdirectory(tools/metal_d3d11_test)
 add_subdirectory(tools/xrdb_unpack)
-add_subdirectory(src/Platform/ShaderXlat)
 add_subdirectory(tools/shader_batch)

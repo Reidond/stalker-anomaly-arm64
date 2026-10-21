@@ -70,6 +70,7 @@ build/macos-arm64/tools/jit_lab/jit_lab.app/Contents/MacOS/jit_lab --headless
 
 After changing `ANOMALY_IOS_LUAJIT_JIT` the LuaJIT build copy is recreated from the submodule, so the
 next build recompiles LuaJIT and relinks the apps.
+
 ## Shader tools
 
 `xrdb_unpack`, `shader_batch` and the `ShaderXlat` library build with the normal presets and need no
