@@ -15,9 +15,9 @@ DualSense (PS5) controller play. The same code also has to run natively on Apple
 ## Base and references
 
 - **Base:** `themrdemonized/xray-monolith` ("Modded Exes"), the Anomaly 1.5.3 engine plus community
-  patches. It is actively maintained and many addons need it. This repo is a fork of it: `upstream`
-  is the remote and `ios-port` is the working branch. Port changes go behind platform `#if`s so
-  upstream merges stay cheap and the Windows build keeps working.
+  patches, many of which addons need. This repo is a hard fork of it: the history is kept, but it
+  doesn't track upstream, and `main` is the working branch. Upstream fixes can still be
+  cherry-picked by hand. Port changes go behind platform `#if`s so the Windows build keeps working.
 - **Reference:** OpenXRay, for portability work it has already solved: the POSIX `xrCore` layer,
   `sse2neon`, SDL input, LuaJIT 2.1 on arm64, OpenAL Soft and the CMake layout.
 
