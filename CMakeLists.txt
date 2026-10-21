@@ -16,3 +16,7 @@ include(AnomalyPlatform)
 include(Dependencies)
 
 add_subdirectory(tools/platform_probe)
+
+# App shell (paths, game-data validation, lifecycle, launcher) and the lab app that exercises it.
+add_subdirectory(src/Platform/Apple)
+add_subdirectory(tools/shell_lab)
