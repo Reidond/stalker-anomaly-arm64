@@ -16,11 +16,21 @@ enable_testing()
 
 include(AnomalyPlatform)
 include(Dependencies)
+include(AnomalyModules)
 
 # Engine libraries.
 add_subdirectory("src/3rd party/luabind")
 add_subdirectory("src/3rd party/ode")
 add_subdirectory(src/xrCore)
+
+# Engine modules (xrCDB ... xrGame): one file per module in cmake/targets, owned by the session porting it. Each is
+# off by default (ANOMALY_BUILD_<MODULE>, or ANOMALY_BUILD_ALL_MODULES) until it compiles. New modules need no edit here.
+file(GLOB anomaly_module_files "${PROJECT_SOURCE_DIR}/cmake/targets/*.cmake")
+list(SORT anomaly_module_files)
+foreach(anomaly_module_file IN LISTS anomaly_module_files)
+    include("${anomaly_module_file}")
+endforeach()
+anomaly_finalize_modules()
 
 # Port platform layer: app shell, controller input, shader translation, D3D11 subset on Metal.
 add_subdirectory(src/Platform/Apple)

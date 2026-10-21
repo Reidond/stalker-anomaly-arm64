@@ -84,3 +84,108 @@ needed. The page size is 16 KB on Apple silicon (`FS.dwAllocGranularity`).
 | x87 control word | FPCR rounding mode and flush-to-zero |
 | `CreateFile`/`MapViewOfFile` readers | `open`/`mmap` |
 | Win32 clipboard, comdlg32 dialogs | process-local clipboard; dialogs stubbed (editor-only) |
+
+## For module sessions
+
+Every other engine module (xrCDB ... xrGame) is a CMake static library, defined in its own file under
+`cmake/targets/` and **off by default** until its session makes it compile. The root `CMakeLists.txt` includes every
+`cmake/targets/*.cmake`, so a module session edits only its own file.
+
+| Module | Option | File | Target | Source list read from |
+|---|---|---|---|---|
+| xrCDB | `ANOMALY_BUILD_XRCDB` | `xrCDB.cmake` | `xrCDB` | `src/xrCDB/xrCDB.vcxproj` |
+| xrXMLParser | `ANOMALY_BUILD_XRXMLPARSER` | `xrXMLParser.cmake` | `xrXMLParser` | `src/xrXMLParser/xrXMLParser.vcxproj` |
+| xrParticles | `ANOMALY_BUILD_XRPARTICLES` | `xrParticles.cmake` | `xrParticles` | `src/xrParticles/xrParticles.vcxproj` |
+| xrCPU_Pipe | `ANOMALY_BUILD_XRCPU_PIPE` | `xrCPU_Pipe.cmake` | `xrCPU_Pipe` | `src/xrCPU_Pipe/xrCPU_Pipe.vcxproj` |
+| xrSound | `ANOMALY_BUILD_XRSOUND` | `xrSound.cmake` | `xrSound` | `src/xrSound/xrSound.vcxproj` |
+| xrPhysics | `ANOMALY_BUILD_XRPHYSICS` | `xrPhysics.cmake` | `xrPhysics` | `src/xrPhysics/xrPhysics.vcxproj` |
+| xrNetServer | `ANOMALY_BUILD_XRNETSERVER` | `xrNetServer.cmake` | `xrNetServer` | `src/xrNetServer/xrNetServer.vcxproj` |
+| xrEngine | `ANOMALY_BUILD_XRENGINE` | `xrEngine.cmake` | `xrEngine` | `src/xrEngine/xrEngine.vcxproj` |
+| xrAPI | `ANOMALY_BUILD_XRAPI` | `xrAPI.cmake` | `xrAPI` | `src/Layers/xrAPI/xrAPI.vcxproj` |
+| R4 renderer layers | `ANOMALY_BUILD_XRRENDER_R4` | `xrRender_R4.cmake` | `xrRender_R4` | `src/Layers/xrRenderPC_R4/xrRender_R4.vcxproj` (xrRender + xrRenderDX10 + R4, 227 files) |
+| xrGame (+ 58 xrServerEntities files) | `ANOMALY_BUILD_XRGAME` | `xrGame.cmake` | `xrGame` | `src/xrGame/xrGame.vcxproj` |
+| lua-extensions | `ANOMALY_BUILD_LUA_EXTENSIONS` | `lua_extensions.cmake` | `lua_extensions` | `src/3rd party/lua-extensions/lua_extensions.vcxproj` |
+
+`ANOMALY_BUILD_ALL_MODULES=ON` turns them all on (the per-module options are then ignored), and the aggregate target
+`anomaly_modules` builds whatever is enabled.
+
+```bash
+cmake -S . -B build/probe -G Ninja -DCMAKE_OSX_ARCHITECTURES=arm64 -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+      -DANOMALY_BUILD_ALL_MODULES=ON            # or -DANOMALY_BUILD_XRSOUND=ON for just your module
+cmake --build build/probe --target luajit_build  # once: the Lua headers live in the LuaJIT build copy
+cmake --build build/probe --target xrSound -- -k 0
+tools/syntax_probe.py build/probe --module xrSound --all-files      # -fsyntax-only, no objects, errors grouped by origin
+```
+
+`anomaly_vcxproj_sources(<var> <vcxproj> [EXCLUDE regex...] [INCLUDE regex...])` (cmake/AnomalyModules.cmake) turns the
+project's `<ClCompile>` entries into the source list (paths are matched on a case-insensitive file system, entries with
+`ExcludedFromBuild` are skipped, regexes are written in lower case). Your module file can exclude files, add its
+own (`SOURCES ${list} extra.cpp`), add `LINK` dependencies, define macros and so on; it stays the only file you edit
+for the build. No precompiled header is configured: every file starts with `#include "stdafx.h"` (or
+`pch_script.h`), so the MSVC `/Yu` behaviour is preserved by the includes themselves.
+
+### What every module gets: `Anomaly::EngineConfig`
+
+Linking a module (it is done for you by `anomaly_add_module`) brings, on top of `Anomaly::xrCore`'s flags above:
+
+- `-fms-extensions` (`\` in `#include`, `__declspec`, `__super`, the `i64` suffix) and `-iquote src/xrCore`. The
+  module's own include roots are also passed as `-iquote` ahead of it, because `-iquote` directories are searched
+  before every `-I`: `pch_script.h` includes `"stdafx.h"` and must find the module's, not xrCore's.
+- `src/Common/compat` first on the include path, then `src`, `src/3rd party`, `src/Include`; the sse2neon include root
+  and the Metal D3D11 headers (`metal_d3d11_compat`). `src/xrCore` itself is **never** an include directory, and neither
+  is `sdk/include` (its DirectX, DirectPlay and `cs` headers are the real Windows ones; `sm_boost` comes through luabind).
+- `NDEBUG` (unless `ANOMALY_ENGINE_DEBUG`), `dSINGLE`, `MTL_D3D11_NO_WINTYPES` (the Win32 types come from the shim, the
+  Metal shim's fallback typedefs stay out of the way).
+- Warning suppressions for what MSVC `/W3` never reported (`-Wno-microsoft`, unknown pragmas, writable strings,
+  narrowing in initializer lists, `offsetof` on non-POD, ...). C++ exceptions stay on (the sources contain `try`/`catch`,
+  and Lua error unwinding needs them).
+- `ANOMALY_MS_COMPAT=ON` adds `-fms-compatibility -fms-compatibility-version=19.30 -D__GNUC__=4` (the define restores the Apple
+  SDK headers, which break without it). It makes clang accept dependent-base lookup, template-parameter shadowing and
+  forward-declared enums. Measured at P0 on the same 60 sampled TUs per module: xrGame unique module error sites 541 without it,
+  350 with it (total errors 2,680 against 706), xrPhysics 28 against 25, xrEngine and the renderer unchanged; but 34 luabind
+  `type_info` sites then appear in every script TU, so no xrGame TU is clean until luabind is patched, and the diagnostics it
+  hides stay hidden. It is off by default; the xrgame-triage session decides whether xrGame builds with it while the
+  shared template headers are fixed.
+
+### What the shim provides
+
+`Common/Platform.h` (+ `PlatformApple.inl`, implemented in `xrCore/Platform/PlatformApple.cpp`): the Win32 types
+(`DWORD` is `uint32_t`; `GUID`, `LUID`, `FILETIME`, `SYSTEMTIME`, `WAVEFORMATEX`, `SIZE`, `HMONITOR`, GDI handles), `HRESULT`
+codes, the MSVC keyword macros, the secure CRT (`*_s`, `sscanf_s` that drops the size arguments), `_snprintf`, `_splitpath`,
+`_alloca`, `_aligned_malloc`, 64-bit time functions, `ZeroMemory` & co. as macros, `CRITICAL_SECTION` (recursive),
+`Interlocked*` and `_Interlocked*`, events, mutexes, semaphores, `CreateThread`/`_beginthread(ex)` with `WaitForSingleObject`
+/ `WaitForMultipleObjects` / `CloseHandle`, `GetLocalTime`, `GetSystemInfo`, `GlobalMemoryStatusEx`, environment variables,
+`ShellExecute` (always fails), `LoadLibrary`/`GetProcAddress` (always fail). It also defines `interface` as `struct` in C++ (not
+Objective-C++) translation units, like `objbase.h`.
+
+`Common/d3d9compat.h` + `d3dx9compat.h` (based on OpenXRay's `d3d9compat.hpp`): the D3D9 enums, flags and structs the engine
+and the renderer still name, the D3D9 interfaces as incomplete types, `D3DXVECTOR*`/`D3DXMATRIX`/`D3DXPLANE` with the matrix,
+vector and plane functions in use, `D3DXGetDeclLength`/`D3DXGetDeclVertexSize`/`D3DXGetFVFVertexSize`/`D3DXDeclaratorFromFVF`,
+`D3DXFLOAT16`. It has no D3D10/11/DXGI names, so it coexists with the Metal shim's headers in one translation unit
+(checked on the R4 sources). Not provided: D3DX texture/surface/shader-compiler calls (the renderer port replaces them).
+
+`Common/dinput_compat.h`: `DIK_*` with the DirectInput numbering (Anomaly's Lua scripts and `user.ltx` depend on it; map SDL
+scancodes to these, never the other way), plus the DirectInput device types as declarations so `xr_input.h` parses.
+`Common/compat/DPlay/dplay8.h`: the DirectPlay subset xrGame and xrEngine name (`DPNID`, `DPNSEND_*`, application/connection
+descriptors, the interface names as incomplete types). `external/sse2neon` through `<xmmintrin.h>`, `<emmintrin.h>`,
+`<intrin.h>`, ... in `Common/compat` (sources need no edits).
+
+**Not** in the shim, on purpose: the window system (`WNDCLASS`, `CreateWindow`, `GetClientRect`, `ClipCursor`, `WM_*`), COM,
+DirectInput/DirectPlay/DirectSound/WASAPI calls, the registry, VFW. Those code paths are replaced by the module sessions that
+own them (engine-core, engine-input, netserver, sound).
+
+Known leftovers that block specific modules and belong to them: the circular `D3D_PRIMITIVE_TOPOLOGY_*` /
+`D3D11_PRIMITIVE_TOPOLOGY_*` macros between `Layers/xrRenderDX10/DXCommonTypes.h` and the Metal shim's `d3d11_metal.h` (hits every R4 file
+at `dx10R_Backend_Runtime.h:294`; drop the engine-side `#define` block for Apple or the shim-side one), `IUnknown` for
+`xrEngine/Environment.cpp` (comes from the Metal shim's headers), `REFIID`, the `luaL_reg` name for lua-extensions.
+
+### Requesting shim additions
+
+`src/Common/**`, `src/xrCore/**`, `cmake/AnomalyPlatform.cmake` and `cmake/AnomalyModules.cmake` are owned by the orchestrating
+session after P0 merges. If you are blocked on a missing name, append a line to `shim-requests.md` in the shared notes folder
+(the name, the file and line that needs it, the Win32 signature) and carry on with the next error. If it blocks you for good, add it
+yourself as an **additive** change in `Common/PlatformApple.inl` (declaration) and `xrCore/Platform/PlatformApple.cpp`
+(implementation), in its own commit at the start of your branch, and say so in your PR: additive-only keeps the merges between
+module branches trivial. Do not "fix" a Windows name by changing the module's source when the shim can provide it; do not put
+Apple-only code in a module without `XR_PLATFORM_APPLE`.
+

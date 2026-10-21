@@ -96,7 +96,13 @@ class resptr_core : public C
 protected:
 	typedef resptr_core this_type;
 	typedef resptr_core<T, C> self;
+	// C is a dependent base: its members are not found by unqualified lookup (clang, standard C++; MSVC /permissive)
+	using C::p_;
+	using C::_inc;
+	using C::_dec;
 public:
+	using C::_set;
+	using C::_get;
 	// construction
 	resptr_core() { p_ = 0; }
 

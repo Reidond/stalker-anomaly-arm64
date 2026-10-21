@@ -3,6 +3,7 @@
 // Deliberately independent of the rest of xrCore: no stdafx.h, so it can be used (and tested) on its own and does not
 // pull in xrCore's `thread_t` next to the Mach `thread_t`.
 #include "Common/Platform.h"
+#undef interface // Platform.h defines it for the engine sources; Apple system headers below may use the name
 
 #ifdef XR_PLATFORM_APPLE
 
@@ -15,6 +16,8 @@
 #include <sys/sysctl.h>
 
 #include <atomic>
+#include <chrono>
+#include <condition_variable>
 #include <mutex>
 #include <string>
 #include <unordered_map>
@@ -610,6 +613,435 @@ int WideCharToMultiByte(UINT code_page, DWORD, const wchar_t* src, int src_len, 
 		count += n;
 	}
 	return count;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Handle objects: events, mutexes, semaphores and threads, with CloseHandle / WaitForSingleObject semantics
+// ---------------------------------------------------------------------------------------------
+namespace
+{
+enum class HandleKind : int
+{
+	Event,
+	Mutex,
+	Semaphore,
+	Thread
+};
+
+struct HandleObject
+{
+	HandleKind kind;
+	std::mutex lock;
+	std::condition_variable cond;
+	// event
+	bool manual_reset = false;
+	bool signaled = false;
+	// mutex (recursive, owner tracked by thread id)
+	pthread_t owner = nullptr;
+	int recursion = 0;
+	// semaphore
+	LONG count = 0;
+	LONG maximum = 0;
+	// thread
+	pthread_t thread = nullptr;
+	bool finished = false;
+	bool detached = false;
+	DWORD exit_code = STILL_ACTIVE;
+	DWORD thread_id = 0;
+	LPTHREAD_START_ROUTINE start = nullptr;
+	void* parameter = nullptr;
+	void (*cdecl_start)(void*) = nullptr;
+	unsigned (*ex_start)(void*) = nullptr;
+	int priority = 0;
+	std::atomic<int> refs{1}; // handle + running thread
+};
+
+HandleObject* as_object(HANDLE h)
+{
+	if (!h || h == INVALID_HANDLE_VALUE) return nullptr;
+	return static_cast<HandleObject*>(h);
+}
+
+void release(HandleObject* o)
+{
+	if (o->refs.fetch_sub(1) == 1) delete o;
+}
+
+// Waits on one object until `ready()` accepts it (under its lock); takes ownership semantics in `acquire`.
+bool try_acquire(HandleObject* o)
+{
+	switch (o->kind)
+	{
+	case HandleKind::Event:
+		if (!o->signaled) return false;
+		if (!o->manual_reset) o->signaled = false;
+		return true;
+	case HandleKind::Mutex:
+		if (o->recursion == 0 || pthread_equal(o->owner, pthread_self()))
+		{
+			o->owner = pthread_self();
+			++o->recursion;
+			return true;
+		}
+		return false;
+	case HandleKind::Semaphore:
+		if (o->count <= 0) return false;
+		--o->count;
+		return true;
+	case HandleKind::Thread:
+		return o->finished;
+	}
+	return false;
+}
+
+DWORD wait_one(HandleObject* o, DWORD ms)
+{
+	std::unique_lock<std::mutex> guard(o->lock);
+	if (ms == INFINITE)
+	{
+		o->cond.wait(guard, [&] { return try_acquire(o); });
+		return WAIT_OBJECT_0;
+	}
+	return o->cond.wait_for(guard, std::chrono::milliseconds(ms), [&] { return try_acquire(o); }) ? WAIT_OBJECT_0 : WAIT_TIMEOUT;
+}
+
+void* thread_main(void* arg)
+{
+	HandleObject* o = static_cast<HandleObject*>(arg);
+	DWORD code = 0;
+	if (o->start) code = o->start(o->parameter);
+	else if (o->ex_start) code = (DWORD)o->ex_start(o->parameter);
+	else if (o->cdecl_start) o->cdecl_start(o->parameter);
+	{
+		std::lock_guard<std::mutex> guard(o->lock);
+		o->exit_code = code;
+		o->finished = true;
+	}
+	o->cond.notify_all();
+	release(o);
+	return nullptr;
+}
+
+HandleObject* spawn_thread(LPTHREAD_START_ROUTINE start, unsigned (*ex_start)(void*), void (*cdecl_start)(void*), void* arg,
+                           size_t stack_size, bool detached)
+{
+	HandleObject* o = new HandleObject;
+	o->kind = HandleKind::Thread;
+	o->start = start;
+	o->ex_start = ex_start;
+	o->cdecl_start = cdecl_start;
+	o->parameter = arg;
+	o->detached = detached;
+	o->refs = 2; // the returned handle and the thread itself
+	pthread_attr_t attr;
+	pthread_attr_init(&attr);
+	if (stack_size) pthread_attr_setstacksize(&attr, stack_size < 16384 ? 16384 : stack_size);
+	if (pthread_create(&o->thread, &attr, thread_main, o) != 0)
+	{
+		pthread_attr_destroy(&attr);
+		delete o;
+		return nullptr;
+	}
+	pthread_attr_destroy(&attr);
+	return o;
+}
+} // namespace
+
+HANDLE CreateEvent(void*, BOOL manual_reset, BOOL initial_state, const char*)
+{
+	HandleObject* o = new HandleObject;
+	o->kind = HandleKind::Event;
+	o->manual_reset = manual_reset != 0;
+	o->signaled = initial_state != 0;
+	return o;
+}
+
+BOOL SetEvent(HANDLE event)
+{
+	HandleObject* o = as_object(event);
+	if (!o || o->kind != HandleKind::Event) return FALSE;
+	{
+		std::lock_guard<std::mutex> guard(o->lock);
+		o->signaled = true;
+	}
+	o->cond.notify_all();
+	return TRUE;
+}
+
+BOOL ResetEvent(HANDLE event)
+{
+	HandleObject* o = as_object(event);
+	if (!o || o->kind != HandleKind::Event) return FALSE;
+	std::lock_guard<std::mutex> guard(o->lock);
+	o->signaled = false;
+	return TRUE;
+}
+
+HANDLE CreateMutex(void*, BOOL initial_owner, const char*)
+{
+	HandleObject* o = new HandleObject;
+	o->kind = HandleKind::Mutex;
+	if (initial_owner)
+	{
+		o->owner = pthread_self();
+		o->recursion = 1;
+	}
+	return o;
+}
+
+BOOL ReleaseMutex(HANDLE mutex)
+{
+	HandleObject* o = as_object(mutex);
+	if (!o || o->kind != HandleKind::Mutex) return FALSE;
+	{
+		std::lock_guard<std::mutex> guard(o->lock);
+		if (o->recursion == 0 || !pthread_equal(o->owner, pthread_self())) return FALSE;
+		--o->recursion;
+	}
+	o->cond.notify_one();
+	return TRUE;
+}
+
+HANDLE CreateSemaphore(void*, LONG initial_count, LONG maximum_count, const char*)
+{
+	HandleObject* o = new HandleObject;
+	o->kind = HandleKind::Semaphore;
+	o->count = initial_count;
+	o->maximum = maximum_count;
+	return o;
+}
+
+BOOL ReleaseSemaphore(HANDLE semaphore, LONG release_count, LONG* previous_count)
+{
+	HandleObject* o = as_object(semaphore);
+	if (!o || o->kind != HandleKind::Semaphore) return FALSE;
+	{
+		std::lock_guard<std::mutex> guard(o->lock);
+		if (previous_count) *previous_count = o->count;
+		if (o->count + release_count > o->maximum) return FALSE;
+		o->count += release_count;
+	}
+	o->cond.notify_all();
+	return TRUE;
+}
+
+DWORD WaitForSingleObject(HANDLE handle, DWORD milliseconds)
+{
+	HandleObject* o = as_object(handle);
+	if (!o) return WAIT_FAILED;
+	return wait_one(o, milliseconds);
+}
+
+DWORD WaitForMultipleObjects(DWORD count, const HANDLE* handles, BOOL wait_all, DWORD milliseconds)
+{
+	// Polling is good enough for the handful of call sites (multiplayer sync, tools).
+	const uint64_t start = clock_gettime_nsec_np(CLOCK_UPTIME_RAW);
+	for (;;)
+	{
+		DWORD ready = 0;
+		for (DWORD i = 0; i < count; ++i)
+		{
+			HandleObject* o = as_object(handles[i]);
+			if (!o) return WAIT_FAILED;
+			if (!wait_all)
+			{
+				if (wait_one(o, 0) == WAIT_OBJECT_0) return WAIT_OBJECT_0 + i;
+			}
+			else
+			{
+				std::lock_guard<std::mutex> guard(o->lock);
+				bool signaled = (o->kind == HandleKind::Event) ? o->signaled : (o->kind == HandleKind::Thread) ? o->finished : o->count > 0;
+				if (signaled) ++ready;
+			}
+		}
+		if (wait_all && ready == count)
+		{
+			for (DWORD i = 0; i < count; ++i) wait_one(as_object(handles[i]), 0);
+			return WAIT_OBJECT_0;
+		}
+		if (milliseconds != INFINITE && (clock_gettime_nsec_np(CLOCK_UPTIME_RAW) - start) / 1000000ull >= milliseconds)
+			return WAIT_TIMEOUT;
+		usleep(500);
+	}
+}
+
+BOOL CloseHandle(HANDLE handle)
+{
+	HandleObject* o = as_object(handle);
+	if (!o) return FALSE;
+	if (o->kind == HandleKind::Thread && !o->detached)
+	{
+		std::unique_lock<std::mutex> guard(o->lock);
+		if (!o->finished) pthread_detach(o->thread);
+	}
+	release(o);
+	return TRUE;
+}
+
+HANDLE CreateThread(void*, size_t stack_size, LPTHREAD_START_ROUTINE start, void* parameter, DWORD, DWORD* thread_id)
+{
+	HandleObject* o = spawn_thread(start, nullptr, nullptr, parameter, stack_size, false);
+	if (o && thread_id) *thread_id = (DWORD)(uintptr_t)o->thread;
+	return o;
+}
+
+uintptr_t _beginthread(void (*start)(void*), unsigned stack_size, void* arg)
+{
+	HandleObject* o = spawn_thread(nullptr, nullptr, start, arg, stack_size, true);
+	if (!o) return (uintptr_t)-1;
+	pthread_detach(o->thread);
+	return (uintptr_t)o;
+}
+
+uintptr_t _beginthreadex(void*, unsigned stack_size, unsigned (*start)(void*), void* arg, unsigned, unsigned* thread_id)
+{
+	HandleObject* o = spawn_thread(nullptr, start, nullptr, arg, stack_size, false);
+	if (!o) return 0;
+	if (thread_id) *thread_id = (unsigned)(uintptr_t)o->thread;
+	return (uintptr_t)o;
+}
+
+HANDLE GetCurrentThread() { return (HANDLE)(intptr_t)-2; }
+
+BOOL GetExitCodeThread(HANDLE thread, DWORD* exit_code)
+{
+	HandleObject* o = as_object(thread);
+	if (!o || o->kind != HandleKind::Thread) return FALSE;
+	std::lock_guard<std::mutex> guard(o->lock);
+	*exit_code = o->finished ? o->exit_code : STILL_ACTIVE;
+	return TRUE;
+}
+
+BOOL SetThreadPriority(HANDLE, int) { return TRUE; }
+int GetThreadPriority(HANDLE) { return THREAD_PRIORITY_NORMAL; }
+DWORD_PTR SetThreadAffinityMask(HANDLE, DWORD_PTR mask) { return mask; } // no affinity on Apple platforms
+DWORD SetThreadIdealProcessor(HANDLE, DWORD) { return 0; }
+
+// ---------------------------------------------------------------------------------------------
+// Time of day, system information, environment, dynamic libraries
+// ---------------------------------------------------------------------------------------------
+static void fill_systemtime(SYSTEMTIME* st, const tm& t, int milliseconds)
+{
+	st->wYear = (WORD)(t.tm_year + 1900);
+	st->wMonth = (WORD)(t.tm_mon + 1);
+	st->wDayOfWeek = (WORD)t.tm_wday;
+	st->wDay = (WORD)t.tm_mday;
+	st->wHour = (WORD)t.tm_hour;
+	st->wMinute = (WORD)t.tm_min;
+	st->wSecond = (WORD)t.tm_sec;
+	st->wMilliseconds = (WORD)milliseconds;
+}
+
+void GetLocalTime(SYSTEMTIME* st)
+{
+	timeval tv;
+	gettimeofday(&tv, nullptr);
+	time_t seconds = tv.tv_sec;
+	tm t;
+	localtime_r(&seconds, &t);
+	fill_systemtime(st, t, (int)(tv.tv_usec / 1000));
+}
+
+void GetSystemTime(SYSTEMTIME* st)
+{
+	timeval tv;
+	gettimeofday(&tv, nullptr);
+	time_t seconds = tv.tv_sec;
+	tm t;
+	gmtime_r(&seconds, &t);
+	fill_systemtime(st, t, (int)(tv.tv_usec / 1000));
+}
+
+void GetSystemInfo(SYSTEM_INFO* info)
+{
+	memset(info, 0, sizeof(*info));
+	int cpus = 1;
+	size_t size = sizeof(cpus);
+	sysctlbyname("hw.logicalcpu", &cpus, &size, nullptr, 0);
+	info->wProcessorArchitecture = PROCESSOR_ARCHITECTURE_ARM64;
+	info->dwPageSize = (DWORD)getpagesize();
+	info->dwAllocationGranularity = info->dwPageSize;
+	info->dwNumberOfProcessors = (DWORD)cpus;
+	info->dwActiveProcessorMask = cpus >= 64 ? ~0ull : ((1ull << cpus) - 1);
+}
+
+BOOL GlobalMemoryStatusEx(MEMORYSTATUSEX* status)
+{
+	uint64_t total = 0;
+	size_t size = sizeof(total);
+	sysctlbyname("hw.memsize", &total, &size, nullptr, 0);
+	size_t free_bytes = 0, reserved = 0, committed = 0;
+	xr_apple_vm_info(&free_bytes, &reserved, &committed);
+	memset(status, 0, sizeof(*status));
+	status->dwLength = sizeof(*status);
+	status->ullTotalPhys = total;
+	status->ullAvailPhys = free_bytes;
+	status->ullTotalVirtual = total;
+	status->ullAvailVirtual = free_bytes;
+	status->ullTotalPageFile = total;
+	status->ullAvailPageFile = free_bytes;
+	status->dwMemoryLoad = total ? (DWORD)(100 - (free_bytes * 100 / total)) : 0;
+	return TRUE;
+}
+
+DWORD GetEnvironmentVariable(const char* name, char* buffer, DWORD size)
+{
+	const char* value = getenv(name);
+	if (!value) return 0;
+	DWORD needed = (DWORD)strlen(value);
+	if (needed + 1 > size) return needed + 1;
+	memcpy(buffer, value, needed + 1);
+	return needed;
+}
+
+HMODULE LoadLibrary(const char*) { return nullptr; } // Windows module names; nothing loads on Apple platforms
+BOOL FreeLibrary(HMODULE) { return TRUE; }
+FARPROC GetProcAddress(HMODULE, const char*) { return nullptr; }
+
+HINSTANCE ShellExecute(HWND, const char*, const char* file, const char*, const char*, int)
+{
+	fprintf(stderr, "ShellExecute(%s) is not supported on this platform\n", file ? file : "");
+	return (HINSTANCE)(intptr_t)2; // ERROR_FILE_NOT_FOUND: values <= 32 are failures
+}
+
+// ---------------------------------------------------------------------------------------------
+// sscanf_s: drops the size argument that follows %s, %c and %[ conversions
+// ---------------------------------------------------------------------------------------------
+int xr_sscanf_s(const char* buffer, const char* format, ...)
+{
+	void* args[16] = {};
+	int n = 0;
+	va_list va;
+	va_start(va, format);
+	for (const char* p = format; *p && n < 16; ++p)
+	{
+		if (*p != '%') continue;
+		++p;
+		if (*p == '%') continue;
+		bool suppressed = false;
+		if (*p == '*')
+		{
+			suppressed = true;
+			++p;
+		}
+		while (*p >= '0' && *p <= '9') ++p;
+		while (*p == 'h' || *p == 'l' || *p == 'L' || *p == 'q' || *p == 'j' || *p == 'z' || *p == 't') ++p;
+		if (!*p) break;
+		const char conv = *p;
+		if (conv == '[')
+		{
+			++p;
+			if (*p == '^') ++p;
+			if (*p == ']') ++p;
+			while (*p && *p != ']') ++p;
+		}
+		if (suppressed) continue;
+		args[n++] = va_arg(va, void*);
+		if (conv == 's' || conv == 'c' || conv == '[') (void)va_arg(va, unsigned int);
+	}
+	va_end(va);
+	return sscanf(buffer, format, args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8],
+	              args[9], args[10], args[11], args[12], args[13], args[14], args[15]);
 }
 
 #endif // XR_PLATFORM_APPLE

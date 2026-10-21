@@ -9,7 +9,7 @@ uses `src/engine-vs2022.sln`.
 - Submodules:
 
   ```bash
-  git submodule update --init --depth 1 external/SDL external/openal-soft external/LuaJIT external/ogg external/vorbis external/theora external/SPIRV-Cross external/vkd3d
+  git submodule update --init --depth 1 external/SDL external/openal-soft external/LuaJIT external/ogg external/vorbis external/theora external/SPIRV-Cross external/vkd3d external/sse2neon
   ```
 
 ## macOS

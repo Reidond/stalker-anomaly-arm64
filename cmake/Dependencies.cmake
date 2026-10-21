@@ -2,7 +2,7 @@
 
 set(ANOMALY_EXTERNAL_DIR "${PROJECT_SOURCE_DIR}/external")
 
-foreach(dep SDL openal-soft LuaJIT ogg vorbis theora SPIRV-Cross vkd3d)
+foreach(dep SDL openal-soft LuaJIT ogg vorbis theora SPIRV-Cross vkd3d sse2neon)
     if(NOT EXISTS "${ANOMALY_EXTERNAL_DIR}/${dep}/.git")
         message(FATAL_ERROR "external/${dep} is missing; run: git submodule update --init --depth 1 external/${dep}")
     endif()
@@ -49,3 +49,6 @@ include(deps/LuaJIT)
 # Shader translation (src/Platform/ShaderXlat): HLSL -> SPIR-V (vkd3d-shader), SPIR-V -> MSL (SPIRV-Cross).
 include(deps/SPIRV-Cross)
 include(deps/Vkd3dShader)
+
+# SSE intrinsics -> NEON for the engine's SSE code paths (single header).
+include(deps/sse2neon)
