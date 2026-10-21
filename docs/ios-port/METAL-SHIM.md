@@ -12,7 +12,7 @@ Branch `claude/metal-d3d11-9647f6`; nothing here depends on engine code.
 | `src/Platform/MetalD3D11/compat/` | One-line forwarding headers named like the Windows SDK (`d3d11.h`, `d3d11_1.h`, `dxgi1_4.h`, `D3DCompiler.h`, `D3Dx11core.h`, ...). Put this directory on the include path instead of the Windows SDK. |
 | `src/Platform/MetalD3D11/src/` | Objective-C++ implementation (ARC), about 6,000 lines. `mtl_context.mm` is the immediate context, `mtl_device.mm` creation and views, `mtl_swapchain.mm`/`mtl_dxgi.mm` presentation, `mtl_shader.mm` the container and reflection facade, `mtl_d3dx11.mm` the DDS loader, `mtl_formats.mm` the format tables. |
 | `tools/metal_d3d11_test` | SDL3 test app that drives the shim through the D3D11 API. |
-| `tools/d3d11_surface_scan` | Survey scanner. |
+| `tools/d3d11_surface_scan` | Survey scanner (`scan.py`) and the conformance check (`check_shim.py`): all 273 D3D11/D3D10/DXGI identifiers and all 94 interface methods the survey found are declared by the shim headers, and the engine's `DXCommonTypes.h` (USE_DX11) compiles against them. |
 
 CMake targets: `metal_d3d11` (static library) and `metal_d3d11_compat` (interface target: include path + link).
 

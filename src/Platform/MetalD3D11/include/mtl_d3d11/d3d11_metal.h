@@ -29,6 +29,9 @@
 #define D3D11_REQ_MIP_LEVELS 15
 #define D3D11_REQ_TEXTURE2D_ARRAY_AXIS_DIMENSION 2048
 #define D3D11_FLOAT32_MAX 3.402823466e+38f
+#ifndef D3D_OK
+#define D3D_OK S_OK // d3d9.h's name; R4's DX11 build still tests it
+#endif
 
 typedef RECT D3D11_RECT;
 
@@ -92,6 +95,9 @@ enum D3D11_BIND_FLAG
     D3D11_BIND_DEPTH_STENCIL = 0x40,
     D3D11_BIND_UNORDERED_ACCESS = 0x80
 };
+
+#define D3D10_BIND_SHADER_RESOURCE D3D11_BIND_SHADER_RESOURCE // names left over in the screenshot/combine paths
+#define D3D10_BIND_RENDER_TARGET D3D11_BIND_RENDER_TARGET
 
 enum D3D11_CPU_ACCESS_FLAG
 {
