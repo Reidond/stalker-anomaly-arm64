@@ -25,6 +25,23 @@ if(ANOMALY_IOS AND NOT ANOMALY_IOS_TEAM_ID)
     message(WARNING "ANOMALY_IOS_TEAM_ID is empty; iOS targets will not be signed. Set it in CMakeUserPresets.json.")
 endif()
 
+# Memory entitlements. A free Personal Team cannot sign extended virtual addressing, so it is
+# opt-in; turn it on with a paid Apple Developer Program team.
+option(ANOMALY_IOS_INCREASED_MEMORY_LIMIT "Request com.apple.developer.kernel.increased-memory-limit" ON)
+option(ANOMALY_IOS_EXTENDED_VIRTUAL_ADDRESSING "Request com.apple.developer.kernel.extended-virtual-addressing (paid team only)" OFF)
+
+set(ANOMALY_ENTITLEMENT_ENTRIES "")
+if(ANOMALY_IOS_INCREASED_MEMORY_LIMIT)
+    # Raise the jetsam limit on 8 GB iPads; Anomaly needs several GB of RAM plus GPU memory.
+    string(APPEND ANOMALY_ENTITLEMENT_ENTRIES "\t<key>com.apple.developer.kernel.increased-memory-limit</key>\n\t<true/>\n")
+endif()
+if(ANOMALY_IOS_EXTENDED_VIRTUAL_ADDRESSING)
+    # Larger address space for memory-mapped .db archives (~17 GB of game data).
+    string(APPEND ANOMALY_ENTITLEMENT_ENTRIES "\t<key>com.apple.developer.kernel.extended-virtual-addressing</key>\n\t<true/>\n")
+endif()
+set(ANOMALY_IOS_ENTITLEMENTS "${CMAKE_BINARY_DIR}/Anomaly.entitlements")
+configure_file("${PROJECT_SOURCE_DIR}/platform/ios/Anomaly.entitlements.in" "${ANOMALY_IOS_ENTITLEMENTS}" @ONLY)
+
 # Applies bundle, signing and entitlement settings shared by every app target.
 function(anomaly_configure_app target)
     cmake_parse_arguments(ARG "" "BUNDLE_SUFFIX;DISPLAY_NAME;INFO_PLIST;ENTITLEMENTS" "" ${ARGN})
