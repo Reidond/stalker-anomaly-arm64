@@ -23,7 +23,8 @@ namespace
 const ALCenum k_system_events[] = {ALC_EVENT_TYPE_DEFAULT_DEVICE_CHANGED_SOFT, ALC_EVENT_TYPE_DEVICE_ADDED_SOFT,
                                    ALC_EVENT_TYPE_DEVICE_REMOVED_SOFT};
 
-std::atomic<bool> g_interrupted{false};
+std::atomic<bool> g_interrupted{false};      // the device was paused for an interruption
+std::atomic<bool> g_session_pending{false};  // the session could not be (re)activated yet; retried when it can be
 
 // OpenAL Soft's own device events (ALC_SOFT_system_events). They arrive on an OpenAL thread and only raise the same
 // flags the WASAPI client raised; CSoundRender_Core::update() acts on them on the engine thread.
@@ -40,14 +41,17 @@ void ALC_APIENTRY on_alc_event(ALCenum event, ALCenum device_type, ALCdevice*, A
 
 void resume_after_interruption(CSoundRender_CoreA* core)
 {
-	if (!g_interrupted)
+	if (!g_interrupted && !g_session_pending)
 		return;
 	if (!activate_session())
-		return; // still in the background; AppActive tries again
-	g_interrupted = false;
-	if (ALCdevice* device = core->al_device())
-		alcDeviceResumeSOFT(device);
-	Msg("SOUND: audio session reactivated, device resumed");
+		return; // still in the background or in a call; the next InterruptionEnded / AppActive tries again
+	g_session_pending = false;
+	if (g_interrupted.exchange(false))
+	{
+		if (ALCdevice* device = core->al_device())
+			alcDeviceResumeSOFT(device);
+	}
+	Msg("SOUND: audio session reactivated");
 }
 
 void on_session_event(SessionEvent event, void*)
@@ -73,8 +77,11 @@ void on_session_event(SessionEvent event, void*)
 		core->bPendingDefaultDeviceSwitch = TRUE;
 		break;
 	case SessionEvent::MediaServicesReset:
-		configure_session();
-		core->bPendingDefaultDeviceSwitch = TRUE;
+		// every audio object is invalid, whichever device was selected: reopen it (not only when it is the default)
+		g_interrupted = false;
+		if (!configure_session())
+			g_session_pending = true;
+		core->bPendingDeviceReopen = TRUE;
 		break;
 	}
 }
@@ -132,7 +139,9 @@ void prepare()
 {
 	// before the first alc* call, which is when OpenAL Soft reads its configuration
 	use_anomaly_alsoft_conf();
-	configure_session();
+	// A refusal (a call in progress, launched in the background) is retried on InterruptionEnded / AppActive.
+	if (!configure_session())
+		g_session_pending = true;
 }
 } // namespace xr_sound_apple
 
