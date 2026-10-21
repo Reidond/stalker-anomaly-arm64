@@ -43,4 +43,4 @@ namespace gamespy_gp
 	}
 } //namespace gamespy_gp
 
-DEFINE_MIXED_DELEGATE_SCRIPT(gamespy_gp::login_operation_cb, "login_operation_cb");
+template<> DEFINE_MIXED_DELEGATE_SCRIPT(gamespy_gp::login_operation_cb, "login_operation_cb");

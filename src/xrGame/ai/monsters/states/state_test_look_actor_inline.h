@@ -11,8 +11,8 @@
 TEMPLATE_SPECIALIZATION
 void CStateMonsterLookActorAbstract::execute()
 {
-	object->set_action(ACT_STAND_IDLE);
-	object->dir().face_target(Level().CurrentEntity()->Position(), 1200);
+	this->object->set_action(ACT_STAND_IDLE);
+	this->object->dir().face_target(Level().CurrentEntity()->Position(), 1200);
 }
 
 

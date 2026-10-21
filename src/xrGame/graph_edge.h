@@ -8,13 +8,13 @@
 
 #pragma once
 
-template <typename _edge_weight_type, typename _vertex_type>
+template <typename T_edge_weight_type, typename T_vertex_type>
 class CEdgeBase
 {
 public:
-	typedef _edge_weight_type _edge_weight_type;
-	typedef _vertex_type _vertex_type;
-	typedef typename _vertex_type::_vertex_id_type _vertex_id_type;
+	typedef T_edge_weight_type _edge_weight_type;
+	typedef T_vertex_type _vertex_type;
+	typedef typename T_vertex_type::_vertex_id_type _vertex_id_type;
 
 private:
 	_edge_weight_type m_weight;
@@ -34,6 +34,9 @@ class CEdge :
 private:
 	typedef CEdgeBase<_edge_weight_type, _vertex_type> inherited;
 
+public:
+	typedef typename inherited::_vertex_id_type _vertex_id_type;
+
 private:
 	_edge_data_type m_data;
 
@@ -50,7 +53,7 @@ class CEdge<_edge_weight_type, _vertex_type, xr_empty> :
 	public CEdgeBase<_edge_weight_type,_vertex_type> {
 private:
 	typedef CEdgeBase<_edge_weight_type, _vertex_type> inherited;
-	using _vertex_id_type = inherited::_vertex_id_type;
+	using _vertex_id_type = typename inherited::_vertex_id_type;
 
 public:
 	IC CEdge(const _edge_weight_type& weight, _vertex_type* vertex);

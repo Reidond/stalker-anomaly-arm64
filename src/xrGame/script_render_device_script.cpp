@@ -49,7 +49,7 @@ u32 time_continual(const CRenderDevice* self)
 }
 
 #pragma optimize("s",on)
-void CScriptRenderDevice::script_register(lua_State* L)
+template<> void CScriptRenderDevice::script_register(lua_State* L)
 {
 	module(L)
 	[

@@ -15,8 +15,8 @@ template <
 	typename _builder,
 	typename _allocator,
 	template <
-		typename _builder,
-		typename _allocator
+		typename,
+		typename
 	>
 	class _builder_allocator_constructor = CBuilderAllocatorConstructor
 >

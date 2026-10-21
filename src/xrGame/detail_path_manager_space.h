@@ -10,7 +10,7 @@
 
 namespace DetailPathManager
 {
-	enum EDetailPathType
+	enum EDetailPathType : int
 	{
 		eDetailPathTypeSmooth,
 		eDetailPathTypeSmoothDodge,

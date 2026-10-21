@@ -9,8 +9,8 @@
 #pragma once
 
 template <
-	typename _path_id_type,
-	typename _index_type,
+	typename T_path_id_type,
+	typename T_index_type,
 	u8 mask
 >
 struct CVertexManagerFixed
@@ -21,7 +21,7 @@ struct CVertexManagerFixed
 		template <typename T2>
 		struct _vertex : public T1<T2>
 		{
-			typedef _index_type _index_type;
+			typedef T_index_type _index_type;
 			_index_type _index : 8 * sizeof(_index_type) - mask;
 			_index_type _opened : mask;
 
@@ -40,13 +40,13 @@ struct CVertexManagerFixed
 	template <
 		template <typename _T> class _vertex = CEmptyClassTemplate,
 		template <typename _T1, typename _T2> class _index_vertex = CEmptyClassTemplate2,
-		typename _data_storage = CBuilderAllocatorConstructor
+		typename _data_storage = CBuilderAllocatorConstructor<void, void>
 	>
-	class CDataStorage : public _data_storage::template CDataStorage<VertexManager<_vertex>::_vertex>
+	class CDataStorage : public _data_storage::template CDataStorage<VertexManager<_vertex>::template _vertex>
 	{
 	public:
 		typedef typename _data_storage::template CDataStorage<
-			VertexManager<_vertex>::_vertex
+			VertexManager<_vertex>::template _vertex
 		> inherited;
 		typedef typename inherited::CGraphVertex CGraphVertex;
 		typedef typename CGraphVertex::_index_type _index_type;
@@ -60,7 +60,7 @@ struct CVertexManagerFixed
 		};
 #pragma pack(pop)
 
-		typedef _path_id_type _path_id_type;
+		typedef T_path_id_type _path_id_type;
 		typedef SGraphIndexVertex<_path_id_type> CGraphIndexVertex;
 
 	protected:

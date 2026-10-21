@@ -75,8 +75,8 @@ private:
 	Fvector	m_vCenter;
 	float	m_fKeepRadius;
 	float	m_fThrowPower;
-	boolean	m_bHeightFixed;		// whether object will be hard-fixed at tele_heigh or can go above (true - default)
-	boolean m_bSpawnSkeleton;
+	bool	m_bHeightFixed;		// whether object will be hard-fixed at tele_heigh or can go above (true - default)
+	bool m_bSpawnSkeleton;
 	float   m_fTeleTime;
 	u16		m_fTeleRotateSpeed;
 
@@ -124,8 +124,8 @@ public: // Getters
 	float			GetKeepRadius() const { return m_fKeepRadius; }
 	float			GetTeleTime() const { return m_fTeleTime; }
 	u16				GetTeleRotateSpeed() const { return m_fTeleRotateSpeed; }
-	boolean			GetSpawnSkeleton() const { return m_bSpawnSkeleton; }
-	boolean			GetHeightFixed() const { return m_bHeightFixed; }
+	bool			GetSpawnSkeleton() const { return m_bSpawnSkeleton; }
+	bool			GetHeightFixed() const { return m_bHeightFixed; }
 	const Fvector&	GetCenter() const { return m_vCenter; }
 	LPCSTR			GetTearingParticles() const { return *m_sTearingParticles; }
 	

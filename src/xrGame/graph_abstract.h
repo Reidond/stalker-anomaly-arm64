@@ -15,12 +15,14 @@
 template <
 	typename _data_type = xr_empty,
 	typename _edge_weight_type = float,
-	typename _vertex_id_type = u32,
+	typename T_vertex_id_type = u32,
 	typename _edge_data_type = xr_empty
 >
 class CGraphAbstract
 {
 public:
+	typedef T_vertex_id_type _vertex_id_type;
+
 	typedef CVertex<
 		_data_type,
 		_vertex_id_type,
@@ -42,7 +44,6 @@ public:
 	typedef typename VERTICES::iterator vertex_iterator;
 	typedef typename EDGES::const_iterator const_iterator;
 	typedef typename EDGES::iterator iterator;
-	typedef _vertex_id_type _vertex_id_type;
 
 private:
 	VERTICES m_vertices;
@@ -86,6 +87,11 @@ template <
 class CGraphAbstractSerialize : public CGraphAbstract<_data_type, _edge_weight_type, _vertex_id_type>,
                                 public IPureSerializeObject<IReader, IWriter>
 {
+public:
+	typedef CGraphAbstract<_data_type, _edge_weight_type, _vertex_id_type> inherited;
+	typedef typename inherited::const_vertex_iterator const_vertex_iterator;
+	typedef typename inherited::const_iterator const_iterator;
+
 public:
 	virtual void save(IWriter& stream);
 	virtual void load(IReader& stream);

@@ -33,7 +33,7 @@ TEMPLATE_SPECIALIZATION
 IC void CDoubleLinkedList::init()
 {
 	inherited::init();
-	m_list_tail->prev() = m_list_head;
+	this->m_list_tail->prev() = this->m_list_head;
 }
 
 TEMPLATE_SPECIALIZATION
