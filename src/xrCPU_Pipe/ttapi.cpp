@@ -1,6 +1,97 @@
 #include "stdafx.h"
 #pragma hdrstop
 
+#ifdef XR_PLATFORM_APPLE
+// Apple: the spin pool (CreateThread, SwitchToThread, _mm_pause) is replaced by Grand Central Dispatch. The caller
+// of ttapi_RunAllWorkers() takes part in the work, as the last worker did on Windows, and the call returns when
+// every worker function has finished (dispatch_apply is synchronous).
+#include <thread>
+
+struct TTAPI_WORKER_PARAMS
+{
+	LPPTTAPI_WORKER_FUNC lpWorkerFunc;
+	LPVOID lpvWorkerFuncParams;
+};
+
+static BOOL ttapi_initialized = FALSE;
+static DWORD ttapi_workers_count = 0;
+static DWORD ttapi_assigned_workers = 0;
+static TTAPI_WORKER_PARAMS* ttapi_worker_params = NULL;
+
+DWORD ttapi_Init(_processor_info* ID)
+{
+	if (ttapi_initialized)
+		return ttapi_workers_count;
+
+	ttapi_workers_count = std::thread::hardware_concurrency();
+	if (ttapi_workers_count == 0)
+		ttapi_workers_count = 4;
+
+	// -max-threads N lowers the worker count, as on Windows
+	const char szSearchFor[] = "-max-threads";
+	const char* pszTemp = strstr(GetCommandLine(), szSearchFor);
+	DWORD dwOverride = 0;
+	if (pszTemp)
+		if (sscanf(pszTemp + strlen(szSearchFor), "%u", &dwOverride) == 1)
+			if ((dwOverride >= 1) && (dwOverride < ttapi_workers_count))
+				ttapi_workers_count = dwOverride;
+
+	ttapi_worker_params = (TTAPI_WORKER_PARAMS*)calloc(ttapi_workers_count, sizeof(TTAPI_WORKER_PARAMS));
+	if (!ttapi_worker_params)
+	{
+		ttapi_workers_count = 0;
+		return 0;
+	}
+
+	ttapi_assigned_workers = 0;
+	ttapi_initialized = TRUE;
+	return ttapi_workers_count;
+}
+
+DWORD ttapi_GetWorkersCount()
+{
+	return ttapi_workers_count;
+}
+
+VOID ttapi_AddWorker(LPPTTAPI_WORKER_FUNC lpWorkerFunc, LPVOID lpvWorkerFuncParams)
+{
+	// Not checked for overflow, like on Windows: callers stay within ttapi_GetWorkersCount()
+	ttapi_worker_params[ttapi_assigned_workers].lpWorkerFunc = lpWorkerFunc;
+	ttapi_worker_params[ttapi_assigned_workers].lpvWorkerFuncParams = lpvWorkerFuncParams;
+	ttapi_assigned_workers++;
+}
+
+VOID ttapi_RunAllWorkers()
+{
+	const DWORD count = ttapi_assigned_workers;
+	ttapi_assigned_workers = 0;
+
+	if (count == 1)
+	{
+		ttapi_worker_params[0].lpWorkerFunc(ttapi_worker_params[0].lpvWorkerFuncParams);
+		return;
+	}
+	if (count > 1)
+		xr_parallel_for<size_t>(0, count, [](size_t i)
+		{
+			ttapi_worker_params[i].lpWorkerFunc(ttapi_worker_params[i].lpvWorkerFuncParams);
+		});
+}
+
+VOID ttapi_Done()
+{
+	if (!ttapi_initialized)
+		return;
+
+	free(ttapi_worker_params);
+	ttapi_worker_params = NULL;
+	ttapi_workers_count = 0;
+	ttapi_assigned_workers = 0;
+	ttapi_initialized = FALSE;
+}
+
+#else // XR_PLATFORM_APPLE
+
 typedef struct TTAPI_WORKER_PARAMS
 {
 	volatile LONG vlFlag;
@@ -255,3 +346,5 @@ VOID ttapi_Done()
 
 	ttapi_initialized = FALSE;
 }
+
+#endif // XR_PLATFORM_APPLE
