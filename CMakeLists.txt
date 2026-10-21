@@ -17,3 +17,4 @@ include(Dependencies)
 
 add_subdirectory(tools/platform_probe)
 add_subdirectory(src/xrCore)
+add_subdirectory(tools/xrcore_smoke)
