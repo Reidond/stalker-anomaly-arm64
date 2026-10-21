@@ -56,12 +56,13 @@ struct Options
     // Apply the minimal FXC-compat source hooks (see FxcCompat.cpp). Never edits the game's files;
     // only the in-memory text handed to the frontend.
     bool fxc_compat = true;
-    // MSL buffer argument table layout: constant buffers use [[buffer(cbuffer_base + slot)]],
-    // structured/raw/UAV buffers use [[buffer(storage_buffer_base + n)]]. Vertex streams are bound
-    // by the pipeline's vertex descriptor and should live at >= vertex_stream_base.
+    // MSL buffer argument table: constant buffer b# -> [[buffer(cbuffer_base + #)]] (b0..b13 fit below 14),
+    // vertex streams are bound by the pipeline's vertex descriptor at vertex_stream_base + n (this matches
+    // the Metal D3D11 shim: buffer(16+n)), structured/raw/UAV buffers take [[buffer(storage_buffer_base +
+    // ordinal)]] above the streams. The stock shaders use none of the latter.
     uint32_t cbuffer_base = 0;
-    uint32_t storage_buffer_base = 14;
-    uint32_t vertex_stream_base = 20;
+    uint32_t vertex_stream_base = 16;
+    uint32_t storage_buffer_base = 24;
     // MSL texture table: SRV t# -> [[texture(#)]]; UAV textures u# -> [[texture(uav_texture_base + #)]].
     // Samplers: s# -> [[sampler(#)]].
     uint32_t uav_texture_base = 64;

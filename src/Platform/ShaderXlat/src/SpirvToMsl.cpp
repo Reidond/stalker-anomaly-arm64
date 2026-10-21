@@ -117,10 +117,11 @@ bool crossCompile(const std::vector<uint32_t>& spirv, const Options& opt, Result
         }
 
         // ---- structured / raw buffers
+        uint32_t storageOrdinal = 0;
         for (StorageBuffer& sb : refl.storage_buffers)
         {
             const uint32_t binding = (sb.is_uav ? kBindingUav : kBindingSrv) + sb.slot;
-            sb.msl_index = opt.storage_buffer_base + (sb.is_uav ? 8u : 0u) + sb.slot;
+            sb.msl_index = opt.storage_buffer_base + storageOrdinal++;
             if (findByBinding(res.storage_buffers, binding))
                 addBinding(SPIRType::Struct, binding, sb.msl_index, 0, 0);
         }

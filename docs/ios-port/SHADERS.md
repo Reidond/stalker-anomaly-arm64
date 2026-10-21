@@ -230,8 +230,8 @@ psReflection)`, `version()`, `frontend_name()`.
 | SRV texture `t#` | `[[texture(#)]]` | at most 11 textures, slots <= 10 |
 | UAV texture `u#` | `[[texture(uav_texture_base + #)]]` (64) | |
 | sampler `s#` | `[[sampler(#)]]` | at most 4 samplers, slots <= 3 |
-| structured / raw buffers | `[[buffer(storage_buffer_base + ...)]]` (14..19) | unused by the stock shaders |
-| vertex streams | pipeline vertex descriptor, buffer index >= `vertex_stream_base` (20) | the MSL uses `[[stage_in]]` attributes |
+| vertex streams | pipeline vertex descriptor, buffer index `vertex_stream_base + n` (16, same as the Metal D3D11 shim) | the MSL uses `[[stage_in]]` attributes |
+| structured / raw buffers | `[[buffer(storage_buffer_base + ordinal)]]` (24..30) | unused by the stock shaders |
 
 Every `msl_index` is also in the reflection, so the shim never recomputes these. `slot` is the
 real D3D register from the HLSL compiler, which is what the engine's reflection returned.
