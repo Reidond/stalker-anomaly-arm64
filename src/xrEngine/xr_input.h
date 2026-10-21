@@ -15,21 +15,6 @@ class GameInput;
 class SdlPadSource;
 } // namespace gameinput
 struct XrInputSdl;
-
-// TODO(shim): Common/dinput_compat.h has no DIMOFS_* yet. Same values as dinput.h.
-# ifndef DIMOFS_X
-#  define DIMOFS_X 0
-#  define DIMOFS_Y 4
-#  define DIMOFS_Z 8
-#  define DIMOFS_BUTTON0 12
-#  define DIMOFS_BUTTON1 13
-#  define DIMOFS_BUTTON2 14
-#  define DIMOFS_BUTTON3 15
-#  define DIMOFS_BUTTON4 16
-#  define DIMOFS_BUTTON5 17
-#  define DIMOFS_BUTTON6 18
-#  define DIMOFS_BUTTON7 19
-# endif
 #endif
 
 class ENGINE_API IInputReceiver;
