@@ -15,14 +15,15 @@ are in that shard's own files.
 
 |  | before triage | after triage |
 |---|---:|---:|
-| errors in xrGame / xrServerEntities files | 69,092 | **154** |
-| unique error sites (file, line, message) | 4,386 | **148** |
+| errors in xrGame / xrServerEntities files | 69,092 | **147** |
+| unique error sites (file, line, message) | 4,386 | **141** |
 | sites in a header that more than one shard includes (or in another shard's file) | 576 | **0** |
-| translation units without an error of their own | 217 | **1,189** |
-| translation units without any error | 217 | 521 |
+| translation units without an error of their own | 217 | **1,191** |
+| translation units without any error | 217 | **1,186** |
 
-The 668 translation units that still show an error but none of their own are blocked by one line outside xrGame:
-`xrNetServer/net_shared.h:61` names `REFIID` (netserver session: its branch adds it; the shim request is in the shared notes).
+The five translation units that show an error but none of their own include `3rd party/cximage` (multiplayer screenshots, mp-stub) or
+`xrPhysics/PHCharacter.h:23` (`enum EHitType;`: the physics session's branch replaces it with an include of `alife_space.h`, whose definition now carries `: int`).
+On the tree before the netserver session merged, 668 more were blocked by `REFIID` in `xrNetServer/net_shared.h`.
 
 Per shard (the ownership lists are the final ones, applied to both runs):
 
@@ -33,12 +34,12 @@ Per shard (the ownership lists are the final ones, applied to both runs):
 | ai-core | 99 | 94 | 8,295 | 821 | 15 | 15 |
 | nav-alife | 68 | 68 | 1,404 | 200 | 0 | 0 |
 | script-entities | 118 | 111 | 3,860 | 394 | 38 | 32 |
-| ui | 141 | 133 | 3,431 | 457 | 14 | 14 |
+| ui | 141 | 134 | 3,431 | 457 | 9 | 9 |
 | objects-items | 146 | 138 | 4,085 | 225 | 14 | 14 |
 | objects-world | 112 | 107 | 4,070 | 258 | 12 | 12 |
-| core-physics | 161 | 156 | 2,871 | 188 | 12 | 12 |
+| core-physics | 161 | 157 | 2,871 | 188 | 10 | 10 |
 | mp-stub | 167 | 156 | 3,603 | 116 | 46 | 46 |
-| **total** | 1,241 | 1,189 | 69,092 | 4,386 | 154 | 148 |
+| **total** | 1,241 | 1,191 | 69,092 | 4,386 | 147 | 141 |
 
 A shard's "before" numbers are what its own session would have seen: the same shared-header errors were repeated in every
 shard. The ai-monsters-b "before" figure counts the state-machine templates (`ai/monsters/states`) that moved to
@@ -236,8 +237,7 @@ needs changed is usually in `shared`, core-physics or objects-items. nav-alife i
 headers, 65 shared, almost nothing else); script-entities and mp-stub reach into every other shard (script exports and multiplayer
 screens name game objects). ai-monsters-b depends on ai-monsters-a (193 headers): the monster shards go in that order.
 
-Blockers outside xrGame that shard sessions will meet (all recorded in the shared notes `shim-requests.md`): `REFIID` (netserver),
-`NONE` defined by the shim (`game_sv_artefacthunt.h` works around it with an `#undef`), `HKEY_*`/window-system calls (engine-core, engine-input),
+Blockers outside xrGame that shard sessions will meet (recorded in the shared notes `shim-requests.md`): `NONE` defined by the shim (`game_sv_artefacthunt.h` works around it with an `#undef`), `HKEY_*`/window-system calls (engine-core, engine-input),
 `CLONE_MTL_SOUND_DO` pasting `mtl_pair->` (xrCore/xrEngine macro, physics).
 
 ## Not covered
