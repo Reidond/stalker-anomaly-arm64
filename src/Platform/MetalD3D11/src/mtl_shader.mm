@@ -3,6 +3,150 @@
 
 namespace mtl_d3d11
 {
+// ---------------------------------------------------------------------------------------------------------
+// Stage interface of translated MSL: SPIRV-Cross declares the interpolants as members of main0_out / main0_in with
+// [[user(locnN)]], e.g. "    float4 v7 [[user(locn7)]];"
+// ---------------------------------------------------------------------------------------------------------
+namespace
+{
+bool structBlock(const std::string& msl, const char* structName, size_t* open, size_t* close)
+{
+    const std::string head = std::string("struct ") + structName;
+    size_t p = msl.find(head);
+    if (p == std::string::npos)
+        return false;
+    *open = msl.find('{', p);
+    if (*open == std::string::npos)
+        return false;
+    *close = msl.find("};", *open);
+    return *close != std::string::npos;
+}
+
+bool parseMember(const std::string& line, Interpolant* out)
+{
+    const size_t attr = line.find("[[user(locn");
+    if (attr == std::string::npos)
+        return false;
+    out->location = uint32_t(strtoul(line.c_str() + attr + 11, nullptr, 10));
+    // "<type> <name> " before the attribute
+    size_t end = attr;
+    while (end > 0 && isspace(uint8_t(line[end - 1])))
+        --end;
+    size_t nameBegin = end;
+    while (nameBegin > 0 && (isalnum(uint8_t(line[nameBegin - 1])) || line[nameBegin - 1] == '_'))
+        --nameBegin;
+    size_t typeBegin = 0;
+    while (typeBegin < nameBegin && isspace(uint8_t(line[typeBegin])))
+        ++typeBegin;
+    size_t typeEnd = nameBegin;
+    while (typeEnd > typeBegin && isspace(uint8_t(line[typeEnd - 1])))
+        --typeEnd;
+    if (nameBegin == end || typeEnd == typeBegin)
+        return false;
+    out->name = line.substr(nameBegin, end - nameBegin);
+    out->type = line.substr(typeBegin, typeEnd - typeBegin);
+    return true;
+}
+} // namespace
+
+std::vector<Interpolant> ParseInterpolants(const std::string& msl, const char* structName)
+{
+    std::vector<Interpolant> out;
+    size_t open, close;
+    if (!structBlock(msl, structName, &open, &close))
+        return out;
+    size_t pos = open + 1;
+    while (pos < close)
+    {
+        size_t eol = msl.find('\n', pos);
+        if (eol == std::string::npos || eol > close)
+            eol = close;
+        Interpolant v;
+        if (parseMember(msl.substr(pos, eol - pos), &v))
+            out.push_back(std::move(v));
+        pos = eol + 1;
+    }
+    return out;
+}
+
+std::string PatchFragmentInputs(const std::string& msl, const std::vector<Interpolant>& remove)
+{
+    size_t open, close;
+    if (remove.empty() || !structBlock(msl, "main0_in", &open, &close))
+        return msl;
+    auto removed = [&](const Interpolant& v) {
+        for (const Interpolant& r : remove)
+            if (r.location == v.location && r.name == v.name)
+                return true;
+        return false;
+    };
+    // 1. drop the members from the input struct
+    std::string structText = "{\n";
+    size_t kept = 0;
+    size_t pos = open + 1;
+    while (pos < close)
+    {
+        size_t eol = msl.find('\n', pos);
+        if (eol == std::string::npos || eol > close)
+            eol = close;
+        const std::string line = msl.substr(pos, eol - pos);
+        Interpolant v;
+        if (!(parseMember(line, &v) && removed(v)))
+        {
+            if (line.find_first_not_of(" \t\r") != std::string::npos)
+            {
+                structText += line + "\n";
+                ++kept;
+            }
+        }
+        pos = eol + 1;
+    }
+    std::string out = msl.substr(0, open) + structText + msl.substr(close);
+    // 2. find the entry point body and declare the dropped inputs as zero locals
+    size_t fn = out.find("main0(", open);
+    size_t body = fn == std::string::npos ? std::string::npos : out.find('{', fn);
+    if (body == std::string::npos)
+        return msl;
+    if (kept == 0)
+    {
+        // an empty stage_in struct is not allowed as a parameter
+        size_t param = out.find("main0_in in [[stage_in]]", fn);
+        if (param != std::string::npos && param < body)
+        {
+            size_t end = param + std::strlen("main0_in in [[stage_in]]");
+            if (out.compare(end, 2, ", ") == 0)
+                end += 2;
+            out.erase(param, end - param);
+            body = out.find('{', fn);
+        }
+    }
+    std::string locals;
+    for (const Interpolant& r : remove)
+        locals += "\n    " + r.type + " " + r.name + "_unwritten = " + r.type + "(0);";
+    std::string head = out.substr(0, body + 1) + locals;
+    std::string tail = out.substr(body + 1);
+    // 3. in.<member> -> <member>_unwritten
+    for (const Interpolant& r : remove)
+    {
+        const std::string needle = "in." + r.name;
+        size_t at = 0;
+        while ((at = tail.find(needle, at)) != std::string::npos)
+        {
+            const size_t after = at + needle.size();
+            const bool boundaryBefore = at == 0 || !(isalnum(uint8_t(tail[at - 1])) || tail[at - 1] == '_');
+            const bool boundaryAfter = after >= tail.size() || !(isalnum(uint8_t(tail[after])) || tail[after] == '_');
+            if (boundaryBefore && boundaryAfter)
+            {
+                tail.replace(at, needle.size(), r.name + "_unwritten");
+                at += r.name.size() + 10;
+            }
+            else
+                at = after;
+        }
+    }
+    return head + tail;
+}
+
 namespace
 {
 constexpr uint32_t kMagic = 'XMSL';

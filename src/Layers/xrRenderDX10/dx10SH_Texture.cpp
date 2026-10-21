@@ -7,7 +7,12 @@
 #include "../../xrEngine/render.h"
 #endif
 
-#include "../../xrEngine/tntQAVI.h"
+#if defined(XR_PLATFORM_APPLE)
+// AVI playback is VFW (Windows only): .avi textures are not supported, the Theora and sequence paths are
+#	define XR_NO_AVI_TEXTURES
+#else
+#	include "../../xrEngine/tntQAVI.h"
+#endif
 #include "../../xrEngine/xrTheora_Surface.h"
 #include "../xrRender/gifPlayer.h"
 
@@ -131,7 +136,9 @@ ID3DBaseTexture* CTexture::surface_get()
 void CTexture::PostLoad()
 {
 	if (pTheora) bind = fastdelegate::FastDelegate1<u32>(this, &CTexture::apply_theora);
+#ifndef XR_NO_AVI_TEXTURES
 	else if (pAVI) bind = fastdelegate::FastDelegate1<u32>(this, &CTexture::apply_avi);
+#endif
 	else if (!seqDATA.empty()) bind = fastdelegate::FastDelegate1<u32>(this, &CTexture::apply_seq);
     else if (gifPlayer) bind = fastdelegate::FastDelegate1<u32>(this, &CTexture::apply_gif);
 	else bind = fastdelegate::FastDelegate1<u32>(this, &CTexture::apply_normal);
@@ -314,6 +321,9 @@ void CTexture::apply_theora(u32 dwStage)
 
 void CTexture::apply_avi(u32 dwStage)
 {
+#ifdef XR_NO_AVI_TEXTURES
+	Apply(dwStage);
+#else
 	if (pAVI->NeedUpdate())
 	{
 		D3D_RESOURCE_DIMENSION type;
@@ -342,6 +352,7 @@ void CTexture::apply_avi(u32 dwStage)
 	}
 	//CHK_DX(HW.pDevice->SetTexture(dwStage,pSurface));
 	Apply(dwStage);
+#endif
 };
 
 void CTexture::apply_seq(u32 dwStage)
@@ -467,6 +478,7 @@ void CTexture::Load()
 			}
 		}
 	}
+#ifndef XR_NO_AVI_TEXTURES
 	else if (FS.exist(fn, "$game_textures$", *cName, ".avi"))
 	{
 		// AVI
@@ -516,6 +528,7 @@ void CTexture::Load()
 			}
 		}
 	}
+#endif
 	else if (FS.exist(fn, "$game_textures$", *cName, ".seq"))
 	{
 		// Sequence
@@ -637,7 +650,9 @@ void CTexture::Unload()
 	_RELEASE(pSurface);
 	_RELEASE(m_pSRView);
 
+#ifndef XR_NO_AVI_TEXTURES
 	xr_delete(pAVI);
+#endif
 	xr_delete(pTheora);
 
 	bind = fastdelegate::FastDelegate1<u32>(this, &CTexture::apply_load);

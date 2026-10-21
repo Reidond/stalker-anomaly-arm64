@@ -1151,6 +1151,17 @@ HRESULT Device::CreateInputLayout(const D3D11_INPUT_ELEMENT_DESC* elems, UINT n,
 // ---------------------------------------------------------------------------------------------------------
 // Shaders
 // ---------------------------------------------------------------------------------------------------------
+id<MTLLibrary> Device::newLibraryFromMsl(NSString* source, NSError** err)
+{
+    MTLCompileOptions* opts = [MTLCompileOptions new];
+    if (@available(macOS 15.0, iOS 18.0, *))
+        opts.mathMode = desc.fastMath ? MTLMathModeFast : MTLMathModeSafe;
+    else
+        opts.fastMathEnabled = desc.fastMath;
+    opts.languageVersion = MTLLanguageVersion3_0;
+    return [mtl newLibraryWithSource:source options:opts error:err];
+}
+
 template <class Shader, class Iface>
 HRESULT Device::createShader(const void* bytecode, SIZE_T size, ShaderStage expected, Iface** out)
 {
@@ -1170,13 +1181,15 @@ HRESULT Device::createShader(const void* bytecode, SIZE_T size, ShaderStage expe
     if (blob.kind == PayloadKind::MslSource)
     {
         NSString* src = [[NSString alloc] initWithBytes:blob.payload.data() length:blob.payload.size() encoding:NSUTF8StringEncoding];
-        MTLCompileOptions* opts = [MTLCompileOptions new];
-        if (@available(macOS 15.0, iOS 18.0, *))
-            opts.mathMode = desc.fastMath ? MTLMathModeFast : MTLMathModeSafe;
-        else
-            opts.fastMathEnabled = desc.fastMath;
-        opts.languageVersion = MTLLanguageVersion3_0;
-        s->lib = [mtl newLibraryWithSource:src options:opts error:&err];
+        s->lib = newLibraryFromMsl(src, &err);
+        if (blob.reflection.stage == ShaderStage::Vertex || blob.reflection.stage == ShaderStage::Pixel)
+        {
+            const std::string text(reinterpret_cast<const char*>(blob.payload.data()), blob.payload.size());
+            const bool vertex = blob.reflection.stage == ShaderStage::Vertex;
+            s->interpolants = ParseInterpolants(text, vertex ? "main0_out" : "main0_in");
+            if (!vertex)
+                s->msl = text;
+        }
     }
     else
     {

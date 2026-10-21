@@ -1,6 +1,9 @@
 // D3DX11 texture helpers: DDS parsing and creation, mip generation, read-back saving.
 #import "mtl_context.h"
 
+#import <CoreGraphics/CoreGraphics.h>
+#import <ImageIO/ImageIO.h>
+
 #include <algorithm>
 #include <cstdio>
 
@@ -324,15 +327,124 @@ HRESULT D3DX11FilterTexture(ID3D11DeviceContext* pContext, ID3D11Resource* pText
     return S_OK;
 }
 
+namespace
+{
+bool isRGBA8(DXGI_FORMAT f) { return f == DXGI_FORMAT_R8G8B8A8_UNORM || f == DXGI_FORMAT_R8G8B8A8_UNORM_SRGB; }
+bool isBGRA8(DXGI_FORMAT f)
+{
+    return f == DXGI_FORMAT_B8G8R8A8_UNORM || f == DXGI_FORMAT_B8G8R8X8_UNORM || f == DXGI_FORMAT_B8G8R8A8_UNORM_SRGB;
+}
+
+// Reads mip 0 of a 2D texture into tightly packed 8-bit RGBA (BGRA sources are swizzled).
+bool readbackRGBA8(ID3D11DeviceContext* ctx, ID3D11Resource* src, TextureCore* t, std::vector<uint8_t>* out)
+{
+    if (!t || t->dim != D3D11_RESOURCE_DIMENSION_TEXTURE2D || !(isRGBA8(t->dxgi) || isBGRA8(t->dxgi)))
+        return false;
+    ID3D11Device* dev = nullptr;
+    ctx->GetDevice(&dev);
+    D3D11_TEXTURE2D_DESC td{t->width, t->height, 1, 1, t->dxgi, {1, 0}, D3D11_USAGE_STAGING, 0, D3D11_CPU_ACCESS_READ, 0};
+    ID3D11Texture2D* staging = nullptr;
+    HRESULT hr = dev->CreateTexture2D(&td, nullptr, &staging);
+    dev->Release();
+    if (FAILED(hr))
+        return false;
+    ctx->CopySubresourceRegion(staging, 0, 0, 0, 0, src, 0, nullptr);
+    D3D11_MAPPED_SUBRESOURCE m;
+    if (FAILED(ctx->Map(staging, 0, D3D11_MAP_READ, 0, &m)))
+    {
+        staging->Release();
+        return false;
+    }
+    const bool bgra = isBGRA8(t->dxgi);
+    out->resize(size_t(t->width) * t->height * 4);
+    for (uint32_t y = 0; y < t->height; ++y)
+    {
+        const uint8_t* row = static_cast<const uint8_t*>(m.pData) + size_t(y) * m.RowPitch;
+        uint8_t* o = out->data() + size_t(y) * t->width * 4;
+        for (uint32_t x = 0; x < t->width; ++x)
+        {
+            o[x * 4 + 0] = bgra ? row[x * 4 + 2] : row[x * 4 + 0];
+            o[x * 4 + 1] = row[x * 4 + 1];
+            o[x * 4 + 2] = bgra ? row[x * 4 + 0] : row[x * 4 + 2];
+            o[x * 4 + 3] = row[x * 4 + 3];
+        }
+    }
+    ctx->Unmap(staging, 0);
+    staging->Release();
+    return true;
+}
+
+// Area-average (box) filter for shrinking, bilinear for enlarging: the "filtered" part of D3DX11LoadTextureFromTexture.
+std::vector<uint8_t> resizeRGBA8(const std::vector<uint8_t>& src, uint32_t sw, uint32_t sh, uint32_t dw, uint32_t dh)
+{
+    std::vector<uint8_t> dst(size_t(dw) * dh * 4);
+    for (uint32_t y = 0; y < dh; ++y)
+    {
+        const float fy0 = float(y) * sh / dh, fy1 = float(y + 1) * sh / dh;
+        for (uint32_t x = 0; x < dw; ++x)
+        {
+            const float fx0 = float(x) * sw / dw, fx1 = float(x + 1) * sw / dw;
+            float acc[4] = {0, 0, 0, 0}, wsum = 0;
+            if (fx1 - fx0 >= 1.f || fy1 - fy0 >= 1.f)
+            {
+                for (uint32_t sy = uint32_t(fy0); sy < std::min<uint32_t>(sh, uint32_t(std::ceil(fy1))); ++sy)
+                {
+                    const float wy = std::min(fy1, float(sy + 1)) - std::max(fy0, float(sy));
+                    for (uint32_t sx = uint32_t(fx0); sx < std::min<uint32_t>(sw, uint32_t(std::ceil(fx1))); ++sx)
+                    {
+                        const float w = wy * (std::min(fx1, float(sx + 1)) - std::max(fx0, float(sx)));
+                        const uint8_t* p = &src[(size_t(sy) * sw + sx) * 4];
+                        for (int c = 0; c < 4; ++c)
+                            acc[c] += w * p[c];
+                        wsum += w;
+                    }
+                }
+            }
+            else
+            {
+                const float cx = std::clamp((fx0 + fx1) * 0.5f - 0.5f, 0.f, float(sw - 1));
+                const float cy = std::clamp((fy0 + fy1) * 0.5f - 0.5f, 0.f, float(sh - 1));
+                const uint32_t x0 = uint32_t(cx), y0 = uint32_t(cy), x1 = std::min(x0 + 1, sw - 1), y1 = std::min(y0 + 1, sh - 1);
+                const float tx = cx - float(x0), ty = cy - float(y0);
+                for (int c = 0; c < 4; ++c)
+                    acc[c] = (src[(size_t(y0) * sw + x0) * 4 + c] * (1 - tx) + src[(size_t(y0) * sw + x1) * 4 + c] * tx) * (1 - ty) +
+                             (src[(size_t(y1) * sw + x0) * 4 + c] * (1 - tx) + src[(size_t(y1) * sw + x1) * 4 + c] * tx) * ty;
+                wsum = 1;
+            }
+            uint8_t* o = &dst[(size_t(y) * dw + x) * 4];
+            for (int c = 0; c < 4; ++c)
+                o[c] = uint8_t(std::clamp(acc[c] / wsum + 0.5f, 0.f, 255.f));
+        }
+    }
+    return dst;
+}
+} // namespace
+
 HRESULT D3DX11LoadTextureFromTexture(ID3D11DeviceContext* pContext, ID3D11Resource* pSrc, D3DX11_IMAGE_LOAD_INFO*, ID3D11Resource* pDst)
 {
     if (!pContext || !pSrc || !pDst)
         return E_INVALIDARG;
     TextureCore* s = AsTexture(pSrc);
     TextureCore* d = AsTexture(pDst);
-    if (!s || !d || s->width != d->width || s->height != d->height)
-        return E_NOTIMPL; // no filtered resize
-    pContext->CopySubresourceRegion(pDst, 0, 0, 0, 0, pSrc, 0, nullptr);
+    if (!s || !d)
+        return E_INVALIDARG;
+    if (s->width == d->width && s->height == d->height && s->dxgi == d->dxgi)
+    {
+        pContext->CopySubresourceRegion(pDst, 0, 0, 0, 0, pSrc, 0, nullptr);
+        return S_OK;
+    }
+    // different size (savegame and level thumbnails): filter on the CPU, 8-bit colour only
+    std::vector<uint8_t> pixels;
+    if (d->dim != D3D11_RESOURCE_DIMENSION_TEXTURE2D || !(isRGBA8(d->dxgi) || isBGRA8(d->dxgi)) ||
+        !readbackRGBA8(pContext, pSrc, s, &pixels))
+        return E_NOTIMPL;
+    std::vector<uint8_t> scaled = (s->width == d->width && s->height == d->height)
+                                      ? std::move(pixels)
+                                      : resizeRGBA8(pixels, s->width, s->height, d->width, d->height);
+    if (isBGRA8(d->dxgi))
+        for (size_t i = 0; i < scaled.size(); i += 4)
+            std::swap(scaled[i], scaled[i + 2]);
+    pContext->UpdateSubresource(pDst, 0, nullptr, scaled.data(), d->width * 4, 0);
     return S_OK;
 }
 
@@ -353,11 +465,60 @@ HRESULT D3DX11SaveTextureToMemory(ID3D11DeviceContext* pContext, ID3D11Resource*
 {
     if (!pContext || !pSrc || !ppBlob)
         return E_INVALIDARG;
-    if (fmt != D3DX11_IFF_DDS && fmt != D3DX11_IFF_BMP)
-        return E_NOTIMPL;
     TextureCore* t = AsTexture(pSrc);
     if (!t || t->dim != D3D11_RESOURCE_DIMENSION_TEXTURE2D)
         return E_INVALIDARG;
+    if (fmt == D3DX11_IFF_JPG || fmt == D3DX11_IFF_PNG || fmt == D3DX11_IFF_TIFF || fmt == D3DX11_IFF_GIF)
+    {
+        // screenshots: encode with ImageIO
+        std::vector<uint8_t> rgba;
+        if (!readbackRGBA8(pContext, pSrc, t, &rgba))
+            return E_NOTIMPL;
+        const bool opaque = fmt == D3DX11_IFF_JPG || t->dxgi == DXGI_FORMAT_B8G8R8X8_UNORM;
+        if (opaque)
+            for (size_t i = 3; i < rgba.size(); i += 4)
+                rgba[i] = 255;
+        CFDataRef pixels = CFDataCreate(nullptr, rgba.data(), CFIndex(rgba.size()));
+        CGDataProviderRef provider = CGDataProviderCreateWithCFData(pixels);
+        CGColorSpaceRef cs = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
+        CGImageRef image = CGImageCreate(t->width, t->height, 8, 32, size_t(t->width) * 4, cs,
+                                         kCGBitmapByteOrderDefault | (opaque ? kCGImageAlphaNoneSkipLast : kCGImageAlphaLast),
+                                         provider, nullptr, false, kCGRenderingIntentDefault);
+        CFStringRef uti = fmt == D3DX11_IFF_JPG ? CFSTR("public.jpeg") : fmt == D3DX11_IFF_PNG ? CFSTR("public.png")
+                          : fmt == D3DX11_IFF_TIFF ? CFSTR("public.tiff") : CFSTR("com.compuserve.gif");
+        CFMutableDataRef data = CFDataCreateMutable(nullptr, 0);
+        CGImageDestinationRef dest = image ? CGImageDestinationCreateWithData(data, uti, 1, nullptr) : nullptr;
+        bool ok = false;
+        if (dest)
+        {
+            float q = 0.9f;
+            CFNumberRef quality = CFNumberCreate(nullptr, kCFNumberFloatType, &q);
+            const void* keys[] = {kCGImageDestinationLossyCompressionQuality};
+            const void* values[] = {quality};
+            CFDictionaryRef props = CFDictionaryCreate(nullptr, keys, values, 1, &kCFTypeDictionaryKeyCallBacks,
+                                                       &kCFTypeDictionaryValueCallBacks);
+            CGImageDestinationAddImage(dest, image, props);
+            ok = CGImageDestinationFinalize(dest);
+            CFRelease(props);
+            CFRelease(quality);
+            CFRelease(dest);
+        }
+        std::vector<uint8_t> encoded;
+        if (ok)
+            encoded.assign(CFDataGetBytePtr(data), CFDataGetBytePtr(data) + CFDataGetLength(data));
+        CFRelease(data);
+        if (image)
+            CGImageRelease(image);
+        CGColorSpaceRelease(cs);
+        CGDataProviderRelease(provider);
+        CFRelease(pixels);
+        if (!ok)
+            return E_FAIL;
+        *ppBlob = new MemBlob(std::move(encoded));
+        return S_OK;
+    }
+    if (fmt != D3DX11_IFF_DDS && fmt != D3DX11_IFF_BMP)
+        return E_NOTIMPL;
     ID3D11Device* dev = nullptr;
     pContext->GetDevice(&dev);
     D3D11_TEXTURE2D_DESC td{t->width, t->height, 1, 1, t->dxgi, {1, 0}, D3D11_USAGE_STAGING, 0, D3D11_CPU_ACCESS_READ, 0};

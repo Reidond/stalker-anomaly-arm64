@@ -1,5 +1,25 @@
 #include "stdafx.h"
 
+#if defined(XR_PLATFORM_APPLE)
+// The probe only has to tell whether a D3D11-class device can be created; the Metal shim needs no window for that.
+bool TestDX11Present()
+{
+	D3D_FEATURE_LEVEL pFeatureLevels[] = {D3D_FEATURE_LEVEL_11_0};
+	D3D_FEATURE_LEVEL FeatureLevel;
+	ID3D11Device* pd3dDevice = NULL;
+	ID3D11DeviceContext* pContext = NULL;
+
+	HRESULT hr = D3D11CreateDevice(NULL, D3D_DRIVER_TYPE_HARDWARE, NULL, 0, pFeatureLevels, 1, D3D11_SDK_VERSION,
+	                               &pd3dDevice, &FeatureLevel, &pContext);
+	if (FAILED(hr))
+		Msg("* D3D11: device creation failed with hr=0x%08x", hr);
+
+	if (pContext) pContext->Release();
+	if (pd3dDevice) pd3dDevice->Release();
+	return SUCCEEDED(hr);
+}
+#else // XR_PLATFORM_APPLE
+
 LRESULT CALLBACK WndProc2(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
 	return DefWindowProc(hWnd, message, wParam, lParam);
@@ -104,6 +124,8 @@ bool TestDX11Present()
 
 	return SUCCEEDED(hr);
 }
+
+#endif // XR_PLATFORM_APPLE
 
 BOOL xrRender_test_hw()
 {

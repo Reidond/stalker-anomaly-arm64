@@ -134,6 +134,19 @@ bool Deserialize(const void* data, size_t size, ShaderBlob* out);
 bool ParseReflection(const void* data, size_t size, ShaderReflection* out);
 bool IsShaderContainer(const void* data, size_t size);
 
+// A stage-to-stage variable of a translated shader: a member of the MSL struct main0_out (vertex) or main0_in (pixel)
+// declared with [[user(locnN)]].
+struct Interpolant
+{
+    std::string type; // "float4"
+    std::string name; // member name in the MSL
+    uint32_t location = 0;
+};
+std::vector<Interpolant> ParseInterpolants(const std::string& msl, const char* structName);
+// D3D reads zero for a pixel input the vertex shader never writes; Metal refuses such a pipeline. Returns the pixel
+// shader's source without the given inputs, which become zero-initialised locals.
+std::string PatchFragmentInputs(const std::string& msl, const std::vector<Interpolant>& remove);
+
 // Hook for D3DCompile(): called with the HLSL R4 wants compiled; must return a container.
 struct CompileRequest
 {

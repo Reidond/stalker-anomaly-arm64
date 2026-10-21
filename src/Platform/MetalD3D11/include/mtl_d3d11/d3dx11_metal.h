@@ -93,7 +93,8 @@ HRESULT D3DX11LoadTextureFromTexture(ID3D11DeviceContext* pContext, ID3D11Resour
                                      D3DX11_IMAGE_LOAD_INFO* pLoadInfo, ID3D11Resource* pDstTexture);
 
 struct ID3D10Blob;
-// Reads a 2D texture back and encodes it. Supported: D3DX11_IFF_DDS, D3DX11_IFF_BMP. Others return E_NOTIMPL.
+// Reads a 2D texture back and encodes it. Supported: D3DX11_IFF_DDS, D3DX11_IFF_BMP and, for 8-bit RGBA/BGRA
+// textures, JPG, PNG, TIFF and GIF through ImageIO. Others return E_NOTIMPL.
 HRESULT D3DX11SaveTextureToMemory(ID3D11DeviceContext* pContext, ID3D11Resource* pSrcTexture,
                                   D3DX11_IMAGE_FILE_FORMAT DestFormat, ID3D10Blob** ppDestBuf, UINT Flags);
 HRESULT D3DX11SaveTextureToFile(ID3D11DeviceContext* pContext, ID3D11Resource* pSrcTexture,

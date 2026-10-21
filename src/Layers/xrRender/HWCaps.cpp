@@ -4,14 +4,14 @@
 #include "hwcaps.h"
 #include "hw.h"
 
-#ifndef _EDITOR
+#if !defined(_EDITOR) && !defined(XR_PLATFORM_APPLE) // NvAPI and AGS are vendor SDKs for Windows
 #include <nvapi.h>
 //	#include "ATI/atimgpud.h"
 #endif
 
 namespace
 {
-#ifndef _EDITOR
+#if !defined(_EDITOR) && !defined(XR_PLATFORM_APPLE)
 	u32 GetNVGpuNum()
 	{
 		NvLogicalGpuHandle logicalGPUs[NVAPI_MAX_LOGICAL_GPUS];

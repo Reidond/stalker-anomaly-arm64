@@ -410,6 +410,8 @@ public:
     id<MTLFunction> fn = nil;
     id<MTLComputePipelineState> computePso = nil;
     uint64_t id = 0;
+    std::vector<Interpolant> interpolants; // vertex: written, pixel: read (MSL payloads only)
+    std::string msl;                       // pixel shaders: kept to build variants without unwritten inputs
 };
 typedef ShaderObject<ID3D11VertexShader> VertexShader;
 typedef ShaderObject<ID3D11PixelShader> PixelShader;
@@ -542,6 +544,8 @@ public:
 
     template <class Shader, class Iface>
     HRESULT createShader(const void* bytecode, SIZE_T size, ShaderStage expected, Iface** out);
+    // Compiles MSL source with the device's math mode; used for shaders and for pixel-input variants.
+    id<MTLLibrary> newLibraryFromMsl(NSString* source, NSError** err);
 
     // Shared state
     DeviceDesc desc;

@@ -169,6 +169,18 @@ struct D3DXVECTOR2
 	D3DXVECTOR2(const float* p) : x(p[0]), y(p[1]) {}
 	operator float*() { return &x; }
 	operator const float*() const { return &x; }
+#ifndef XR_D3DX9COMPAT_VECTOR_OPS
+#define XR_D3DX9COMPAT_VECTOR_OPS // operators of D3DXVECTOR2 and D3DXVECTOR4, float * D3DXVECTOR2/3/4 after D3DXVECTOR4
+#endif
+	D3DXVECTOR2 operator+(const D3DXVECTOR2& v) const { return D3DXVECTOR2(x + v.x, y + v.y); }
+	D3DXVECTOR2 operator-(const D3DXVECTOR2& v) const { return D3DXVECTOR2(x - v.x, y - v.y); }
+	D3DXVECTOR2 operator*(float f) const { return D3DXVECTOR2(x * f, y * f); }
+	D3DXVECTOR2 operator/(float f) const { return D3DXVECTOR2(x / f, y / f); }
+	D3DXVECTOR2 operator-() const { return D3DXVECTOR2(-x, -y); }
+	D3DXVECTOR2& operator+=(const D3DXVECTOR2& v) { x += v.x; y += v.y; return *this; }
+	D3DXVECTOR2& operator-=(const D3DXVECTOR2& v) { x -= v.x; y -= v.y; return *this; }
+	D3DXVECTOR2& operator*=(float f) { x *= f; y *= f; return *this; }
+	D3DXVECTOR2& operator/=(float f) { x /= f; y /= f; return *this; }
 };
 
 struct D3DXVECTOR3 : public D3DVECTOR
@@ -196,7 +208,20 @@ struct D3DXVECTOR4
 	D3DXVECTOR4(const float* p) : x(p[0]), y(p[1]), z(p[2]), w(p[3]) {}
 	operator float*() { return &x; }
 	operator const float*() const { return &x; }
+	D3DXVECTOR4 operator+(const D3DXVECTOR4& v) const { return D3DXVECTOR4(x + v.x, y + v.y, z + v.z, w + v.w); }
+	D3DXVECTOR4 operator-(const D3DXVECTOR4& v) const { return D3DXVECTOR4(x - v.x, y - v.y, z - v.z, w - v.w); }
+	D3DXVECTOR4 operator*(float f) const { return D3DXVECTOR4(x * f, y * f, z * f, w * f); }
+	D3DXVECTOR4 operator/(float f) const { return D3DXVECTOR4(x / f, y / f, z / f, w / f); }
+	D3DXVECTOR4 operator-() const { return D3DXVECTOR4(-x, -y, -z, -w); }
+	D3DXVECTOR4& operator+=(const D3DXVECTOR4& v) { x += v.x; y += v.y; z += v.z; w += v.w; return *this; }
+	D3DXVECTOR4& operator-=(const D3DXVECTOR4& v) { x -= v.x; y -= v.y; z -= v.z; w -= v.w; return *this; }
+	D3DXVECTOR4& operator*=(float f) { x *= f; y *= f; z *= f; w *= f; return *this; }
+	D3DXVECTOR4& operator/=(float f) { x /= f; y /= f; z /= f; w /= f; return *this; }
 };
+
+inline D3DXVECTOR2 operator*(float f, const D3DXVECTOR2& v) { return v * f; }
+inline D3DXVECTOR3 operator*(float f, const D3DXVECTOR3& v) { return v * f; }
+inline D3DXVECTOR4 operator*(float f, const D3DXVECTOR4& v) { return v * f; }
 
 struct D3DXPLANE
 {

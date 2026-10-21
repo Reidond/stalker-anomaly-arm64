@@ -21,7 +21,11 @@ void CBlender_DESC::Setup(LPCSTR N)
 	xr_strcpy(cComputer, Core.CompName); // Computer
 #ifndef _EDITOR
 	_tzset();
+#if defined(XR_PLATFORM_APPLE)
+	cTime = u32(time(nullptr)); // Time
+#else
 	_time32((__time32_t*)&cTime); // Time
+#endif
 #else
 	_tzset(); time  ((long*)&cTime);			// Time
 #endif

@@ -528,6 +528,14 @@ void dxRenderDeviceRender::OnAssetsChanged()
 	Resources->m_textures_description.Load();
 }
 
+#if defined(XR_PLATFORM_APPLE)
+// One display on iPad, and the Mac shell lets the window system pick it: there is no output to switch.
+bool dxRenderDeviceRender::SwitchOutputMonitor(HMONITOR, HWND, u32, u32&, u32&)
+{
+    Msg("! vid_monitor: switching the output monitor is not supported on this platform");
+    return false;
+}
+#else
 extern ENGINE_API void SetStartupMonitor(HMONITOR h);
 extern XRAPI_API xr_token* vid_mode_token;
 #if defined(USE_DX11) || defined(USE_DX10)
@@ -667,3 +675,4 @@ bool dxRenderDeviceRender::SwitchOutputMonitor(HMONITOR hTargetMon, HWND hWnd,
     return false;
 #endif
 }
+#endif // XR_PLATFORM_APPLE

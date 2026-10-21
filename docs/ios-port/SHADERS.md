@@ -254,7 +254,8 @@ Stock shader limits for sizing: largest cbuffer 3952 bytes, at most 10 inputs / 
 ### Things the shim must still handle
 
 1. **Pixel inputs the vertex shader never writes.** D3D reads zero; Metal refuses to build the
-   pipeline. `checkStageInterface()` finds them. The stock set has 9 pairs (22 combinations):
+   pipeline. `checkStageInterface()` finds them. The shim handles it now: `Context::fragmentFunctionFor` rebuilds the pixel
+   function with the missing inputs as zero locals (see METAL-SHIM.md). The stock set has 9 pairs (22 combinations):
    `model_def_lplanes` to `model_scope_lense` (TEXCOORD1) and `models_lfo_light_dot_weapons`
    (TEXCOORD1, TEXCOORD2), `model_distort` / `model_distort_inv` to `particle_distort` (TEXCOORD1),
    and `water_{regular,ryaska,studen,underground}` VS to PS (TEXCOORD7). Widths always match
