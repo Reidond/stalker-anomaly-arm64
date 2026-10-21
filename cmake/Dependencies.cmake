@@ -33,6 +33,13 @@ set(ALSOFT_EMBED_HRTF_DATA ON CACHE BOOL "" FORCE)
 add_subdirectory("${ANOMALY_EXTERNAL_DIR}/openal-soft" "${CMAKE_BINARY_DIR}/external/openal-soft" EXCLUDE_FROM_ALL SYSTEM)
 # 1.25.2 builds with -Werror=function-effects, which newer Apple clang trips in the CoreAudio backend.
 target_compile_options(OpenAL PRIVATE -Wno-error=function-effects -w)
+if(ANOMALY_IOS)
+    # AvailabilityMacros.h sets MAC_OS_X_VERSION_MIN_REQUIRED to 10.5 on iOS, so OpenAL Soft takes its
+    # "old macOS" fallbacks. One of them, a posix_memalign-based aligned operator new, rejects 4-byte
+    # alignment and makes alGenEffects fail, which breaks EAX reverb. The header only sets the macro
+    # when it is unset.
+    target_compile_definitions(OpenAL PRIVATE MAC_OS_X_VERSION_MIN_REQUIRED=140000)
+endif()
 
 # Ogg / Vorbis / Theora: sound (xrSound) and video (xrEngine/xrTheora_*) decoding.
 set(INSTALL_DOCS OFF CACHE BOOL "" FORCE)
