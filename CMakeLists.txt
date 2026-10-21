@@ -32,3 +32,6 @@ add_subdirectory(tools/xrcore_smoke)
 # App shell (paths, game-data validation, lifecycle, launcher) and the lab app that exercises it.
 add_subdirectory(src/Platform/Apple)
 add_subdirectory(tools/shell_lab)
+
+add_subdirectory(src/Platform/MetalD3D11)
+add_subdirectory(tools/metal_d3d11_test)
