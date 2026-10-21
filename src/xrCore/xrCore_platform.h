@@ -2,6 +2,10 @@
 #define XRCORE_PLATFORM_H
 #pragma once
 
+#include "Common/Platform.h"
+
+#ifdef XR_PLATFORM_WINDOWS
+
 #define VC_EXTRALEAN // Exclude rarely-used stuff from Windows headers
 #define WIN32_LEAN_AND_MEAN // Exclude rarely-used stuff from Windows headers
 #ifndef STRICT
@@ -52,5 +56,7 @@
 #include <windowsx.h>
 #endif
 #pragma warning(pop)
+
+#endif // XR_PLATFORM_WINDOWS
 
 #endif

@@ -99,7 +99,11 @@ using ThreadID = HANDLE;
 class XRCORE_API xrSRWLock
 {
 private:
+#ifdef XR_PLATFORM_APPLE
+    std::shared_mutex smutex;
+#else
     SRWLOCK smutex;
+#endif
 
 public:
     xrSRWLock();

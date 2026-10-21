@@ -16,3 +16,4 @@ include(AnomalyPlatform)
 include(Dependencies)
 
 add_subdirectory(tools/platform_probe)
+add_subdirectory(src/xrCore)

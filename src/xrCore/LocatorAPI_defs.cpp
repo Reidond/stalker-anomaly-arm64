@@ -2,12 +2,14 @@
 #pragma hdrstop
 
 #include "LocatorAPI_defs.h"
+#ifndef XR_PLATFORM_APPLE
 #pragma warning(disable:4995)
 #include <io.h>
 #include <direct.h>
 #include <fcntl.h>
 #include <sys\stat.h>
 #pragma warning(default:4995)
+#endif
 
 //////////////////////////////////////////////////////////////////////
 // FS_File

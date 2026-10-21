@@ -2,6 +2,8 @@
 #define xrCoreH
 #pragma once
 
+#include "xrCore_platform.h"
+
 #ifndef DEBUG
 # define MASTER_GOLD
 #endif // DEBUG
@@ -28,6 +30,15 @@
 
 #pragma warning(disable:4996)
 
+#ifdef XR_PLATFORM_APPLE
+// clang: exceptions stay enabled (libc++ throws bad_alloc etc.); XRAY_EXCEPTIONS only selects the engine's own paths.
+# if (defined(_DEBUG) || defined(MIXED) || defined(DEBUG)) && !defined(FORCE_NO_EXCEPTIONS)
+#  define XRAY_EXCEPTIONS 1
+# else
+#  define XRAY_EXCEPTIONS 0
+#  define LUABIND_NO_EXCEPTIONS
+# endif
+#else
 #if (defined(_DEBUG) || defined(MIXED) || defined(DEBUG)) && !defined(FORCE_NO_EXCEPTIONS)
 // "debug" or "mixed"
 #if !defined(_CPPUNWIND)
@@ -50,6 +61,7 @@
 // multithreading disabled
 #error Please enable multi-threaded library...
 #endif
+#endif // XR_PLATFORM_APPLE
 
 # include "xrCore_platform.h"
 
@@ -120,7 +132,7 @@
 
 #define UNUSED(...) (void)(__VA_ARGS__)
 
-#ifndef DEBUG
+#if !defined(DEBUG) && !defined(XR_PLATFORM_APPLE)
 #pragma inline_depth ( 254 )
 #pragma inline_recursion( on )
 #ifndef __BORLANDC__
@@ -160,7 +172,9 @@
 #define _MCW_EM MCW_EM
 #else
 #define ALIGN(a) __declspec(align(a))
+#ifndef XR_PLATFORM_APPLE
 #include <sys\utime.h>
+#endif
 #define MODULE_NAME "xrCore.dll"
 #endif
 
@@ -194,8 +208,13 @@
 #include <map>
 
 #ifndef _EDITOR
-# include <hash_map>
-# include <hash_set>
+# ifndef XR_PLATFORM_APPLE
+#  include <hash_map>
+#  include <hash_set>
+# else
+#  include <unordered_map>
+#  include <unordered_set>
+# endif
 #endif
 
 #include <string>

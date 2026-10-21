@@ -85,8 +85,16 @@ std::string timeInHMSMMM()
 }
 
 BOOL logTimestamps = FALSE;
+#ifdef XR_PLATFORM_APPLE
+enum Console_mark : int;
+#else
 enum Console_mark;
+#endif
 extern bool is_console_mark(Console_mark type);
+#ifdef XR_PLATFORM_APPLE
+// Default for programs that link xrCore without xrEngine (tools, tests); the real one in XR_IOConsole.cpp overrides it.
+__attribute__((weak)) bool is_console_mark(Console_mark) { return false; }
+#endif
 
 void AddOne(const char* split)
 {

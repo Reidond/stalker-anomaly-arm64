@@ -3,10 +3,12 @@
 #pragma once
 
 #include "lzhuf.h"
+#ifndef XR_PLATFORM_APPLE
 #include <io.h>
 #include <fcntl.h>
 #include <sys\stat.h>
 #include <share.h>
+#endif
 
 void* FileDownload(LPCSTR fn, u32* pdwSize = NULL);
 void FileCompress(const char* fn, const char* sign, void* data, u32 size);
@@ -24,14 +26,18 @@ public:
 		VerifyPath(fName.c_str());
 		if (exclusive)
 		{
+#ifdef XR_PLATFORM_APPLE
+			int handle = _open(fName.c_str(), _O_WRONLY | _O_TRUNC | _O_CREAT | _O_BINARY, 0644);
+#else
 			int handle = _sopen(fName.c_str(),_O_WRONLY | _O_TRUNC | _O_CREAT | _O_BINARY,SH_DENYWR);
+#endif
             if (handle==-1)
                 Msg("!Can't create file: '%s'. Error: '%s'.", fName.c_str(), _sys_errlist[errno]);
-			hf = _fdopen(handle, "wb");
+			hf = fdopen(handle, "wb");
 		}
 		else
 		{
-			hf = fopen(fName.c_str(), "wb");
+			hf = xr_fopen(fName.c_str(), "wb");
 			if (hf == 0)
 				Msg("!Can't write file: '%s'. Error: '%s'.", fName.c_str(), _sys_errlist[errno]);
 		}
@@ -92,8 +98,19 @@ public:
 class CPackReader : public IReader
 {
 	void* base_address;
+#ifdef XR_PLATFORM_APPLE
+	size_t map_size; // length of the mmap window starting at base_address
+#endif
 public:
+#ifdef XR_PLATFORM_APPLE
+	CPackReader(void* _base, size_t _map_size, void* _data, int _size) : IReader(_data, _size)
+	{
+		base_address = _base;
+		map_size = _map_size;
+	}
+#else
 	CPackReader(void* _base, void* _data, int _size) : IReader(_data, _size) { base_address = _base; }
+#endif
 	virtual ~CPackReader();
 };
 

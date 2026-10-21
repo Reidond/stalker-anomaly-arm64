@@ -2,7 +2,9 @@
 #pragma hdrstop
 
 #include "cpuid.h"
+#ifndef XR_PLATFORM_APPLE
 #include <intrin.h>
+#endif
 
 #include <array>
 #include <bitset>
@@ -21,7 +23,47 @@
 *   Returns int with capablity bit set.
 *
 ****************************************************/
-#ifdef _EDITOR
+#ifdef XR_PLATFORM_APPLE
+#include <sys/sysctl.h>
+
+static bool sysctl_string(const char* name, char* out, size_t size)
+{
+	size_t len = size;
+	if (sysctlbyname(name, out, &len, nullptr, 0) != 0) return false;
+	out[size - 1] = 0;
+	return true;
+}
+
+static unsigned sysctl_uint(const char* name, unsigned fallback)
+{
+	int value = 0;
+	size_t len = sizeof(value);
+	if (sysctlbyname(name, &value, &len, nullptr, 0) != 0 || value <= 0) return fallback;
+	return (unsigned)value;
+}
+
+int _cpuid(_processor_info* pinfo)
+{
+	memset(pinfo, 0, sizeof(_processor_info));
+
+	strncpy(pinfo->v_name, "Apple", sizeof(pinfo->v_name) - 1);
+	// macOS: "Apple M3"; iOS does not expose the brand string, hw.machine ("iPad15,3") identifies the device.
+	if (!sysctl_string("machdep.cpu.brand_string", pinfo->model_name, sizeof(pinfo->model_name)))
+		if (!sysctl_string("hw.machine", pinfo->model_name, sizeof(pinfo->model_name)))
+			strncpy(pinfo->model_name, "Apple Silicon", sizeof(pinfo->model_name) - 1);
+
+	// arm64 has no cpuid. The x86 feature bits gate engine code paths that are written with SSE intrinsics; those are
+	// built on sse2neon here, so report the whole SSE family as available (and SSE4.2 stands for the CRC32 extension).
+	pinfo->feature = _CPU_FEATURE_SSE | _CPU_FEATURE_SSE2 | _CPU_FEATURE_SSE3 | _CPU_FEATURE_SSSE3 |
+		_CPU_FEATURE_SSE4_1 | _CPU_FEATURE_SSE4_2;
+
+	pinfo->n_cores = sysctl_uint("hw.physicalcpu", 1);
+	pinfo->n_threads = sysctl_uint("hw.logicalcpu", pinfo->n_cores);
+	// no affinity control on Apple platforms; the mask only says how many CPUs there are
+	pinfo->affinity_mask = (pinfo->n_threads >= 32) ? 0xffffffffu : ((1u << pinfo->n_threads) - 1u);
+	return pinfo->feature;
+}
+#elif defined(_EDITOR)
 int _cpuid ( _processor_info *pinfo )
 {
     ZeroMemory(pinfo, sizeof(_processor_info));

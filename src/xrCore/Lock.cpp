@@ -2,6 +2,16 @@
 #include "Lock.hpp"
 #include <mutex>
 
+#ifdef XR_PLATFORM_APPLE
+struct LockImpl
+{
+	std::recursive_mutex mutex;
+
+	ICF void Lock() { mutex.lock(); }
+	ICF void Unlock() { mutex.unlock(); }
+	ICF bool TryLock() { return mutex.try_lock(); }
+};
+#else
 struct LockImpl
 {
 	CRITICAL_SECTION cs;
@@ -13,6 +23,7 @@ struct LockImpl
 	ICF void Unlock() { LeaveCriticalSection(&cs); }
 	ICF bool TryLock() { return !!TryEnterCriticalSection(&cs); }
 };
+#endif
 
 #ifdef CONFIG_PROFILE_LOCKS
 static add_profile_portion_callback add_profile_portion = 0;

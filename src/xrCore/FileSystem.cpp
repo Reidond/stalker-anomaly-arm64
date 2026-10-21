@@ -5,9 +5,11 @@
 #include "stdafx.h"
 #pragma hdrstop
 
+#ifndef XR_PLATFORM_APPLE
 #include "cderr.h"
 #include "commdlg.h"
 #include "vfw.h"
+#endif
 
 EFS_Utils* xr_EFS = NULL;
 //----------------------------------------------------
@@ -117,6 +119,12 @@ void MakeFilter(string1024& dest, LPCSTR info, LPCSTR ext)
 // start_flt_ext = -1-all 0..n-indices
 //------------------------------------------------------------------------------
 
+#ifdef XR_PLATFORM_APPLE
+// The open/save dialogs are editor-only features built on comdlg32; the game never calls them. A platform file picker
+// can be added behind these two functions if tools ever need one.
+bool EFS_Utils::GetOpenNameInternal(LPCSTR, LPSTR, int, bool, LPCSTR, int) { return false; }
+bool EFS_Utils::GetSaveName(LPCSTR, string_path&, LPCSTR, int) { return false; }
+#else // XR_PLATFORM_APPLE
 // Vista uses this hook for old-style save dialog
 UINT_PTR CALLBACK OFNHookProcOldStyle(HWND, UINT, WPARAM, LPARAM)
 {
@@ -284,6 +292,7 @@ bool EFS_Utils::GetSaveName(LPCSTR initial, string_path& buffer, LPCSTR offset, 
 	strlwr(buffer);
 	return bRes;
 }
+#endif // XR_PLATFORM_APPLE
 
 //----------------------------------------------------
 LPCSTR EFS_Utils::AppendFolderToName(LPSTR tex_name, u32 const tex_name_size, int depth, BOOL full_name)

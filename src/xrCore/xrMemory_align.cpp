@@ -2,9 +2,20 @@
 #pragma hdrstop
 
 #include <errno.h>
+#ifndef XR_PLATFORM_APPLE
 #include <malloc.h>
+#endif
 
 #include "xrMemory_align.h"
+
+#ifdef XR_PLATFORM_APPLE
+size_t xr_apple_malloc_size(const void* p);
+# define XR_MSIZE(p) xr_apple_malloc_size(p)
+# define XR_EXPAND(p, n) ((void*)0) /* no in-place growth: callers fall back to malloc + copy */
+#else
+# define XR_MSIZE(p) _msize(p)
+# define XR_EXPAND(p, n) _expand(p, n)
+#endif
 
 /***
 *align.c - Aligned allocation, reallocation or freeing of memory in the heap
@@ -207,7 +218,7 @@ void* __stdcall xr_aligned_offset_realloc(void* memblock, size_t size, size_t al
 	diff = (uintptr_t)memblock - stptr;
 	/* Mov size is min of the size of data available and sizw requested.
 	*/
-	movsz = _msize((void*)stptr) - ((uintptr_t)memblock - stptr);
+	movsz = XR_MSIZE((void*)stptr) - ((uintptr_t)memblock - stptr);
 	movsz = movsz > size ? size : movsz;
 	reqsz = PTR_SZ + gap + align + size;
 
@@ -228,7 +239,7 @@ void* __stdcall xr_aligned_offset_realloc(void* memblock, size_t size, size_t al
 	}
 	else
 	{
-		if ((ptr = (uintptr_t)_expand((void*)stptr, reqsz)) == (uintptr_t)NULL)
+		if ((ptr = (uintptr_t)XR_EXPAND((void*)stptr, reqsz)) == (uintptr_t)NULL)
 		{
 			if ((ptr = (uintptr_t)malloc(reqsz)) == (uintptr_t)NULL)
 				return NULL;
@@ -301,5 +312,5 @@ u32 __stdcall xr_aligned_msize(void* memblock)
 
 	/* ptr is the pointer to the start of memory block*/
 	ptr = *((uintptr_t*)ptr);
-	return (u32)_msize((void*)ptr);
+	return (u32)XR_MSIZE((void*)ptr);
 }

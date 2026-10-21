@@ -58,6 +58,14 @@ namespace xray
 				}
 			} // namespace strconcat_error
 
+#ifdef XR_PLATFORM_APPLE
+			// No SEH: a stack overflow here would be a SIGSEGV on the guard page, which the crash handler reports.
+			void check_stack_overflow(u32 stack_increment)
+			{
+				void* p = _alloca(stack_increment);
+				(void)p;
+			}
+#else // XR_PLATFORM_APPLE
 			int stack_overflow_exception_filter(int exception_code)
 			{
 				if (exception_code == EXCEPTION_STACK_OVERFLOW)
@@ -84,6 +92,7 @@ namespace xray
 					_resetstkoflw();
 				}
 			}
+#endif // XR_PLATFORM_APPLE
 
 			void string_tupples::error_process() const
 			{

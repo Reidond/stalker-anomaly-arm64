@@ -156,6 +156,14 @@ private:
 
 public:
 	typedef allocator allocator_type;
+	typedef typename inherited::size_type size_type;
+	typedef typename inherited::reference reference;
+	typedef typename inherited::const_reference const_reference;
+	using inherited::begin;
+	using inherited::end;
+	using inherited::capacity;
+	using inherited::reserve;
+	using inherited::erase;
 
 public:
 	xr_vector() : inherited()
@@ -222,7 +230,7 @@ private:
 
 public:
 	u32 size() const { return (u32)inherited::size(); }
-	void clear() { erase(begin(), end()); }
+	void clear() { inherited::erase(inherited::begin(), inherited::end()); }
 };
 
 template <typename allocator>
@@ -233,18 +241,21 @@ private:
 
 public:
 	u32 size() const { return (u32)inherited::size(); }
-	void clear() { erase(begin(), end()); }
+	void clear() { inherited::erase(inherited::begin(), inherited::end()); }
 };
 
 // deque
 template <typename T, typename allocator = xalloc<T>>
 class xr_deque : public std::deque<T, allocator>
 {
+private:
+	typedef std::deque<T, allocator> inherited;
+
 public:
-	typedef typename allocator allocator_type;
+	typedef allocator allocator_type;
 	typedef typename allocator_type::value_type value_type;
 	typedef typename allocator_type::size_type size_type;
-	u32 size() const { return (u32)__super::size(); }
+	u32 size() const { return (u32)inherited::size(); }
 };
 
 // stack
@@ -326,35 +337,35 @@ template <typename T, typename allocator = xalloc<T>>
 class xr_list : public std::list<T, allocator>
 {
 public:
-	u32 size() const { return (u32)__super::size(); }
+	u32 size() const { return (u32)std::list<T, allocator>::size(); }
 };
 
 template <typename K, class P = std::less<K>, typename allocator = xalloc<K>>
 class xr_set : public std::set<K, P, allocator>
 {
 public:
-	u32 size() const { return (u32)__super::size(); }
+	u32 size() const { return (u32)std::set<K, P, allocator>::size(); }
 };
 
 template <typename K, class P = std::less<K>, typename allocator = xalloc<K>>
 class xr_multiset : public std::multiset<K, P, allocator>
 {
 public:
-	u32 size() const { return (u32)__super::size(); }
+	u32 size() const { return (u32)std::multiset<K, P, allocator>::size(); }
 };
 
 template <typename K, class V, class P = std::less<K>, typename allocator = xalloc<std::pair<const K, V>>>
 class xr_map : public std::map<K, V, P, allocator>
 {
 public:
-	u32 size() const { return (u32)__super::size(); }
+	u32 size() const { return (u32)std::map<K, V, P, allocator>::size(); }
 };
 
 template <typename K, class V, class P = std::less<K>, typename allocator = xalloc<std::pair<const K, V>>>
 class xr_multimap : public std::multimap<K, V, P, allocator>
 {
 public:
-	u32 size() const { return (u32)__super::size(); }
+	u32 size() const { return (u32)std::multimap<K, V, P, allocator>::size(); }
 };
 
 #ifdef STLPORT
@@ -363,6 +374,15 @@ template <typename V, class _HashFcn = std::hash<V>, class _EqualKey = std::equa
 
 template <typename K, class V, class _HashFcn = std::hash<K>, class _EqualKey = std::equal_to<K>, typename allocator = xalloc<std::pair<K, V> > > class xr_hash_map : public std::hash_map < K, V, _HashFcn, _EqualKey, allocator > { public: u32 size() const { return (u32)__super::size(); } };
 template <typename K, class V, class _HashFcn = std::hash<K>, class _EqualKey = std::equal_to<K>, typename allocator = xalloc<std::pair<K, V> > > class xr_hash_multimap : public std::hash_multimap < K, V, _HashFcn, _EqualKey, allocator > { public: u32 size() const { return (u32)__super::size(); } };
+#elif defined(XR_PLATFORM_APPLE)
+// stdext::hash_map is MSVC-only; the ordered-by-hash semantics are not relied upon.
+template <typename K, class V, class _Hash = std::hash<K>, class _Eq = std::equal_to<K>,
+	typename allocator = xalloc<std::pair<const K, V>>>
+class xr_hash_map : public std::unordered_map<K, V, _Hash, _Eq, allocator>
+{
+public:
+	u32 size() const { return (u32)std::unordered_map<K, V, _Hash, _Eq, allocator>::size(); }
+};
 #else
 template <typename K, class V, class _Traits = stdext::hash_compare<K, std::less<K>>, typename allocator = xalloc<std::
 	          pair<const K, V>>>

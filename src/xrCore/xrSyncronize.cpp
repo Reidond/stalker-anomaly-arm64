@@ -39,14 +39,22 @@ xrCriticalSection::xrCriticalSection(LPCSTR id) : m_id(id)
 xrCriticalSection::xrCriticalSection()
 #endif // PROFILE_CRITICAL_SECTIONS
 {
+#ifdef XR_PLATFORM_APPLE
+	pmutex = new std::recursive_mutex(); // CRITICAL_SECTION is recursive
+#else
 	pmutex = xr_alloc<CRITICAL_SECTION>(1);
 	InitializeCriticalSection((CRITICAL_SECTION*)pmutex);
+#endif
 }
 
 xrCriticalSection::~xrCriticalSection()
 {
+#ifdef XR_PLATFORM_APPLE
+	delete static_cast<std::recursive_mutex*>(pmutex);
+#else
 	DeleteCriticalSection((CRITICAL_SECTION*)pmutex);
 	xr_free(pmutex);
+#endif
 }
 
 #ifdef DEBUG
@@ -63,17 +71,29 @@ void xrCriticalSection::Enter()
 # endif // DEBUG
     profiler temp(m_id);
 #endif // PROFILE_CRITICAL_SECTIONS
+#ifdef XR_PLATFORM_APPLE
+	static_cast<std::recursive_mutex*>(pmutex)->lock();
+#else
 	EnterCriticalSection((CRITICAL_SECTION*)pmutex);
+#endif
 }
 
 void xrCriticalSection::Leave()
 {
+#ifdef XR_PLATFORM_APPLE
+	static_cast<std::recursive_mutex*>(pmutex)->unlock();
+#else
 	LeaveCriticalSection((CRITICAL_SECTION*)pmutex);
+#endif
 }
 
 BOOL xrCriticalSection::TryEnter()
 {
+#ifdef XR_PLATFORM_APPLE
+	return static_cast<std::recursive_mutex*>(pmutex)->try_lock() ? TRUE : FALSE;
+#else
 	return TryEnterCriticalSection((CRITICAL_SECTION*)pmutex);
+#endif
 }
 
 xrCriticalSection::raii::raii(xrCriticalSection* critical_section)
@@ -88,6 +108,15 @@ xrCriticalSection::raii::~raii()
 	critical_section->Leave();
 }
 
+#ifdef XR_PLATFORM_APPLE
+xrSRWLock::xrSRWLock() {}
+void xrSRWLock::AcquireExclusive() { smutex.lock(); }
+void xrSRWLock::ReleaseExclusive() { smutex.unlock(); }
+void xrSRWLock::AcquireShared() { smutex.lock_shared(); }
+void xrSRWLock::ReleaseShared() { smutex.unlock_shared(); }
+BOOL xrSRWLock::TryAcquireExclusive() { return smutex.try_lock() ? TRUE : FALSE; }
+BOOL xrSRWLock::TryAcquireShared() { return smutex.try_lock_shared() ? TRUE : FALSE; }
+#else
 xrSRWLock::xrSRWLock()
 {
     InitializeSRWLock(&smutex);
@@ -126,6 +155,7 @@ BOOL xrSRWLock::TryAcquireShared()
 {
     return TryAcquireSRWLockShared(&smutex);
 }
+#endif // XR_PLATFORM_APPLE
 
 
 xrSRWLockGuard::xrSRWLockGuard(xrSRWLock* lock, bool shared)

@@ -27,7 +27,11 @@ IC const HANDLE& CStreamReader::file_mapping_handle() const
 
 IC void CStreamReader::unmap()
 {
+#ifdef XR_PLATFORM_APPLE
+	munmap(m_current_map_view_of_file, m_current_map_length);
+#else
 	UnmapViewOfFile(m_current_map_view_of_file);
+#endif
 }
 
 IC void CStreamReader::remap(const u32& new_offset)

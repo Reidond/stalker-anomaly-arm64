@@ -1,6 +1,9 @@
 #include "stdafx.h"
 
 #include <array>
+#ifdef XR_ARCH_ARM64
+#include <arm_acle.h>
+#endif
 
 namespace
 {
@@ -35,6 +38,43 @@ namespace
 
     static constexpr auto crc32_table = generate_crc32_lookup_table();
 
+#ifdef XR_ARCH_ARM64
+    __attribute__((target("crc")))
+    u32 crc32_sse42(const void* P, u32 len, u32 starting_crc = ~0u) noexcept
+    {
+        // same CRC32C (Castagnoli) update, without the final inversion, as _mm_crc32_* on x64
+        const u8* buffer = static_cast<const u8*>(P);
+        u32 crc = starting_crc;
+
+        while (len >= 8)
+        {
+            u64 v;
+            memcpy(&v, buffer, 8);
+            crc = __crc32cd(crc, v);
+            buffer += 8;
+            len -= 8;
+        }
+        if (len >= 4)
+        {
+            u32 v;
+            memcpy(&v, buffer, 4);
+            crc = __crc32cw(crc, v);
+            buffer += 4;
+            len -= 4;
+        }
+        if (len >= 2)
+        {
+            u16 v;
+            memcpy(&v, buffer, 2);
+            crc = __crc32ch(crc, v);
+            buffer += 2;
+            len -= 2;
+        }
+        if (len)
+            crc = __crc32cb(crc, *buffer);
+        return crc;
+    }
+#else
     u32 crc32_sse42(const void* P, u32 len, u32 starting_crc = ~0u) noexcept
     {
         const u8* buffer = static_cast<const u8*>(P);
@@ -68,8 +108,10 @@ namespace
 
         return crc;
     }
+#endif
 }
 
+// arm64 always has the CRC32 extension (ARMv8.1+), and CPU::ID reports SSE4.2 for it.
 u32 crc32(const void* P, u32 len)
 {
     if (CPU::ID.feature & _CPU_FEATURE_SSE4_2)

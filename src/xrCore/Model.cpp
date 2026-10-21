@@ -672,6 +672,7 @@ static inline void UpdateModel(PPM_CONTEXT* MinContext)
 
 	UINT ns1, ns, cf, sf, s0, FFreq = FoundState->Freq;
 	BYTE Flag, sym, FSymbol = FoundState->Symbol;
+	PPM_CONTEXT* Successor; // declared up here: clang rejects goto RESTART_MODEL over its initialization
 
 
 	if (FFreq < MAX_FREQ / 4 && pc)
@@ -714,7 +715,7 @@ static inline void UpdateModel(PPM_CONTEXT* MinContext)
 
 	*pText++ = FSymbol;
 
-	PPM_CONTEXT* Successor = (PPM_CONTEXT*)pText;
+	Successor = (PPM_CONTEXT*)pText;
 
 	if (pText >= UnitsStart)
 		goto RESTART_MODEL;

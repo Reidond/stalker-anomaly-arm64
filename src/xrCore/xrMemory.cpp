@@ -4,7 +4,9 @@
 #include "xrsharedmem.h"
 #include "xrMemory_pure.h"
 
+#ifndef XR_PLATFORM_APPLE
 #include <malloc.h>
+#endif
 
 xrMemory Memory;
 BOOL mem_initialized = FALSE;

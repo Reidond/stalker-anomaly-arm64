@@ -9,8 +9,13 @@
 #define _PPMDTYPE_H_
 
 #include <stdio.h>
+#include "../Common/Platform.h"
 
-#define _WIN32_ENVIRONMENT_
+#ifdef XR_PLATFORM_APPLE
+# define _POSIX_ENVIRONMENT_ // BOOL/BYTE/WORD/DWORD/UINT come from Common/Platform.h
+#else
+# define _WIN32_ENVIRONMENT_
+#endif
 //#define _DOS32_ENVIRONMENT_
 //#define _POSIX_ENVIRONMENT_
 //#define _UNKNOWN_ENVIRONMENT_
@@ -20,7 +25,9 @@
 
 #if defined(_WIN32_ENVIRONMENT_)
 #include <windows.h>
-#else /* _DOS32_ENVIRONMENT_ || _POSIX_ENVIRONMENT_ || _UNKNOWN_ENVIRONMENT_ */
+#elif defined(_POSIX_ENVIRONMENT_)
+/* the Win32 compatibility types are already declared */
+#else /* _DOS32_ENVIRONMENT_ || _UNKNOWN_ENVIRONMENT_ */
 typedef int   BOOL;
 #define FALSE 0
 #define TRUE  1
