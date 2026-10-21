@@ -35,3 +35,5 @@ add_subdirectory(tools/shell_lab)
 
 add_subdirectory(src/Platform/MetalD3D11)
 add_subdirectory(tools/metal_d3d11_test)
+add_subdirectory(src/Platform/GameInput)
+add_subdirectory(tools/input_lab)
