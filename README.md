@@ -72,7 +72,7 @@ game/, reference/    local only, gitignored: game files and the OpenXRay referen
 You need macOS on Apple Silicon, Xcode 27, CMake 3.28+ and Ninja.
 
 ```bash
-git submodule update --init --depth 1 external/SDL external/openal-soft external/LuaJIT external/ogg external/vorbis external/theora external/SPIRV-Cross external/vkd3d
+git submodule update --init --depth 1 external/SDL external/openal-soft external/LuaJIT external/ogg external/vorbis external/theora external/SPIRV-Cross external/vkd3d external/sse2neon
 cmake --preset macos-arm64
 cmake --build --preset macos-arm64
 ctest --test-dir build/macos-arm64
