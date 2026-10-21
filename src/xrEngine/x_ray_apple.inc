@@ -193,6 +193,7 @@ InitResult Init(const InitParams& params, std::string& error)
 
 	Startup_Create();
 	Device.RunBegin();
+	Device.SyncActiveState(); // the window's first focus event came before the device existed
 	g_app.running = true;
 	g_app.renderer_ready = true;
 	return InitResult::Ok;

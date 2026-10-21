@@ -487,6 +487,7 @@ public:
 	// Apple: the SDL main loop drives the engine (RunBegin, then RunFrame per SDL_AppIterate, then RunEnd).
 	void RunFrame(); // pumps the SDL events, then one on_idle()
 	void on_sdl_event(const SDL_Event& event);
+	void SyncActiveState(); // OnAppActive() from the window's own state (visible, focused, not system-paused)
 	// The app went to / came back from the background (AppleShell lifecycle); no GPU work while paused.
 	void OnSystemPause(bool paused);
 	// The OS is short on memory: 1 = warning, 2 = critical.

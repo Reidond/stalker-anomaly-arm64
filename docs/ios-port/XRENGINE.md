@@ -91,7 +91,7 @@ of `WndProc`) reacts:
 | SDL | Engine |
 |---|---|
 | `SDL_EVENT_QUIT`, `WINDOW_CLOSE_REQUESTED` | `Engine.Event.Defer("KERNEL:disconnect")`, `("KERNEL:quit")`; `CApplication::OnEvent` then calls `xr_window::RequestQuit()` (was `PostQuitMessage`) |
-| `FOCUS_GAINED/LOST`, `MINIMIZED`, `RESTORED`, `SHOWN`, `HIDDEN` | `OnAppActive(focused && visible && !system_paused)` (the body of `OnWM_Activate`: `seqAppActivate/Deactivate`, cursor, clipping). On iPadOS focus is taken as given; the shell's pause is the authority. |
+| `FOCUS_GAINED/LOST`, `MINIMIZED`, `RESTORED`, `SHOWN`, `HIDDEN` | `SyncActiveState()`: `OnAppActive(focused && visible && !system_paused)` (the body of `OnWM_Activate`: `seqAppActivate/Deactivate`, cursor, clipping). On iPadOS focus is taken as given; the shell's pause is the authority. `Init` calls it once after the device exists, because the window's first focus event predates the device. |
 | `PIXEL_SIZE_CHANGED` (windowed Mac window) | new `psCurrentVidMode`, `Device.Reset()` next frame |
 | `WINDOW_DISPLAY_CHANGED`, `DISPLAY_ADDED/REMOVED/MOVED/CURRENT_MODE_CHANGED` | `g_monitor_list_dirty = 1` |
 
@@ -188,7 +188,8 @@ Links xrCore, xrEngine and the Apple shell; `xr_engine::Init` runs with `stop_be
 colour into the engine window through the D3D11-on-Metal shim (`D3D11CreateDevice`, then
 `CreateSwapChainForHwnd(device, xr_engine::WindowHandle(), ...)`: no `RegisterWindowLayer` call in the tool, the engine
 registered the layer), until the window is closed or `--exit-after <s>` elapses. `--full` runs the whole `Init` and needs
-every module. Output lines start with `xrengine_smoke:`; the exit code is 0 when all checks passed.
+every module; with the renderer stubbed it stops, as expected, at `CreateRendererList`: "No valid renderer found".
+Output lines start with `xrengine_smoke:`; the exit code is 0 when all checks passed.
 
 Checked on the Mac (M2 Pro, macOS 27.0.1), game data `game/Anomaly`, with xrCDB, xrXMLParser and xrAPI linked for real:
 

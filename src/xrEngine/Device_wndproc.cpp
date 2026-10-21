@@ -127,20 +127,9 @@ void CRenderDevice::on_sdl_event(const SDL_Event& e)
 	case SDL_EVENT_WINDOW_RESTORED:
 	case SDL_EVENT_WINDOW_SHOWN:
 	case SDL_EVENT_WINDOW_HIDDEN:
-		{
-			if (!window || e.window.windowID != SDL_GetWindowID(window))
-				break;
-			const SDL_WindowFlags flags = SDL_GetWindowFlags(window);
-#if defined(XR_PLATFORM_IOS)
-			// the shell's pause/resume (OnSystemPause) is the authority on iPadOS; focus only follows it
-			const bool focused = true;
-#else
-			const bool focused = (flags & SDL_WINDOW_INPUT_FOCUS) != 0;
-#endif
-			const bool visible = !(flags & (SDL_WINDOW_MINIMIZED | SDL_WINDOW_HIDDEN));
-			OnAppActive(focused && visible && !m_bSystemPaused);
-			break;
-		}
+		if (window && e.window.windowID == SDL_GetWindowID(window))
+			SyncActiveState();
+		break;
 
 	case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
 		// A resizable macOS window: follow the new size with the render resolution.
@@ -164,17 +153,28 @@ void CRenderDevice::on_sdl_event(const SDL_Event& e)
 	}
 }
 
+// The window is active when it is visible, focused (macOS; on iPadOS the shell's pause is the authority and focus only
+// follows it) and the app is not paused by the system. Also called after the device is created, because the first
+// focus event predates it.
+void CRenderDevice::SyncActiveState()
+{
+	SDL_Window* window = xr_window::Get();
+	if (!window)
+		return;
+	const SDL_WindowFlags flags = SDL_GetWindowFlags(window);
+#if defined(XR_PLATFORM_IOS)
+	const bool focused = true;
+#else
+	const bool focused = (flags & SDL_WINDOW_INPUT_FOCUS) != 0;
+#endif
+	const bool visible = !(flags & (SDL_WINDOW_MINIMIZED | SDL_WINDOW_HIDDEN));
+	OnAppActive(focused && visible && !m_bSystemPaused);
+}
+
 void CRenderDevice::OnSystemPause(bool paused)
 {
 	m_bSystemPaused = paused;
-	if (paused)
-		OnAppActive(false);
-	else
-	{
-		SDL_Window* window = xr_window::Get();
-		const SDL_WindowFlags flags = window ? SDL_GetWindowFlags(window) : 0;
-		OnAppActive(window && !(flags & (SDL_WINDOW_MINIMIZED | SDL_WINDOW_HIDDEN)));
-	}
+	SyncActiveState();
 }
 
 void CRenderDevice::OnMemoryPressure(int level)
