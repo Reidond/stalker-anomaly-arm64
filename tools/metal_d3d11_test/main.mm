@@ -1300,6 +1300,53 @@ bool checkReflection(App&)
     return ok;
 }
 
+// R4 switches render targets constantly: bind, clear, draw, "unbind (0,0,0)", bind again. The shim must keep one Metal
+// pass for repeated binds of the same set and fold clears into load actions.
+bool passEconomyCheck(App& a)
+{
+    ID3D11DeviceContext1* c = a.ctx;
+    ResetFrameStats(c);
+    Stats before;
+    GetStats(c, &before);
+    a.uiPos = App::kUiVBSize;
+    float screen[4] = {2.0f / a.W, -2.0f / a.H, 0, 0};
+    writeCB(a, a.cbUI, screen);
+    bindUIState(a, a.bsOpaque, a.dsNoDepth);
+    setViewport(a, a.W, a.H);
+    const float col[4] = {0.2f, 0.4f, 0.6f, 1.0f};
+    ID3D11RenderTargetView* A = a.albedo.rtv;
+    ID3D11RenderTargetView* B = a.scene.rtv;
+    for (int i = 0; i < 3; ++i)
+    {
+        c->OMSetRenderTargets(0, nullptr, nullptr); // unbind idiom
+        c->OMSetRenderTargets(1, &A, nullptr);
+        if (i == 0)
+            c->ClearRenderTargetView(A, col);
+        drawQuad(a, 10, 10, 50, 50, 0.5f, col, a.srvWhite, a.smpPoint);
+    }
+    Stats mid;
+    GetStats(c, &mid);
+    const uint64_t passesSameSet = mid.renderPasses - before.renderPasses;
+    // switch to B (cleared), back to A (cleared again while B was active): each is one pass, clears are free
+    c->OMSetRenderTargets(1, &B, nullptr);
+    c->ClearRenderTargetView(B, col);
+    drawQuad(a, 10, 10, 50, 50, 0.5f, col, a.srvWhite, a.smpPoint);
+    c->ClearRenderTargetView(A, col);
+    c->OMSetRenderTargets(1, &A, nullptr);
+    drawQuad(a, 10, 10, 50, 50, 0.5f, col, a.srvWhite, a.smpPoint);
+    Stats after;
+    GetStats(c, &after);
+    const uint64_t total = after.renderPasses - before.renderPasses;
+    const uint64_t folded = after.foldedClears - before.foldedClears;
+    const bool ok = passesSameSet == 1 && total == 3 && folded == 3 && after.materializedClears == before.materializedClears;
+    report("pass economy: 3 binds of one target set -> %llu pass; +2 target switches with clears -> %llu passes, %llu clears folded, "
+           "%llu materialised  %s",
+           (unsigned long long)passesSameSet, (unsigned long long)total, (unsigned long long)folded,
+           (unsigned long long)(after.materializedClears - before.materializedClears), ok ? "PASS" : "FAIL");
+    c->OMSetRenderTargets(0, nullptr, nullptr);
+    return ok;
+}
+
 bool writePNG(const std::string& path, const CaptureResult& r)
 {
     CGColorSpaceRef cs = CGColorSpaceCreateDeviceRGB();
@@ -1447,6 +1494,8 @@ SDL_AppResult SDL_AppIterate(void* appstate)
 {
     App& a = *static_cast<App*>(appstate);
     ++a.frame;
+    if (a.frame == 1 && !passEconomyCheck(a))
+        a.failures++;
     if (!renderFrame(a))
         return SDL_APP_FAILURE;
 
