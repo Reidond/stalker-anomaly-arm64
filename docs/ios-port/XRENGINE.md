@@ -119,7 +119,8 @@ SDL_AppQuit:    xr_engine::Shutdown(); AppleShell::Shutdown()
 3. `DllMainXrPhysics(PROCESS_ATTACH)` (ODE allocator hooks), `Debug._initialize`, `compute_build_id`,
    `Core._initialize("xray", ..., Paths::fsgame_ltx)`: the file system runs on the shell's generated `fsgame.ltx`, with
    `$fs_root$` the data root and `$app_data_root$`, `$logs$`, saves and `user.ltx` in `Library/Application Support`;
-   `Core.Params` is then replaced with the command line (`TODO(shim)`: `xr_set_command_line`, see below);
+   the command line is handed over first with the shim's `xr_set_command_line`, so `Core.Params`, xrDebug and
+   `memory_monitor` all see it;
 4. `InitSettings` (system.ltx, game.ltx), `FPU::m24r`, `InitEngine` (`Engine.Initialize` and `Device.Initialize`, which
    creates the window), `InitInput`, `InitConsole`;
 5. `CreateRendererList`, the `renderer` line of `user.ltx`, `Engine.External.Initialize` (the renderer and the game are
@@ -229,9 +230,9 @@ the shell do.
 
 ## Requests and known issues for other modules
 
-- **Shim** (appended to `shim-requests.md`): `void xr_set_command_line(const char*)` so `Core.Params`, xrDebug and
-  `memory_monitor` all see `commandline.txt`; `REFIID` / `IID` (`xrNetServer/net_shared.h:61`). `x_ray.cpp` carries the
-  `REFIID` typedef locally until then.
+- **Shim** (two additive commits on this branch, "shim: add REFIID" and "shim: add xr_set_command_line"): `REFIID`
+  (`xrNetServer/net_shared.h:61`) and `void xr_set_command_line(const char*)`, which overrides what `GetCommandLine()`
+  returns so `commandline.txt` reaches `Core.Params`, xrDebug and `memory_monitor`.
 - **xrServerEntities** (`object_destroyer.h:150`, `CHelper4<T>::template delete_data<...>`): needed by `Environment_misc.cpp` and
   `xr_efflensflare.cpp`; the xrgame-triage session has the fix in its tree.
 - **engine-input**: the contract in the Events and Win32 tables above; `g_monitor_list_dirty` should be `volatile LONG`

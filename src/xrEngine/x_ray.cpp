@@ -11,10 +11,6 @@
 
 #include "dedicated_server_only.h"
 #include "no_single.h"
-#ifdef XR_PLATFORM_APPLE
-// TODO(shim): REFIID is requested for Common/PlatformApple.inl (shim-requests.md); xrNetServer/net_shared.h names it.
-typedef const GUID& REFIID;
-#endif
 #include "../xrNetServer/NET_AuthCheck.h"
 
 #include "xr_input.h"

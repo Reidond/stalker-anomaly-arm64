@@ -133,6 +133,9 @@ InitResult Init(const InitParams& params, std::string& error)
 	g_app.command_line = build_command_line(params, paths);
 	AppleShell::Log("engine: command line '%s'", g_app.command_line.c_str());
 
+	// Core._initialize, xrDebug and memory_monitor read the flags through GetCommandLine()
+	xr_set_command_line(g_app.command_line.c_str());
+
 	// ODE's allocator hooks (DllMain of the physics DLL on Windows)
 	DllMainXrPhysics(NULL, 1 /*DLL_PROCESS_ATTACH*/, NULL);
 	g_app.physics_attached = true;
@@ -145,11 +148,6 @@ InitResult Init(const InitParams& params, std::string& error)
 	Core._initialize("xray", NULL, TRUE, paths.fsgame_ltx.c_str());
 	g_app.core_created = true;
 
-	// TODO(shim): Core.Params comes from GetCommandLine() (the process argv). A shim hook to set that string before
-	// Core._initialize would also reach the xrDebug/memory_monitor flags that read GetCommandLine() directly.
-	xr_free(Core.Params);
-	Core.Params = xr_strdup(g_app.command_line.c_str());
-	xr_strlwr(Core.Params);
 
 	InitSettings();
 	Msg(XRAY_MONOLITH_VERSION);
