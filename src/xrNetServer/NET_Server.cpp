@@ -222,6 +222,7 @@ IPureServer::IPureServer(CTimer* timer, BOOL Dedicated)
 	SV_Client = NULL;
 	NET = NULL;
 	net_Address_device = NULL;
+	psNET_Port = 0;
 	pSvNetLog = NULL; //xr_new<INetLog>("logs\\net_sv_log.log", TimeGlobal(device_timer));
 #ifdef DEBUG
 	sender_functor_invoked = false;
@@ -303,6 +304,12 @@ IPureServer::EConnect IPureServer::Connect(LPCSTR options, GameDescriptionData& 
 
 	if (!psNET_direct_connect)
 	{
+#ifdef XR_NET_STUB_TRANSPORT
+		// Single player ("/single" in the options) never gets here; a hosted session needs a network transport.
+		Msg("! IPureServer::Connect: hosting a network session is not supported on this platform "
+		    "(DirectPlay is Windows-only); refusing options [%s]. Only single player is available.", options);
+		return ErrConnect;
+#else
 		//---------------------------
 #ifdef DEBUG
 	string1024 tmp;
@@ -430,6 +437,7 @@ IPureServer::EConnect IPureServer::Connect(LPCSTR options, GameDescriptionData& 
 		};
 
 		CHK_DX(HostSuccess);
+#endif // XR_NET_STUB_TRANSPORT
 	} //psNET_direct_connect
 
 	//.	config_Load		();
@@ -453,15 +461,21 @@ void IPureServer::Disconnect()
 		IpList_Unload();
 	}
 
+#ifndef XR_NET_STUB_TRANSPORT
 	if (NET) NET->Close(0);
 
 	// Release interfaces
 	_RELEASE(net_Address_device);
 	_RELEASE(NET);
+#endif
 }
 
 HRESULT IPureServer::net_Handler(u32 dwMessageType, PVOID pMessage)
 {
+#ifdef XR_NET_STUB_TRANSPORT
+	// Nothing delivers DirectPlay messages on this platform.
+	return S_OK;
+#else
 	// HRESULT     hr = S_OK;
 
 	switch (dwMessageType)
@@ -581,6 +595,7 @@ HRESULT IPureServer::net_Handler(u32 dwMessageType, PVOID pMessage)
 		break;
 	}
 	return S_OK;
+#endif // XR_NET_STUB_TRANSPORT
 }
 
 void IPureServer::Flush_Clients_Buffers()
@@ -620,6 +635,15 @@ void IPureServer::SendTo_LL(ClientID ID/*DPNID ID*/, void* data, u32 size, u32 d
 		if (pSvNetLog) pSvNetLog->LogData(TimeGlobal(device_timer), data, size);
 	}
 
+#ifdef XR_NET_STUB_TRANSPORT
+	// No wire: in single player xrServer::SendTo_LL hands packets to the in-process client directly and never gets here.
+	stats.dwBytesSended += size;
+	static u32 dropped_logged = 0;
+	if (dropped_logged++ < 8)
+		Msg("! IPureServer::SendTo_LL: no network transport on this platform, dropping %u bytes for 0x%08x", size,
+		    ID.value());
+	return;
+#else
 	// send it
 	DPN_BUFFER_DESC desc;
 	desc.dwBufferSize = size;
@@ -656,6 +680,7 @@ void IPureServer::SendTo_LL(ClientID ID/*DPNID ID*/, void* data, u32 size, u32 d
 	if (SUCCEEDED(_hr) || (DPNERR_CONNECTIONLOST == _hr)) return;
 
 	R_CHK(_hr);
+#endif // XR_NET_STUB_TRANSPORT
 }
 
 void IPureServer::SendTo(ClientID ID/*DPNID ID*/, NET_Packet& P, u32 dwFlags, u32 dwTimeout)
@@ -753,6 +778,9 @@ BOOL IPureServer::HasBandwidth(IClient* C)
 		return TRUE;
 	}
 
+#ifdef XR_NET_STUB_TRANSPORT
+	return FALSE; // no send queue to inspect without a transport
+#else
 	if (psNET_ServerUpdate != 0) dwInterval = 1000 / psNET_ServerUpdate;
 	if (psNET_Flags.test(NETFLAG_MINIMIZEUPDATES)) dwInterval = 1000; // approx 2 times per second
 
@@ -776,6 +804,7 @@ BOOL IPureServer::HasBandwidth(IClient* C)
 		return TRUE;
 	}
 	return FALSE;
+#endif // XR_NET_STUB_TRANSPORT
 }
 
 void IPureServer::UpdateClientStatistic(IClient* C)
@@ -784,11 +813,13 @@ void IPureServer::UpdateClientStatistic(IClient* C)
 	DPN_CONNECTION_INFO CI;
 	ZeroMemory(&CI, sizeof(CI));
 	CI.dwSize = sizeof(CI);
+#ifndef XR_NET_STUB_TRANSPORT
 	if (!psNET_direct_connect)
 	{
 		HRESULT hr = NET->GetConnectionInfo(C->ID.value(), &CI, 0);
 		if (FAILED(hr)) return;
 	}
+#endif
 	C->stats.Update(CI);
 }
 
@@ -819,9 +850,15 @@ bool IPureServer::DisconnectClient(IClient* C, LPCSTR Reason)
 {
 	if (!C) return false;
 
+#ifdef XR_NET_STUB_TRANSPORT
+	Msg("! IPureServer::DisconnectClient: no network transport on this platform, 0x%08x stays (%s)", C->ID.value(),
+	    Reason ? Reason : "");
+	return false;
+#else
 	HRESULT res = NET->DestroyClient(C->ID.value(), Reason, xr_strlen(Reason) + 1, 0);
 	CHK_DX(res);
 	return true;
+#endif
 }
 
 bool IPureServer::DisconnectAddress(const ip_address& Address, LPCSTR reason)
@@ -868,6 +905,11 @@ bool IPureServer::DisconnectAddress(const ip_address& Address, LPCSTR reason)
 
 bool IPureServer::GetClientAddress(IDirectPlay8Address* pClientAddress, ip_address& Address, DWORD* pPort)
 {
+#ifdef XR_NET_STUB_TRANSPORT
+	Address.m_data.data = 0;
+	if (pPort) *pPort = 0;
+	return false; // there are no DirectPlay addresses on this platform
+#else
 	WCHAR wstrHostname[ 256 ] = {0};
 	DWORD dwSize = sizeof(wstrHostname);
 	DWORD dwDataType = 0;
@@ -888,14 +930,19 @@ bool IPureServer::GetClientAddress(IDirectPlay8Address* pClientAddress, ip_addre
 	};
 
 	return true;
+#endif // XR_NET_STUB_TRANSPORT
 };
 
 bool IPureServer::GetClientAddress(ClientID ID, ip_address& Address, DWORD* pPort)
 {
+#ifdef XR_NET_STUB_TRANSPORT
+	return GetClientAddress(static_cast<IDirectPlay8Address*>(NULL), Address, pPort);
+#else
 	IDirectPlay8Address* pClAddr = NULL;
 	CHK_DX(NET->GetClientAddress (ID.value(), &pClAddr, 0));
 
 	return GetClientAddress(pClAddr, Address, pPort);
+#endif
 };
 
 IBannedClient* IPureServer::GetBannedClient(const ip_address& Address)

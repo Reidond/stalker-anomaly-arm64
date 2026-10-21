@@ -12,8 +12,14 @@
 #endif
 
 #include "../xrCore/net_utils.h"
-#include <dplay/dplay8.h>
+#include <DPlay/dplay8.h>
 #include "net_messages.h"
+
+// DirectPlay does not exist on Apple platforms. There the DirectPlay transport is replaced by an in-process stub that
+// refuses network connections (see docs/ios-port/NETSERVER.md); single player does not use the transport at all.
+#if defined(XR_PLATFORM_APPLE) && !defined(XR_NET_STUB_TRANSPORT)
+#define XR_NET_STUB_TRANSPORT 1
+#endif
 
 
 #include "net_compressor.h"
@@ -58,7 +64,9 @@ extern const GUID XR_GUID(CLSID_DirectPlay8NATResolver);
  *
  ****************************************************************************/
 
+#ifndef XR_NET_STUB_TRANSPORT
 typedef REFIID DP8REFIID;
+#endif
 
 
 // {5102DACD-241B-11d3-AEA7-006097B01411}
