@@ -86,6 +86,7 @@ private:
     int wheel_ = -1;
     int page_ = 0;
     int selected_ = -1;
+    float since_pick_ = 1e9f; // seconds since the stick last pointed at a slot
     float held_ = 0.0f;
     Vec2 stick_;
     std::vector<RadialWheel> wheels_;

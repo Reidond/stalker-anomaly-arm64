@@ -84,6 +84,7 @@ void RadialMenu::Cancel()
     wheel_ = -1;
     page_ = 0;
     selected_ = -1;
+    since_pick_ = 1e9f;
     held_ = 0.0f;
     stick_ = {};
 }
@@ -156,11 +157,25 @@ std::vector<RadialEvent> RadialMenu::Update(float dt, const std::vector<bool>& w
     {
         page_ = (page_ + page_step + pages) % pages;
         selected_ = -1;
+        since_pick_ = 1e9f;
         events.push_back({RadialEvent::Type::PageChanged, wheel_, page_, 0});
     }
 
     const RadialPage& page = wheel.pages[page_];
-    selected_ = RadialPickSlot(stick, int(page.slots.size()), selected_, cfg);
+    // The pick outlives the stick returning to centre for a moment: flicking towards a slot and
+    // letting go is as natural as holding the direction, and the stick springs back on its own.
+    const int picked = RadialPickSlot(stick, int(page.slots.size()), selected_, cfg);
+    if (picked >= 0)
+    {
+        selected_ = picked;
+        since_pick_ = 0.0f;
+    }
+    else
+    {
+        since_pick_ += dt;
+        if (since_pick_ > cfg.release_grace)
+            selected_ = -1;
+    }
 
     if (!down(wheel_))
     {

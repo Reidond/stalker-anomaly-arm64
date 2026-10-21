@@ -25,6 +25,7 @@ struct MoveConfig
     float key_off = 0.32f;        // ...and releases below this
     float walk_threshold = 0.62f; // moving below this magnitude holds gp_walk (slow walk)
     float walk_hysteresis = 0.05f;
+    float walk_delay = 0.12f;       // the push must stay gentle this long before walking starts, so ramping the stick up does not blip walk
     float cardinal_snap_deg = 9.0f; // snap near-axis pushes to the axis so strafing is not diagonal
     float walk_enabled = 1.0f;      // 0 = never produce gp_walk (always run)
 };
@@ -86,6 +87,7 @@ struct RadialConfig
     float hold_seconds = 0.22f; // holding the wheel button this long opens it; shorter is a tap
     float deadzone = 0.45f;     // stick magnitude needed to pick a slot
     float sticky = 0.18f;       // fraction of a sector the stick must pass before the pick changes
+    float release_grace = 0.30f; // a pick survives this long after the stick springs back to centre, so flick-and-release works
 };
 
 struct FeedbackConfig

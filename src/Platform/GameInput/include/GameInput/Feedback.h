@@ -188,7 +188,7 @@ public:
     void SetBleeding(bool bleeding) { lightbar_.SetBleeding(bleeding); }
     void SetRadiation(float level01) { lightbar_.SetRadiation(level01); }
     void SetBlowout(float intensity01);
-    void SetMenu(bool in_menu) { lightbar_.SetMenu(in_menu); }
+    void SetMenu(bool in_menu) { lightbar_.SetMenu(in_menu); menu_ = in_menu; }
     void OnHit(HitType type, float severity01);
     void OnShot();
     void OnDryFire();
@@ -212,6 +212,7 @@ private:
     LightbarModel lightbar_;
     WeaponState weapon_;
     float health_ = 1.0f;
+    bool menu_ = false;
     FeedbackOutput out_;
 };
 

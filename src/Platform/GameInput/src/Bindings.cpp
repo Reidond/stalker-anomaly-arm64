@@ -300,8 +300,9 @@ BindingMap BindingMap::Default()
         // D-pad and right stick click.
         {"torch", PK_DpadUp}, {"night_vision", PK_DpadDown}, {"llookout", PK_DpadLeft}, {"rlookout", PK_DpadRight},
         {"freelook", PK_R3},
-        // System buttons.
-        {"inventory", PK_Create}, {"quit", PK_Options}, {"active_jobs", PK_Touchpad}, {"pause", PK_Ps},
+        // System buttons. PS is not bound: iPadOS takes it for Home (verified on the iPad), so the
+        // game never sees a press; "pause" stays reachable from the menu.
+        {"inventory", PK_Create}, {"quit", PK_Options}, {"active_jobs", PK_Touchpad},
         // Items wheel (hold L1), page 1.
         {"quick_use_1", PK_RADIAL_1 + 0}, {"quick_use_2", PK_RADIAL_1 + 1}, {"quick_use_3", PK_RADIAL_1 + 2},
         {"quick_use_4", PK_RADIAL_1 + 3}, {"artefact", PK_RADIAL_1 + 4}, {"show_detector", PK_RADIAL_1 + 5},

@@ -15,6 +15,7 @@ std::vector<Tunable> Tunables(Config& c)
         {"move.key_off", &c.move.key_off, 0.05f, 0.8f, 0.01f},
         {"move.walk_threshold", &c.move.walk_threshold, 0.2f, 0.95f, 0.01f},
         {"move.walk_hysteresis", &c.move.walk_hysteresis, 0.0f, 0.2f, 0.01f},
+        {"move.walk_delay", &c.move.walk_delay, 0.0f, 0.5f, 0.02f},
         {"move.cardinal_snap_deg", &c.move.cardinal_snap_deg, 0.0f, 25.0f, 1.0f},
         {"move.walk_enabled", &c.move.walk_enabled, 0.0f, 1.0f, 1.0f},
 
@@ -52,6 +53,7 @@ std::vector<Tunable> Tunables(Config& c)
         {"radial.hold_seconds", &c.radial.hold_seconds, 0.08f, 0.8f, 0.01f},
         {"radial.deadzone", &c.radial.deadzone, 0.2f, 0.8f, 0.01f},
         {"radial.sticky", &c.radial.sticky, 0.0f, 0.5f, 0.01f},
+        {"radial.release_grace", &c.radial.release_grace, 0.0f, 1.0f, 0.05f},
 
         {"feedback.rumble_scale", &c.feedback.rumble_scale, 0.0f, 1.0f, 0.05f},
         {"feedback.trigger_effects", &c.feedback.trigger_effects, 0.0f, 1.0f, 1.0f},

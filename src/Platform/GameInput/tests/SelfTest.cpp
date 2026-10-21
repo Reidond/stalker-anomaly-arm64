@@ -275,6 +275,7 @@ void TestBindings()
     CHECK(m.KeyForAction("wpn_zoom") == PK_L2);
     CHECK(m.ActionForKey(PK_Cross) && *m.ActionForKey(PK_Cross) == "jump");
     CHECK(m.ActionForKey(PK_Mic) == nullptr);
+    CHECK(m.ActionForKey(PK_Ps) == nullptr); // iPadOS keeps the PS button for Home
 
     // Rebinding moves the key and drops the old owner.
     CHECK(m.Bind("crouch", PK_Cross));
@@ -356,9 +357,26 @@ void TestRadial()
     CHECK(ev.size() == 1 && ev[0].type == RadialEvent::Type::Confirmed && ev[0].key == PK_RADIAL_1 + 8);
     CHECK(!menu.Active());
 
-    // Release with the stick centred cancels.
+    // Release with the stick centred and nothing picked cancels.
     for (int i = 0; i < 4; ++i)
         menu.Update(0.1f, l1, {}, 0, cfg);
+    ev = menu.Update(0.016f, none, {}, 0, cfg);
+    CHECK(ev.size() == 1 && ev[0].type == RadialEvent::Type::Cancelled);
+
+    // Flick and let the stick spring back: the pick survives the grace period, then expires.
+    for (int i = 0; i < 4; ++i)
+        menu.Update(0.1f, l1, {}, 0, cfg);
+    menu.Update(0.016f, l1, {1.0f, 0.0f}, 0, cfg);
+    menu.Update(0.1f, l1, {}, 0, cfg);
+    CHECK(menu.View().selected == 2);
+    ev = menu.Update(0.016f, none, {}, 0, cfg);
+    CHECK(ev.size() == 1 && ev[0].type == RadialEvent::Type::Confirmed && ev[0].key == PK_RADIAL_1 + 2);
+    for (int i = 0; i < 4; ++i)
+        menu.Update(0.1f, l1, {}, 0, cfg);
+    menu.Update(0.016f, l1, {1.0f, 0.0f}, 0, cfg);
+    for (int i = 0; i < 5; ++i)
+        menu.Update(0.1f, l1, {}, 0, cfg);
+    CHECK(menu.View().selected == -1);
     ev = menu.Update(0.016f, none, {}, 0, cfg);
     CHECK(ev.size() == 1 && ev[0].type == RadialEvent::Type::Cancelled);
 
@@ -533,6 +551,13 @@ void TestFeedback()
     no_triggers.Update(0.01f, fc);
     CHECK(no_triggers.Current().triggers.right.type == T::Off);
     fc = FeedbackConfig();
+    Feedback in_menu;
+    in_menu.SetWeapon(WeaponClass::Pistol, false);
+    in_menu.Update(0.01f, fc);
+    CHECK(in_menu.Current().triggers.right.type == T::Weapon);
+    in_menu.SetMenu(true);
+    in_menu.Update(0.01f, fc);
+    CHECK(in_menu.Current().triggers.right.type == T::Off && in_menu.Current().triggers.left.type == T::Off);
     Feedback health;
     health.SetHealth(1.0f);
     health.Update(0.016f, fc);
@@ -684,12 +709,30 @@ void TestGameplayInput()
     CHECK(!f.walking && f.move.y > 0.9f && Near(f.move.x, 0.0f, 0.001f));
     CHECK(!Holding(f, PK_Walk));
     pad.left = {0.0f, -0.55f};
-    f = Step(gi, pad);
-    CHECK(f.walking && HasKey(f, PK_Walk, true) && HasAction(f.actions_pressed, "accel"));
+    bool walk_started = false;
+    for (int i = 0; i < 12; ++i)
+    {
+        f = Step(gi, pad);
+        if (HasKey(f, PK_Walk, true) && HasAction(f.actions_pressed, "accel"))
+            walk_started = true;
+        if (i < 3)
+            CHECK(!f.walking); // not immediately: the push has to stay gentle for walk_delay
+    }
+    CHECK(walk_started && f.walking);
     CHECK(Holding(f, PK_LStickUp));
     pad.left = {0.1f, 0.0f};
     f = Step(gi, pad);
     CHECK(HasKey(f, PK_LStickUp, false) && HasKey(f, PK_Walk, false));
+    // Ramping up from centre to full deflection in a few frames never blips into walk.
+    pad.left = {};
+    Step(gi, pad);
+    bool blip = false;
+    for (float v : {0.25f, 0.45f, 0.6f, 0.75f, 0.9f, 0.95f, 0.95f, 0.95f})
+    {
+        pad.left = {0.0f, -v};
+        blip = blip || HasKey(Step(gi, pad), PK_Walk, true);
+    }
+    CHECK(!blip);
     // A slightly crooked push forward does not strafe.
     pad.left = {0.12f, -0.9f};
     f = Step(gi, pad);

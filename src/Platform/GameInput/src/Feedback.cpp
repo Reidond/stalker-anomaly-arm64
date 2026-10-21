@@ -417,7 +417,8 @@ void Feedback::Update(float dt, const FeedbackConfig& cfg)
     out_.motors = m;
 
     out_.led = Scale(lightbar_.Update(dt), cfg.lightbar_brightness);
-    out_.triggers = cfg.trigger_effects > 0.5f ? SelectTriggerEffects(weapon_) : TriggerPair{};
+    // No weapon in your hands while a menu is open.
+    out_.triggers = (cfg.trigger_effects > 0.5f && !menu_) ? SelectTriggerEffects(weapon_) : TriggerPair{};
 }
 
 void Feedback::Reset()

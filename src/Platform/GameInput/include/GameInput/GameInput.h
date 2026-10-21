@@ -204,7 +204,8 @@ private:
     CountAccumulator look_x_, look_y_, cur_x_, cur_y_;
     Hysteresis l2_, r2_;
     Hysteresis dir_[8]; // 4 left-stick + 4 right-stick direction keys
-    Hysteresis walk_;
+    bool walk_active_ = false;
+    float walk_timer_ = 0.0f;
     Hysteresis touch_dir_[4];
 
     // Key bookkeeping: what has been told to the host.

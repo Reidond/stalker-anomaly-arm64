@@ -244,11 +244,21 @@ FrameOutput GameInput::Update(float dt, const PadSnapshot& pad)
         P(PK_LStickLeft) = left;
         P(PK_LStickRight) = right;
         const bool moving = up || down || left || right;
-        bool walking = false;
+        // Walk needs a push that stays gentle for walk_delay: ramping the stick up from centre passes
+        // through the gentle range for a few frames and must not blip into walk.
         if (moving && mv.walk_enabled > 0.5f)
-            walking = walk_.Update(mv.walk_threshold - mag, mv.walk_hysteresis, -mv.walk_hysteresis);
+        {
+            const bool gentle = walk_active_ ? mag < mv.walk_threshold + mv.walk_hysteresis
+                                             : mag < mv.walk_threshold - mv.walk_hysteresis;
+            walk_timer_ = gentle ? walk_timer_ + dt : 0.0f;
+            walk_active_ = gentle && (walk_active_ || walk_timer_ >= mv.walk_delay);
+        }
         else
-            walk_.Reset();
+        {
+            walk_timer_ = 0.0f;
+            walk_active_ = false;
+        }
+        const bool walking = walk_active_;
         P(PK_Walk) = walking;
         out.move = {ls.x, -ls.y};
         out.move_magnitude = mag;
@@ -313,7 +323,8 @@ FrameOutput GameInput::Update(float dt, const PadSnapshot& pad)
     {
         look_.Reset();
         gyro_.Update(pad, dt, false, config_.gyro); // keep drift calibration running
-        walk_.Reset();
+        walk_active_ = false;
+        walk_timer_ = 0.0f;
         if (!capture_)
             for (Hysteresis& h : dir_)
                 h.Reset();

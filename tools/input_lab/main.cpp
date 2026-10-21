@@ -672,7 +672,9 @@ void Draw(Lab& lab)
         double(f.look_gyro_deg.x), double(f.look_gyro_deg.y));
     line(kDim, "gyro %s bias %+.3f %+.3f %+.3f", lab.input.gyro().Calibrated() ? "calibrated" : "calibrating",
         double(gi.gyro().Bias()[0]), double(gi.gyro().Bias()[1]), double(gi.gyro().Bias()[2]));
-    line(kDim, "look ramp %.2f", double(gi.look_filter().Ramp()));
+    line(kDim, "gyro raw %+.2f %+.2f %+.2f rad/s  accel %s", double(lab.raw.gyro[0]), double(lab.raw.gyro[1]),
+        double(lab.raw.gyro[2]), lab.raw.has_accel ? "yes" : "none (fixed axes)");
+    line(kDim, "look ramp %.2f  walk delay %.2f", double(gi.look_filter().Ramp()), double(gi.config().move.walk_delay));
     y += 6;
 
     const FeedbackOutput& fo = gi.feedback().Current();
@@ -1082,7 +1084,10 @@ SDL_AppResult SDL_AppIterate(void* appstate)
         lab.fps_frames = 0;
     }
 
+    const bool was_connected = lab.raw.connected;
     lab.raw = lab.shot_path.empty() ? lab.source->Poll() : SyntheticPad(lab);
+    if (lab.raw.connected != was_connected)
+        Log(lab, "pad snapshot %s", lab.raw.connected ? "connected" : "NOT connected");
     const PadSnapshot masked = HandleChords(lab, lab.raw);
     lab.frame = lab.input.Update(dt, masked);
     LogFrame(lab);
@@ -1099,7 +1104,12 @@ SDL_AppResult SDL_AppIterate(void* appstate)
     {
         lab.readback_timer = 0.1f;
         const DeviceIdentity* dev = lab.input.devices().Active();
+        const TriggerReadback before = lab.readback;
         lab.readback = dev && dev->IsDualSense() ? DualSenseTriggers::Read(-1) : TriggerReadback();
+        if (lab.readback.valid && (lab.readback.left_status != before.left_status || lab.readback.right_status != before.right_status ||
+                                      lab.readback.left_mode != before.left_mode || lab.readback.right_mode != before.right_mode))
+            Log(lab, "GC trigger L mode %d status %d | R mode %d status %d", lab.readback.left_mode, lab.readback.left_status,
+                lab.readback.right_mode, lab.readback.right_status);
     }
 
     Draw(lab);

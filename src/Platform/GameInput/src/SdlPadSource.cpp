@@ -316,11 +316,13 @@ void SdlPadSource::SetTriggers(const TriggerPair& triggers)
     const DeviceIdentity* dev = input_.devices().Active();
     if (!dev || !dev->IsDualSense())
         return;
-    DualSenseTriggers::Apply(active_player_index_, triggers);
+    const bool ok = DualSenseTriggers::Apply(active_player_index_, triggers);
+    SDL_Log("GameInput: triggers L=%s R=%s applied=%d", TriggerEffectName(triggers.left), TriggerEffectName(triggers.right), ok);
 }
 
 void SdlPadSource::Silence()
 {
+    SDL_Log("GameInput: feedback silenced");
     if (Pad* pad = ActivePad())
     {
         SDL_RumbleGamepad(pad->handle, 0, 0, 0);

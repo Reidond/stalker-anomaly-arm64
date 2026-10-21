@@ -36,7 +36,7 @@ Gameplay, with no menu open. "Tap" means pressed and released within 0.22 s.
 | Input | Action (engine action name) | Notes |
 |---|---|---|
 | Left stick | Move: `forward` `back` `lstrafe` `rstrafe` | Becomes `gp_lstick_*` keys. 8 directions, near-axis pushes snap to the axis |
-| Left stick, gentle push (below 62 %) | Walk: `accel` | `gp_walk` is held while moving gently, so it can be rebound or removed (always run) |
+| Left stick, gentle push (below 62 %) | Walk: `accel` | `gp_walk` is held while the push stays gentle for 0.12 s, so ramping up to a run does not blip into walk. It can be rebound or removed (always run) |
 | L3 (click) | Sprint: `sprint_toggle` | Hold or toggle follows the engine's sprint option |
 | Right stick | Look | Deadzone, response curve, acceleration; slower while aiming |
 | Gyro | Look (optional) | Off by default; "ADS only" or "always" |
@@ -56,14 +56,16 @@ Gameplay, with no menu open. "Tap" means pressed and released within 0.22 s.
 | Create | Inventory: `inventory` | |
 | Touchpad (press) | PDA: `active_jobs` | Anomaly's PDA entry. Check against the real default controls at integration |
 | Options | Menu / back: `quit` | |
-| PS | Pause: `pause` | |
+| PS | Unbound | iPadOS keeps the PS button for Home: a short press leaves the app and the game never sees it (verified on the iPad). `pause` is reachable from the menu |
 | Touchpad swipes, Mic, paddles | Unbound | Swipes fire `gp_touch_*` keys, ready to bind |
 
 ### Radial menus
 
 Hold L1 or R1 for 0.22 s: a wheel opens, the movement stick keeps working, the right stick picks a
 slot (the look stick is captured while the wheel is open), D-pad left/right flips between the two
-pages, and releasing the button fires the picked slot. Releasing with the stick centred cancels.
+pages, and releasing the button fires the picked slot. A pick survives for 0.3 s after the stick
+springs back to centre, so "flick and let go" works as well as holding the direction; releasing with
+nothing picked cancels.
 Slots are clockwise from the top.
 
 | Wheel | Page | Slots (clockwise from the top) |
@@ -169,16 +171,20 @@ bar only on visible change, triggers only on change.
   `level_input.on_key_press` callback. `SetKeyCapture(true)` or `ClearKeyFilter()` lifts that.
 - **Movement.** The engine moves digitally, so "analog" movement means: radial deadzone, rescale,
   snap near-axis pushes to the axis, then four direction keys with hysteresis (on at 0.42, off at
-  0.32 of the rescaled push), plus `gp_walk` while the push stays below 62 %. The analog vector is
-  also in `FrameOutput.move` for later.
+  0.32 of the rescaled push), plus `gp_walk` once the push has stayed below 62 % for 0.12 s. The
+  analog vector is also in `FrameOutput.move` for later.
 - **Look.** Right stick: deadzone, `pow(m, 1.7)`, 220 and 150 degrees per second at full yaw and
   pitch, 1.5x acceleration after 0.45 s pushed to the edge, 0.55x while aiming. Output is degrees
   per frame; `LookToCounts()` converts to integer mouse counts and carries the remainder, so slow
   motion is not rounded away.
-- **Gyro.** Yaw is the rotation rate about world-up, found from the gravity direction in the
-  accelerometer ("player space"), so it works whether the pad is held upright or tilted. Pitch comes
-  from the pad's left-right axis. A zero-rate offset is learned while the pad is still (calibrated
-  after one second), and a soft noise floor removes the rest.
+- **Gyro.** With an accelerometer, yaw is the rotation rate about world-up, found from the gravity
+  direction ("player space"), so it works whether the pad is held upright or tilted. Pitch comes from
+  the pad's left-right axis. A zero-rate offset is learned while the pad is still (calibrated after
+  one second), and a soft noise floor removes the rest. **On the iPad the DualSense reaches the app
+  through GameController with a gyro but no accelerometer** (SDL reports `accel=0`), so yaw falls
+  back to fixed axes that assume the pad is held upright, the normal grip. Verified on the iPad: turning
+  the pad clockwise (to the right) gives positive yaw, and tipping the trigger edge away gives
+  negative pitch (look up).
 - **Radial menu.** `RadialMenu` is the model (wheels, pages, slot angles with sticky borders, hold
   versus tap); drawing is the host's job. A confirmed slot fires its `gp_radial_N` key as a one-frame
   pulse.
@@ -195,12 +201,12 @@ Defaults, in `Config` (`GameInput/Config.h`). Each has a dotted name for profile
 
 | Group | Settings |
 |---|---|
-| `move` | `deadzone` 0.18, `key_on` 0.42, `key_off` 0.32, `walk_threshold` 0.62, `walk_hysteresis` 0.05, `cardinal_snap_deg` 9, `walk_enabled` 1 |
+| `move` | `deadzone` 0.18, `key_on` 0.42, `key_off` 0.32, `walk_threshold` 0.62, `walk_hysteresis` 0.05, `walk_delay` 0.12, `cardinal_snap_deg` 9, `walk_enabled` 1 |
 | `look` | `deadzone` 0.10, `exponent` 1.7, `yaw_speed` 220, `pitch_speed` 150, `accel_gain` 1.5, `accel_time` 0.45, `ads_scale` 0.55, `invert_y` 0 |
 | `gyro` | `mode` 0 (off), 1 (ADS only), 2 (always); `sensitivity` 1, `ads_scale` 0.6, `noise_floor` 0.01 rad/s, `smoothing` 0.45, `player_space` 1, `invert_x`, `invert_y` |
 | `trigger` | `press` 0.35, `release` 0.25 (digital threshold for L2/R2) |
 | `cursor` | `deadzone` 0.14, `speed` 700 UI units/s, `exponent` 1.9, `precision_scale` 0.3, `dpad_step` 96, `trackpad_gain` 1.35, `trackpad_enabled` 1, `tap_to_click` 0, `scroll_rate` 9 |
-| `radial` | `hold_seconds` 0.22, `deadzone` 0.45, `sticky` 0.18 |
+| `radial` | `hold_seconds` 0.22, `deadzone` 0.45, `sticky` 0.18, `release_grace` 0.30 |
 | `feedback` | `rumble_scale` 1, `trigger_effects` 1, `lightbar` 1, `lightbar_brightness` 0.8 |
 
 ## Hooking the layer into the engine
@@ -262,14 +268,41 @@ implement `INavigationProvider::FindNeighbor` by walking the visible `CUIWindow`
 
 ## Verification
 
-- `gameinput_tests` (macOS) and `input_lab --selftest` (the same checks, run on the iPad) cover key
-  names, filters, gyro, bindings, radial, cursor, feedback, devices, profiles, gameplay and menu
-  input and the adapter order.
-- `input_lab` shows the live state. Lab commands use Create as a modifier (the layer sees nothing
-  else while it is held): Create+Cross context, Create+Square weapon class, Create+Circle weapon
-  state (ready, empty, jammed, reloading), Create+Triangle gyro mode, Create+D-pad left/right health,
-  Create+D-pad up test hit, Create+D-pad down blowout rumble, Create+L1/R1 pick a tunable,
-  Create+L3/R3 change it. The six buttons at the top of the screen do the same by touch.
-- Not verified without the real engine: the exact default Anomaly PDA binding, the hit and shot
-  hooks above, the `surge_manager` blowout hook, and gyro axis signs on every holding posture (they
-  are checked on the iPad in input_lab, see the verification notes in the hand-over).
+Tests, run on both platforms: `gameinput_tests` (macOS, also built under ASan and UBSan) and
+`input_lab --selftest` (the same 624 checks on the iPad). They cover key names, filters, gyro,
+bindings, radial, cursor, feedback, devices, profiles, gameplay and menu input, key capture and the
+adapter order.
+
+`input_lab` shows the live state. Lab commands use Create as a modifier (the layer sees nothing else
+while it is held): Create+Cross context, Create+Square weapon class, Create+Circle weapon state
+(ready, empty, jammed, reloading), Create+Triangle gyro mode, Create+D-pad left/right health,
+Create+D-pad up test hit, Create+D-pad down blowout rumble, Create+L1/R1 pick a tunable,
+Create+L3/R3 change it. The six buttons at the top of the screen do the same by touch.
+`input_lab --shot out.bmp [gameplay|radial|menu]` renders one scene from synthetic input for layout
+checks.
+
+Checked on the iPad Air (M3) with a DualSense over Bluetooth, from the lab's logs and the user's
+hands-on checks (2026-10-21):
+
+- Every default button, stick direction, walk and trigger reached the right action; L1/R1 taps and
+  both wheels opened, flipped pages and cancelled (the first run exposed that flick-and-let-go
+  cancelled, which the release grace fixes).
+- Menu context: stick cursor, touchpad trackpad, click, click-and-drag, right click, double click and
+  Circle to go back.
+- Gyro direction (yaw, pitch) as described above.
+- Adaptive triggers: GameController's own readback shows the modes switching (weapon, vibration while
+  an automatic weapon fires, off when empty, feedback on L2) and the trigger status moving through
+  ready, firing and fired as R2 is pulled. By hand: clearly different per weapon class and per state.
+- Rumble (shots, hit, blowout) and the light bar (health colours, pulse when low, hit flash) were felt
+  and seen.
+- Disconnect: powering the pad off released every key and silenced feedback, and on reconnect the
+  same stable device key came back, the trigger effects were re-applied and input resumed. The key
+  was also identical after relaunching the app, and the saved per-device profile loaded.
+- iPadOS takes the PS button (Home) and a long hold of Create (about a second, the system capture
+  gesture): the game never sees PS, and during a long Create hold GameController reports the
+  trigger modes as off until it ends. A short Create press arrives normally.
+
+Not verified without the real engine: the exact default Anomaly PDA binding, the hit, shot and
+weapon hooks in the adapter section, and the `surge_manager` blowout hook. Not verified on the
+device: haptic trigger rumble (SDL reports none through GameController), several pads at once, and
+Xbox or other non-DualSense pads (they use the same code path minus the DualSense features).
