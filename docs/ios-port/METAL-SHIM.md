@@ -23,7 +23,7 @@ MTL_DEBUG_LAYER=1 build/macos-arm64/tools/metal_d3d11_test/metal_d3d11_test.app/
   --frames 120 --screenshot /tmp/shot.png
 ```
 
-The app exits 0 when every check passes. For iPad see the end of this file.
+The app exits 0 when every check passes. The iPad run is at the end of this file.
 
 ## Design
 
@@ -212,4 +212,22 @@ moving coloured point lights, depth fog toward a sky gradient, a translucent tea
 against the G-buffer), a HUD panel with a progress bar and a checker swatch at the top left, and a row of sixteen solid-colour
 swatches along the bottom, one per feature check.
 
-iPad: see below.
+### iPad Air 13" (M3, iPadOS 27), 2732x2048
+
+Same app, bundle `com.andriishafar.anomaly.metallab`, signed with the free team: **all 20 checks pass** (16 swatches, scene
+variance, occlusion 0 / about 156k samples, reflection, pass economy), no Metal validation output, clean exit after 150 frames.
+75 frames to the capture used 455 render passes (6 per frame), 378 folded clears, 1 materialised, 11 pipelines created and 2,619
+cache hits; 150 MB of textures at that resolution (the G-buffer, HDR and depth targets dominate).
+
+```bash
+cmake --preset ios-arm64-local        # needs the gitignored CMakeUserPresets.json with the team id
+xcodebuild -project build/ios-arm64/AnomalyPort.xcodeproj -scheme metal_d3d11_test \
+  -destination 'generic/platform=iOS' -allowProvisioningUpdates build
+xcrun devicectl device install app --device <udid> build/ios-arm64/tools/metal_d3d11_test/Debug-iphoneos/metal_d3d11_test.app
+xcrun devicectl device process launch --device <udid> --console --terminate-existing com.andriishafar.anomaly.metallab --frames 150
+```
+
+On iOS the app writes `metal_d3d11_test.png` and `report.txt` to its data container (`Library/Application Support/andriishafar/metallab/`);
+fetch them with `xcrun devicectl device copy from --domain-type appDataContainer --domain-identifier com.andriishafar.anomaly.metallab`.
+The free account allows three apps, so `com.andriishafar.anomaly.probe` had to be uninstalled to fit this one; the test app was
+uninstalled again afterwards.
