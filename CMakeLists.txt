@@ -16,3 +16,5 @@ include(AnomalyPlatform)
 include(Dependencies)
 
 add_subdirectory(tools/platform_probe)
+add_subdirectory(src/Platform/GameInput)
+add_subdirectory(tools/input_lab)
