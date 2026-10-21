@@ -70,10 +70,29 @@ bool find_entry(const std::string& dir, const std::string& name, bool rescan, st
 	return true;
 }
 
+// The virtual paths are lower case, so an app container path ("/private/var/mobile/Containers/Data/Application/<UUID>")
+// arrives without its capitals, and from inside the iOS sandbox its parents cannot be listed to find them again.
+// $HOME is the container root on iOS (the home directory on macOS): put its real spelling back first.
+std::string restore_home_spelling(const std::string& native)
+{
+	static const std::string home = []
+	{
+		const char* h = getenv("HOME");
+		std::string r(h ? h : "");
+		while (r.size() > 1 && r.back() == '/') r.pop_back();
+		return r;
+	}();
+	if (home.size() < 2 || native.size() < home.size() || native.compare(0, home.size(), home) == 0) return native;
+	if (strncasecmp(native.c_str(), home.c_str(), home.size()) != 0) return native;
+	if (native.size() != home.size() && native[home.size()] != '/') return native;
+	return home + native.substr(home.size());
+}
+
 // Resolves 'native' (already '/'-separated) component by component, ignoring case where the exact spelling does not
 // exist. Components that do not exist at all (files about to be created) are kept as given.
-std::string resolve_case(const std::string& native)
+std::string resolve_case(const std::string& native_in)
 {
+	const std::string native = restore_home_spelling(native_in);
 	if (native.empty() || exists_exact(native)) return native;
 
 	std::string out;
