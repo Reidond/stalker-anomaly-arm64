@@ -40,8 +40,10 @@ if(ANOMALY_IOS)
         set_source_files_properties("${XRSOUND_SMOKE_BUNDLE_OGG}" PROPERTIES MACOSX_PACKAGE_LOCATION "")
         target_compile_definitions(xrsound_smoke PRIVATE XRSOUND_SMOKE_BUNDLED_OGG)
     endif()
+    # The free Apple account can only provision bundle ids Xcode has registered; override to reuse one that exists.
+    set(XRSOUND_SMOKE_BUNDLE_SUFFIX ".soundlab" CACHE STRING "Bundle id suffix of the iOS smoke app")
     anomaly_configure_app(xrsound_smoke
-        BUNDLE_SUFFIX ".soundlab"
+        BUNDLE_SUFFIX "${XRSOUND_SMOKE_BUNDLE_SUFFIX}"
         DISPLAY_NAME "Anomaly Sound Lab"
         INFO_PLIST "${CMAKE_CURRENT_SOURCE_DIR}/Info-ios.plist.in"
     )

@@ -20,5 +20,14 @@ anomaly_add_module(xrSound
 set_source_files_properties("${ANOMALY_SRC_DIR}/xrSound/AudioSession_Apple.mm" PROPERTIES COMPILE_OPTIONS "-fobjc-arc")
 target_link_libraries(xrSound PUBLIC "-framework Foundation" "-framework AVFoundation")
 
+# TODO(shim): belongs in cmake/Dependencies.cmake, next to the OpenAL target (it fixes every iOS consumer of OpenAL).
+# OpenAL Soft keys several workarounds on MAC_OS_X_VERSION_MIN_REQUIRED, which AvailabilityMacros.h defines as 10.5 on iOS:
+# common/almalloc.cpp then replaces the global aligned operator new with a posix_memalign() that rejects 4-byte alignment,
+# so alGenEffects (al::Effect is 4-aligned) fails with AL_OUT_OF_MEMORY and Anomaly's EAX reverb is never created; atomic.h
+# and alformat.hpp fall back to code for macOS < 11 / < 13.3. A value matching the iOS 17 deployment target removes them.
+if(ANOMALY_IOS AND TARGET OpenAL)
+    target_compile_definitions(OpenAL PRIVATE MAC_OS_X_VERSION_MIN_REQUIRED=140000)
+endif()
+
 # Headless check of the module against the real game data (tools/xrsound_smoke); also builds for iOS as a small app.
 add_subdirectory("${PROJECT_SOURCE_DIR}/tools/xrsound_smoke" "${PROJECT_BINARY_DIR}/tools/xrsound_smoke")

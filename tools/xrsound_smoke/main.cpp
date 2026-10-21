@@ -359,10 +359,13 @@ int main(int argc, char** argv)
 	}
 	{
 		std::ofstream f(game_dir + "fsgame.ltx", std::ios::trunc);
+		// same columns as the game's fsgame.ltx: recurse | notify | root | add
 		f << "$fs_root$ = false | false | " << game_dir << "\n"
-		  << "$game_data$ = false | true | $fs_root$ | gamedata\\\n"
-		  << "$game_sounds$ = false | true | $game_data$ | sounds\\\n"
-		  << "$game_config$ = false | true | $game_data$ | configs\\\n"
+		  << "$game_data$ = true | true | $fs_root$ | gamedata\\\n"
+		  << "$game_sounds$ = true | true | $game_data$ | sounds\\\n"
+		  << "$game_config$ = true | false | $game_data$ | configs\\\n"
+		  << "$game_levels$ = true | false | $game_data$ | levels\\\n"
+		  << "$level$ = false | false | $game_levels$\n"
 		  << "$app_data_root$ = true | false | " << run_dir << "appdata/\n"
 		  << "$logs$ = true | false | $app_data_root$ | logs\\\n";
 	}
@@ -592,5 +595,10 @@ int main(int argc, char** argv)
 	check(true, "sound manager destroyed");
 
 	printf("\n%s\n", g_failures ? "xrsound_smoke: FAILED" : "xrsound_smoke: all checks passed");
-	return g_failures ? 1 : 0;
+	const int rc = g_failures ? 1 : 0;
+#if TARGET_OS_IOS
+	fflush(stdout);
+	exit(rc); // SDL's UIKit app would keep running after the checks
+#endif
+	return rc;
 }
