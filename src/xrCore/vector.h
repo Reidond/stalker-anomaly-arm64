@@ -16,8 +16,8 @@
 #endif
 
 // Select platform
-#ifdef _MSC_VER
-#define M_VISUAL
+#if defined(_MSC_VER) || defined(XR_PLATFORM_APPLE)
+#define M_VISUAL // "MSVC-style" constants and helpers; clang on Apple takes the same path
 #endif
 #ifdef __BORLANDC__
 #define M_BORLAND

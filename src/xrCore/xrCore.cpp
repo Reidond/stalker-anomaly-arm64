@@ -3,17 +3,19 @@
 #include "stdafx.h"
 #pragma hdrstop
 
+#ifndef XR_PLATFORM_APPLE
 #include <mmsystem.h>
 #include <objbase.h>
+#endif
 #include "xrCore.h"
 
 #pragma comment(lib,"winmm.lib")
 
-#ifdef DEBUG
+#if defined(DEBUG) && !defined(XR_PLATFORM_APPLE)
 # include <malloc.h>
 #endif // DEBUG
 
-#include<fstream>
+#include <fstream>
 #include <iostream>
 #include <string>
 
@@ -54,8 +56,10 @@ void xrCore::_initialize(LPCSTR _ApplicationName, LogCallback cb, BOOL init_fs, 
 		// HRESULT co_res =
 		Params = xr_strdup(GetCommandLine());
 		xr_strlwr(Params);
+#ifndef XR_PLATFORM_APPLE
 		if (!strstr(Params, "-editor"))
 			CoInitializeEx(NULL, COINIT_MULTITHREADED);
+#endif
 
 		string_path fn, dr, di;
 
@@ -115,14 +119,14 @@ void xrCore::_initialize(LPCSTR _ApplicationName, LogCallback cb, BOOL init_fs, 
 		char path_A[MAX_PATH];
 		strcpy(path_A, Core.ApplicationPath);
 		strcat(path_A, "\\..\\commandline.txt");
-		cmdlineTxt.open(path_A);
+		cmdlineTxt.open(xr_native_path(path_A));
 		
 		if (!cmdlineTxt)
 		{
 			cmdlineTxt.close();
 			strcpy(path_A, Core.WorkingPath);
 			strcat(path_A, "\\commandline.txt");
-			cmdlineTxt.open(path_A);
+			cmdlineTxt.open(xr_native_path(path_A));
 		}
 
 		if (cmdlineTxt)
@@ -168,7 +172,7 @@ void xrCore::_initialize(LPCSTR _ApplicationName, LogCallback cb, BOOL init_fs, 
 		Msg("Game started: %s\n", timeInDMYHMSMMM().c_str());
 		EFS._initialize();
 #ifdef DEBUG
-#ifndef _EDITOR
+#if !defined(_EDITOR) && !defined(XR_PLATFORM_APPLE)
         Msg("Process heap 0x%08x", GetProcessHeap());
 #endif
 #endif // DEBUG
@@ -204,7 +208,7 @@ void xrCore::_destroy()
 	}
 }
 
-#ifndef XRCORE_STATIC
+#if !defined(XRCORE_STATIC) && !defined(XR_PLATFORM_APPLE)
 
 //. why ???
 #ifdef _EDITOR

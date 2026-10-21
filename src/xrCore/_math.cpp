@@ -1,15 +1,19 @@
 #include "stdafx.h"
 #pragma hdrstop
 
+#ifndef XR_PLATFORM_APPLE
 #include <process.h>
+#endif
 
 // mmsystem.h
+#ifndef XR_PLATFORM_APPLE
 #define MMNOSOUND
 #define MMNOMIDI
 #define MMNOAUX
 #define MMNOMIXER
 #define MMNOJOY
 #include <mmsystem.h>
+#endif
 
 #include "profiler.h"
 
@@ -18,7 +22,7 @@ XRCORE_API Fmatrix Fidentity;
 XRCORE_API Dmatrix Didentity;
 XRCORE_API CRandom Random;
 
-#ifdef _M_AMD64
+#if defined(_M_AMD64) || defined(XR_ARCH_ARM64)
 u16 getFPUsw() { return 0; }
 
 namespace FPU
@@ -298,6 +302,22 @@ void _initialize_cpu(void)
 void _initialize_cpu_thread()
 {
 }
+#elif defined(XR_PLATFORM_APPLE)
+void debug_on_thread_spawn();
+
+// per-thread initialization
+void _initialize_cpu_thread()
+{
+	debug_on_thread_spawn();
+#ifndef XRCORE_STATIC
+	FPU::m64r(); // round to nearest
+#endif // XRCORE_STATIC
+	// _MM_FLUSH_ZERO_ON + _MM_DENORMALS_ZERO_ON on x64 correspond to FPCR.FZ on arm64
+	uint64_t fpcr;
+	__asm__ volatile("mrs %0, fpcr" : "=r"(fpcr));
+	fpcr |= (1ull << 24);
+	__asm__ volatile("msr fpcr, %0" : : "r"(fpcr));
+}
 #else
 // per-thread initialization
 #include <xmmintrin.h>
@@ -337,6 +357,60 @@ void _initialize_cpu_thread()
 }
 #endif
 // threading API
+#ifdef XR_PLATFORM_APPLE
+void thread_name(const char* name)
+{
+	if (name) pthread_setname_np(name); // names the calling thread
+}
+
+struct THREAD_STARTUP
+{
+	thread_t* entry;
+	char* name;
+	void* args;
+};
+
+static void* thread_entry(void* _params)
+{
+	// initialize
+	THREAD_STARTUP* startup = (THREAD_STARTUP*)_params;
+	thread_name(startup->name);
+	thread_t* entry = startup->entry;
+	void* arglist = startup->args;
+	_initialize_cpu_thread();
+
+	// emit profiler thread
+	PROF_THREAD(startup->name);
+
+	// clean up
+	xr_delete(startup);
+
+	// call
+	entry(arglist);
+	return nullptr;
+}
+
+void thread_spawn(thread_t* entry, const char* name, unsigned stack, void* arglist)
+{
+	Debug._initialize(false);
+
+	THREAD_STARTUP* startup = xr_new<THREAD_STARTUP>();
+	startup->entry = entry;
+	startup->name = (char*)name;
+	startup->args = arglist;
+
+	// Secondary threads get 512 KB by default on Apple platforms; the engine puts large buffers (string4096, ...) on
+	// the stack, so never go below the 2 MB it gets on Windows' linker-default threads.
+	pthread_attr_t attr;
+	pthread_attr_init(&attr);
+	pthread_attr_setstacksize(&attr, stack > (2u << 20) ? stack : (2u << 20));
+	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+	pthread_t thread;
+	if (pthread_create(&thread, &attr, thread_entry, startup) != 0)
+		xr_delete(startup);
+	pthread_attr_destroy(&attr);
+}
+#else // XR_PLATFORM_APPLE
 #pragma pack(push,8)
 struct THREAD_NAME
 {
@@ -399,6 +473,7 @@ void thread_spawn(thread_t* entry, const char* name, unsigned stack, void* argli
 	startup->args = arglist;
 	_beginthread(thread_entry, stack, startup);
 }
+#endif // XR_PLATFORM_APPLE
 
 //void spline1(float t, Fvector* p, Fvector* ret)
 //{

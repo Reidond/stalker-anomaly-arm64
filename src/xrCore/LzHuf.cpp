@@ -4,9 +4,11 @@
 #include "stdafx.h"
 #pragma hdrstop
 
+#ifndef XR_PLATFORM_APPLE
 #include <io.h>
 #include <fcntl.h>
 #include <sys\stat.h>
+#endif
 
 #define MODULE
 

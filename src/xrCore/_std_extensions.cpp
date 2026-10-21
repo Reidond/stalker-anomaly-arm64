@@ -22,17 +22,38 @@ char* timestamp(string64& dest)
 	* the operating system is queried to obtain the default value
 	* for the variable.
 	*/
+#ifdef XR_PLATFORM_APPLE
+	{
+		// _strdate -> "mm/dd/yy", _strtime -> "hh:mm:ss"
+		time_t now = time(nullptr);
+		tm local;
+		localtime_r(&now, &local);
+		strftime(temp, sizeof(temp), "%m/%d/%y", &local);
+	}
+#else
 	_tzset();
+#endif
 	u32 it;
 
 	// date
+#ifndef XR_PLATFORM_APPLE
 	_strdate(temp);
+#endif
 	for (it = 0; it < xr_strlen(temp); it++)
 		if ('/' == temp[it]) temp[it] = '-';
 	strconcat(sizeof(dest), dest, temp, "_");
 
 	// time
+#ifdef XR_PLATFORM_APPLE
+	{
+		time_t now = time(nullptr);
+		tm local;
+		localtime_r(&now, &local);
+		strftime(temp, sizeof(temp), "%H:%M:%S", &local);
+	}
+#else
 	_strtime(temp);
+#endif
 	for (it = 0; it < xr_strlen(temp); it++)
 		if (':' == temp[it]) temp[it] = '-';
 	xr_strcat(dest, sizeof(dest), temp);

@@ -4,6 +4,7 @@
 class XRCORE_API CStreamReader : public IReaderBase<CStreamReader>
 {
 private:
+	// Windows: a file-mapping handle. Apple: (file descriptor + 1); windows are created with mmap().
 	HANDLE m_file_mapping_handle;
 	u32 m_start_offset;
 	u32 m_file_size;
@@ -14,6 +15,7 @@ private:
 	u32 m_current_offset_from_start;
 	u32 m_current_window_size;
 	u8* m_current_map_view_of_file;
+	size_t m_current_map_length; // bytes mapped at m_current_map_view_of_file (munmap needs it)
 	u8* m_start_pointer;
 	u8* m_current_pointer;
 

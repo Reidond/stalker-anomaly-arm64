@@ -5,6 +5,7 @@
 #include "stdafx.h"
 #pragma hdrstop
 
+#ifndef XR_PLATFORM_APPLE
 #pragma warning(disable:4995)
 #include <direct.h>
 #include <fcntl.h>
@@ -12,6 +13,7 @@
 #define _SILENCE_EXPERIMENTAL_FILESYSTEM_DEPRECATION_WARNING
 #include <experimental\filesystem>
 #pragma warning(default:4995)
+#endif
 
 #include "FS_internal.h"
 #include "stream_reader.h"
@@ -22,10 +24,12 @@ const u32 BIG_FILE_READER_WINDOW_SIZE = 1024 * 1024;
 //typedef void DUMMY_STUFF (const void*,const u32&,void*);
 //XRCORE_API DUMMY_STUFF *g_temporary_stuff = 0;
 
+#ifndef XR_PLATFORM_APPLE
 # pragma warning(push)
 # pragma warning(disable:4995)
 # include <malloc.h>
 # pragma warning(pop)
+#endif
 
 CLocatorAPI* xr_FS = NULL;
 
@@ -35,7 +39,15 @@ CLocatorAPI* xr_FS = NULL;
 # define FSLTX "fsgame.ltx"
 #endif
 
+#ifdef XR_PLATFORM_APPLE
+// Virtual form ('\\' separators) of the directory that holds fsgame.ltx.
+static std::string fsRoot;
+// Archive entries up to this size are pread() into a heap buffer; larger ones get a bounded mmap window.
+static const u32 PACK_MMAP_THRESHOLD = 256 * 1024;
+#else
 std::experimental::filesystem::path fsRoot;
+#endif
+
 
 struct _open_file
 {
@@ -208,9 +220,13 @@ CLocatorAPI::CLocatorAPI()
 {
 	m_Flags.zero();
 	// get page size
+#ifdef XR_PLATFORM_APPLE
+	dwAllocGranularity = (u32)getpagesize(); // 16 KB on Apple silicon
+#else
 	SYSTEM_INFO sys_inf;
 	GetSystemInfo(&sys_inf);
 	dwAllocGranularity = sys_inf.dwAllocationGranularity;
+#endif
 	m_iLockRescan = 0;
 	dwOpenCounter = 0;
 }
@@ -224,7 +240,8 @@ CLocatorAPI::~CLocatorAPI()
 void CLocatorAPI::Register(LPCSTR name, u32 vfs, u32 crc, u32 ptr, u32 size_real, u32 size_compressed, u32 modif)
 {
 	//Msg("Register[%d] [%s]",vfs,name);
-	string256 temp_file_name;
+	// string256 on Windows; absolute roots on Apple platforms (iOS sandbox containers) are much longer
+	string_path temp_file_name;
 	xr_strcpy(temp_file_name, sizeof(temp_file_name), name);
 	xr_strlwr(temp_file_name);
 
@@ -287,6 +304,45 @@ void CLocatorAPI::Register(LPCSTR name, u32 vfs, u32 crc, u32 ptr, u32 size_real
 	}
 }
 
+#ifdef XR_PLATFORM_APPLE
+// Finds chunk 'ID' in the archive's chunk directory with pread() and returns its (decompressed) contents.
+static IReader* open_chunk_fd(int fd, u32 ID)
+{
+	off_t pos = 0;
+	while (true)
+	{
+		u32 dwType, dwSize;
+		if (pread(fd, &dwType, 4, pos) != 4) return NULL;
+		pos += 4;
+		if (pread(fd, &dwSize, 4, pos) != 4) return NULL;
+		pos += 4;
+
+		if ((dwType & (~CFS_CompressMark)) == ID)
+		{
+			u8* src_data = xr_alloc<u8>(dwSize);
+			ssize_t got = pread(fd, src_data, dwSize, pos);
+			if (got != (ssize_t)dwSize)
+			{
+				xr_free(src_data);
+				return NULL;
+			}
+			if (dwType & CFS_CompressMark)
+			{
+				BYTE* dest;
+				unsigned dest_sz;
+				_decompressLZ(&dest, &dest_sz, src_data, dwSize);
+				xr_free(src_data);
+				return xr_new<CTempReader>(dest, dest_sz, 0);
+			}
+			return xr_new<CTempReader>(src_data, dwSize, 0);
+		}
+		pos += dwSize;
+	}
+	return 0;
+}
+#endif // XR_PLATFORM_APPLE
+
+#ifndef XR_PLATFORM_APPLE
 IReader* open_chunk(void* ptr, u32 ID)
 {
 	BOOL res;
@@ -334,6 +390,7 @@ IReader* open_chunk(void* ptr, u32 ID)
 	}
 	return 0;
 };
+#endif // !XR_PLATFORM_APPLE
 
 
 void CLocatorAPI::LoadArchive(archive& A, LPCSTR entrypoint)
@@ -397,7 +454,11 @@ void CLocatorAPI::LoadArchive(archive& A, LPCSTR entrypoint)
 
 	// Read FileSystem
 	A.open();
+#ifdef XR_PLATFORM_APPLE
+	IReader* hdr = open_chunk_fd(A.fd(), 1);
+#else
 	IReader* hdr = open_chunk(A.hSrcFile, 1);
+#endif
 	R_ASSERT(hdr);
 	RStringVec fv;
 	while (!hdr->eof())
@@ -437,6 +498,31 @@ void CLocatorAPI::LoadArchive(archive& A, LPCSTR entrypoint)
 	// g_temporary_stuff = g_temporary_stuff_subst;
 }
 
+#ifdef XR_PLATFORM_APPLE
+void CLocatorAPI::archive::open()
+{
+	// Open the file. It stays open (one descriptor per mounted archive); content is read on demand.
+	if (hSrcFile)
+		return;
+
+	int fd = ::open(xr_native_path(*path), O_RDONLY);
+	R_ASSERT3(fd >= 0, "cannot open archive", *path);
+	struct stat st;
+	R_ASSERT(fstat(fd, &st) == 0);
+	size = (u32)st.st_size;
+	R_ASSERT(size > 0);
+	hSrcFile = (void*)(intptr_t)(fd + 1);
+	hSrcMap = NULL;
+}
+
+void CLocatorAPI::archive::close()
+{
+	if (hSrcFile)
+		::close(fd());
+	hSrcFile = NULL;
+	hSrcMap = NULL;
+}
+#else
 void CLocatorAPI::archive::open()
 {
 	// Open the file
@@ -458,6 +544,7 @@ void CLocatorAPI::archive::close()
 	CloseHandle(hSrcFile);
 	hSrcFile = NULL;
 }
+#endif // XR_PLATFORM_APPLE
 
 void CLocatorAPI::ProcessArchive(LPCSTR _path)
 {
@@ -482,7 +569,11 @@ void CLocatorAPI::ProcessArchive(LPCSTR _path)
 	// g_temporary_stuff_subst = g_temporary_stuff;
 	// g_temporary_stuff = NULL;
 
+#ifdef XR_PLATFORM_APPLE
+	IReader* hdr = open_chunk_fd(A.fd(), CFS_HeaderChunkID);
+#else
 	IReader* hdr = open_chunk(A.hSrcFile, CFS_HeaderChunkID);
+#endif
 	if (hdr)
 	{
 		A.header = xr_new<CInifile>(hdr, "archive_header");
@@ -515,6 +606,30 @@ void CLocatorAPI::unload_archive(CLocatorAPI::archive& A)
 		}
 	}
 	A.close();
+}
+
+void CLocatorAPI::get_stats(registry_stats& out) const
+{
+	out.entries = m_files.size();
+	out.folders = out.loose_files = out.archived_files = 0;
+	out.per_archive.assign(m_archives.size(), 0);
+	for (const file& entry : m_files)
+	{
+		const size_t len = xr_strlen(entry.name);
+		if (len && entry.name[len - 1] == '\\')
+		{
+			++out.folders;
+			continue;
+		}
+		if (entry.vfs == 0xffffffff)
+			++out.loose_files;
+		else
+		{
+			++out.archived_files;
+			if (entry.vfs < out.per_archive.size())
+				++out.per_archive[entry.vfs];
+		}
+	}
 }
 
 bool CLocatorAPI::load_all_unloaded_archives()
@@ -573,6 +688,8 @@ bool ignore_name(const char* _name)
 	// ignore windows hidden thumbs.db
 	if (0 == strcmp(_name, "Thumbs.db"))
 		return true;
+	if (0 == strcmp(_name, ".DS_Store"))
+		return true;
 
 	// ignore processing ".svn" folders
 	return (_name[0] == '.' && _name[1] == 's' && _name[2] == 'v' && _name[3] == 'n' && _name[4] == 0);
@@ -582,6 +699,12 @@ bool ignore_name(const char* _name)
 // because Unicode file names can
 // be interpolated by FindNextFile()
 
+#ifdef XR_PLATFORM_APPLE
+bool ignore_path(const char* _path)
+{
+	return access(xr_native_path(_path), F_OK) != 0;
+}
+#else
 bool ignore_path(const char* _path)
 {
 	HANDLE h = CreateFile(_path, 0, 0, NULL, OPEN_EXISTING,
@@ -595,6 +718,7 @@ bool ignore_path(const char* _path)
 	else
 		return true;
 }
+#endif
 
 bool CLocatorAPI::Recurse(const char* path)
 {
@@ -602,7 +726,7 @@ bool CLocatorAPI::Recurse(const char* path)
 	xr_strcpy(scanPath, sizeof(scanPath), path);
 	xr_strcat(scanPath, ".xrignore");
 	struct stat buffer;
-	if (!stat(scanPath, &buffer))
+	if (!xr_stat(scanPath, &buffer))
 		return true;
 	xr_strcpy(scanPath, sizeof(scanPath), path);
 	xr_strcat(scanPath, "*.*");
@@ -664,6 +788,33 @@ void* FileDownload(LPCSTR file_name, const int& file_handle, u32& file_size);
     *(slash + 1) = 0;
 }*/
 
+#ifdef XR_PLATFORM_APPLE
+// Looks for fsgame.ltx in the working directory, its parent, the application directory and its parent. 'fs_name' may
+// be an absolute path. On success fsltxPath holds the absolute virtual path of the file.
+static void searchForFsltx(const char* fs_name, string_path& fsltxPath)
+{
+	const char* realFsltxName = fs_name ? fs_name : FSLTX;
+
+	auto tryPath = [&](const std::string& candidate) -> bool
+	{
+		const char* native = xr_native_path(candidate.c_str());
+		struct stat st;
+		if (stat(native, &st) != 0 || !S_ISREG(st.st_mode))
+			return false;
+		char real[2048];
+		if (!realpath(native, real))
+			return false;
+		xr_virtual_path(real, fsltxPath, sizeof(fsltxPath));
+		return true;
+	};
+
+	const std::string name(realFsltxName);
+	if (tryPath(name)) return; // absolute, or relative to the working directory
+	if (tryPath("..\\" + name)) return;
+	if (tryPath(std::string(Core.ApplicationPath) + name)) return;
+	tryPath(std::string(Core.ApplicationPath) + "..\\" + name);
+}
+#else // XR_PLATFORM_APPLE
 static void searchForFsltx(const char* fs_name, string_path& fsltxPath)
 {
 	//#TODO: Update code, when std::filesystem is out (not much work, standards don't change dramatically)
@@ -710,6 +861,7 @@ static void searchForFsltx(const char* fs_name, string_path& fsltxPath)
 
 	if (tryPathFunc(test_path, fsltxPath)) return;
 }
+#endif // XR_PLATFORM_APPLE
 
 IReader* CLocatorAPI::setup_fs_ltx(LPCSTR fs_name)
 {
@@ -718,10 +870,17 @@ IReader* CLocatorAPI::setup_fs_ltx(LPCSTR fs_name)
 	searchForFsltx(fs_name, fs_path);
 	CHECK_OR_EXIT(fs_path[0] != 0,
 	              make_string("Cannot find fsltx file: \"%s\"\nCheck your working directory", fs_name));
+#ifdef XR_PLATFORM_APPLE
+	// fs_path is an absolute virtual path here; its directory is the root of the game installation
+	fsRoot = fs_path;
+	fsRoot.erase(fsRoot.find_last_of('\\') + 1);
+	xr_strlwr(fs_path);
+#else
 	xr_strlwr(fs_path);
 	fsRoot = fs_path;
 	fsRoot = std::experimental::filesystem::absolute(fsRoot);
 	fsRoot = fsRoot.parent_path();
+#endif
 
 	Msg("using fs-ltx %s", fs_path);
 
@@ -809,6 +968,13 @@ void CLocatorAPI::_initialize(u32 flags, LPCSTR target_folder, LPCSTR fs_name)
 			_GetItem(temp, 4, def, _delimiter);
 			_GetItem(temp, 5, capt, _delimiter);
 			xr_strlwr(id);
+#ifdef XR_PLATFORM_APPLE
+			// fsgame.ltx may give roots as POSIX paths (the port's tools do); the registry only knows '\\'
+			for (char* c = root; *c; ++c)
+				if (*c == '/') *c = '\\';
+			for (char* c = add; *c; ++c)
+				if (*c == '/') *c = '\\';
+#endif
 
 			xr_strlwr(root);
 			lp_add = (cnt >= 4) ? xr_strlwr(add) : nullptr;
@@ -822,7 +988,11 @@ void CLocatorAPI::_initialize(u32 flags, LPCSTR target_folder, LPCSTR fs_name)
 				//Old good fsltx
 				//replace root with predefined path
 				//xr_strcpy(root, fsRoot.generic_string().c_str());
+#ifdef XR_PLATFORM_APPLE
+				FS_Path* P = new FS_Path(xr_strdup(fsRoot.c_str()), nullptr, nullptr, nullptr, 0);
+#else
 				FS_Path* P = new FS_Path(xr_strdup(fsRoot.generic_string().c_str()), nullptr, nullptr, nullptr, 0);
+#endif
 				pathes.insert(std::make_pair(xr_strdup("$fs_root$"), P));
 				p_it = pathes.find(root);
 			}
@@ -854,6 +1024,9 @@ void CLocatorAPI::_initialize(u32 flags, LPCSTR target_folder, LPCSTR fs_name)
 	{
 		string1024 c_newAppPathRoot;
 		sscanf(strstr(Core.Params, "-overlaypath ") + 13, "%[^ ] ", c_newAppPathRoot);
+#ifdef XR_PLATFORM_APPLE
+		xr_virtual_path(c_newAppPathRoot, c_newAppPathRoot, sizeof(c_newAppPathRoot));
+#endif
 		FS_Path* pLogsPath = FS.get_path("$logs$");
 		FS_Path* pAppdataPath = FS.get_path("$app_data_root$");
 
@@ -1164,6 +1337,100 @@ void CLocatorAPI::file_from_cache(T*& R, LPSTR fname, const u32& fname_size, con
 	file_from_cache_impl(R, fname, desc);
 }
 
+#ifdef XR_PLATFORM_APPLE
+// Reads [ptr, ptr+size) of an archive. Small ranges are pread() into a heap buffer, larger ones get a page-aligned
+// read-only mmap window that is released when the reader is destroyed. Whole archives are never mapped: a window
+// only ever spans one entry, so address space stays proportional to what is open (the iPad cannot map ~17 GB).
+struct archive_range
+{
+	u8* data; // start of the entry bytes
+	void* map_base; // non-null when mmap'ed
+	size_t map_size;
+};
+
+static bool archive_read_range(CLocatorAPI::archive& A, u32 ptr, u32 size, u32 granularity, archive_range& out)
+{
+	out.map_base = NULL;
+	out.map_size = 0;
+	if (size >= PACK_MMAP_THRESHOLD)
+	{
+		const u32 start = (ptr / granularity) * granularity;
+		const size_t map_size = (size_t)(ptr - start) + size;
+		void* base = mmap(NULL, map_size, PROT_READ, MAP_PRIVATE, A.fd(), (off_t)start);
+		if (base != MAP_FAILED)
+		{
+			out.map_base = base;
+			out.map_size = map_size;
+			out.data = (u8*)base + (ptr - start);
+			return true;
+		}
+		// address space or mapping limits: fall through to a plain read
+	}
+	u8* buffer = xr_alloc<u8>(size ? size : 1);
+	size_t done = 0;
+	while (done < size)
+	{
+		ssize_t got = pread(A.fd(), buffer + done, size - done, (off_t)ptr + (off_t)done);
+		if (got < 0 && errno == EINTR) continue;
+		if (got <= 0)
+		{
+			xr_free(buffer);
+			return false;
+		}
+		done += (size_t)got;
+	}
+	out.data = buffer;
+	return true;
+}
+
+void CLocatorAPI::file_from_archive(IReader*& R, LPCSTR fname, const file& desc)
+{
+	// Archived one
+	archive& A = m_archives[desc.vfs];
+	archive_range range;
+	R_ASSERT3(archive_read_range(A, desc.ptr, desc.size_compressed, dwAllocGranularity, range),
+	          "cannot read from archive", fname);
+
+	if (desc.size_real == desc.size_compressed)
+	{
+		if (range.map_base)
+			R = xr_new<CPackReader>(range.map_base, range.map_size, range.data, desc.size_real);
+		else
+			R = xr_new<CTempReader>(range.data, desc.size_real, 0); // owns the pread() buffer
+		return;
+	}
+
+	// Compressed
+	u8* dest = xr_alloc<u8>(desc.size_real);
+	rtc_decompress(dest, desc.size_real, range.data, desc.size_compressed);
+	R = xr_new<CTempReader>(dest, desc.size_real, 0);
+	if (range.map_base)
+		munmap(range.map_base, range.map_size);
+	else
+		xr_free(range.data);
+}
+
+void CLocatorAPI::file_from_archive(CStreamReader*& R, LPCSTR fname, const file& desc)
+{
+	archive& A = m_archives[desc.vfs];
+	R_ASSERT2(
+		desc.size_compressed == desc.size_real,
+		make_string(
+			"cannot use stream reading for compressed data %s, do not compress data to be streamed",
+			fname
+		)
+	);
+
+	R = xr_new<CStreamReader>();
+	R->construct(
+		(HANDLE)(intptr_t)(A.fd() + 1),
+		desc.ptr,
+		desc.size_compressed,
+		A.size,
+		BIG_FILE_READER_WINDOW_SIZE
+	);
+}
+#else // XR_PLATFORM_APPLE
 void CLocatorAPI::file_from_archive(IReader*& R, LPCSTR fname, const file& desc)
 {
 	// Archived one
@@ -1222,6 +1489,7 @@ void CLocatorAPI::file_from_archive(CStreamReader*& R, LPCSTR fname, const file&
 		BIG_FILE_READER_WINDOW_SIZE
 	);
 }
+#endif // XR_PLATFORM_APPLE
 
 void CLocatorAPI::copy_file_to_build(IWriter* W, IReader* r)
 {
@@ -1339,7 +1607,7 @@ bool CLocatorAPI::check_for_file(LPCSTR path, LPCSTR _fname, string_path& fname,
 	return (true);
 }
 
-#include "..\xrGame\Actor_Flags.h"
+#include "../xrGame/Actor_Flags.h"
 
 template <typename T>
 T* CLocatorAPI::r_open_impl(LPCSTR path, LPCSTR _fname)
@@ -1437,8 +1705,8 @@ void CLocatorAPI::w_close(IWriter*& S)
 
 		if (bReg)
 		{
-			struct _stat st;
-			_stat(fname, &st);
+			struct stat st;
+			xr_stat(fname, &st);
 			Register(fname, 0xffffffff, 0, 0, st.st_size, st.st_size, (u32)st.st_mtime);
 		}
 	}
@@ -1485,7 +1753,7 @@ BOOL CLocatorAPI::dir_delete(LPCSTR path, LPCSTR nm, BOOL remove_files)
 			{
 				// const char* entry_begin = entry.name+base_len;
 				if (!remove_files) return FALSE;
-				unlink(entry.name);
+				xr_unlink(entry.name);
 				m_files.erase(cur_item);
 			}
 			else
@@ -1518,7 +1786,7 @@ void CLocatorAPI::file_delete(LPCSTR path, LPCSTR nm)
 	if (I != m_files.end())
 	{
 		// remove file
-		unlink(I->name);
+		xr_unlink(I->name);
 		char* str = LPSTR(I->name);
 		xr_free(str);
 		m_files.erase(I);
@@ -1552,7 +1820,7 @@ void CLocatorAPI::file_rename(LPCSTR src, LPCSTR dest, bool bOwerwrite)
 		if (D != m_files.end())
 		{
 			if (!bOwerwrite) return;
-			unlink(D->name);
+			xr_unlink(D->name);
 			char* str = LPSTR(D->name);
 			xr_free(str);
 			m_files.erase(D);
@@ -1569,7 +1837,7 @@ void CLocatorAPI::file_rename(LPCSTR src, LPCSTR dest, bool bOwerwrite)
 
 		// physically rename file
 		VerifyPath(dest);
-		rename(src, dest);
+		xr_rename(src, dest);
 	}
 }
 
@@ -1720,12 +1988,12 @@ BOOL CLocatorAPI::can_write_to_folder(LPCSTR path)
 		string_path temp;
 		LPCSTR fn = "$!#%TEMP%#!$.$$$";
 		strconcat(sizeof(temp), temp, path, path[xr_strlen(path) - 1] != '\\' ? "\\" : "", fn);
-		FILE* hf = fopen(temp, "wb");
+		FILE* hf = xr_fopen(temp, "wb");
 		if (hf == 0) return FALSE;
 		else
 		{
 			fclose(hf);
-			unlink(temp);
+			xr_unlink(temp);
 			return TRUE;
 		}
 	}
@@ -1744,7 +2012,7 @@ BOOL CLocatorAPI::can_write_to_alias(LPCSTR path)
 
 BOOL CLocatorAPI::can_modify_file(LPCSTR fname)
 {
-	FILE* hf = fopen(fname, "r+b");
+	FILE* hf = xr_fopen(fname, "r+b");
 	if (hf)
 	{
 		fclose(hf);

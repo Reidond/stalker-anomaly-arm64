@@ -6,10 +6,12 @@
 #define LocatorAPIH
 #pragma once
 
+#ifndef XR_PLATFORM_APPLE
 #pragma warning(push)
 #pragma warning(disable:4995)
 #include <io.h>
 #pragma warning(pop)
+#endif
 
 #include "LocatorAPI_defs.h"
 
@@ -33,6 +35,9 @@ public:
 	struct archive
 	{
 		shared_str path;
+		// Windows: file and file-mapping handles. Apple: hSrcFile is (file descriptor + 1), i.e. non-null while the
+		// archive is open, and hSrcMap is unused. Archives are never mapped whole: entries are read with pread() or
+		// through bounded mmap windows (see file_from_archive).
 		void *hSrcFile, *hSrcMap;
 		u32 size;
 		CInifile* header;
@@ -44,6 +49,9 @@ public:
 
 		void open();
 		void close();
+#ifdef XR_PLATFORM_APPLE
+		int fd() const { return int(intptr_t(hSrcFile)) - 1; }
+#endif
 	};
 
 	DEFINE_VECTOR(archive, archives_vec, archives_it);
@@ -177,6 +185,17 @@ public:
 	LPCSTR update_path(string_path& dest, LPCSTR initial, LPCSTR src);
 
 	int file_list(FS_FileSet& dest, LPCSTR path, u32 flags = FS_ListFiles, LPCSTR mask = 0);
+
+	// Diagnostics for tools: how many registry entries exist and how they split across archives.
+	struct registry_stats
+	{
+		size_t entries; // files + folders
+		size_t folders;
+		size_t loose_files; // real files on disk
+		size_t archived_files;
+		xr_vector<u32> per_archive; // files registered from each archive, indexed like m_archives
+	};
+	void get_stats(registry_stats& out) const;
 
 	bool load_all_unloaded_archives();
 	void unload_archive(archive& A);

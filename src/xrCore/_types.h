@@ -11,8 +11,8 @@ typedef unsigned short u16;
 typedef signed int s32;
 typedef unsigned int u32;
 
-typedef signed __int64 s64;
-typedef unsigned __int64 u64;
+typedef signed long long s64;
+typedef unsigned long long u64;
 
 typedef float f32;
 typedef double f64;
@@ -23,7 +23,7 @@ typedef const char* pcstr;
 struct xr_empty {};
 
 // windoze stuff
-#ifndef _WINDOWS_
+#if !defined(_WINDOWS_) && !defined(XR_WIN32_COMPAT_TYPES)
 typedef int BOOL;
 typedef pstr LPSTR;
 typedef pcstr LPCSTR;

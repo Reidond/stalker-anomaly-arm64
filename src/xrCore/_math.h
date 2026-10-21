@@ -30,7 +30,15 @@ namespace CPU
 	XRCORE_API extern _processor_info ID;
 	XRCORE_API extern u64 QPC();
 
-#ifdef M_VISUAL
+#ifdef XR_PLATFORM_APPLE
+	// arm64: the virtual counter register (24 MHz on Apple silicon), the closest thing to rdtsc.
+	IC u64 GetCLK(void)
+	{
+		u64 v;
+		__asm__ volatile("isb\n\tmrs %0, cntvct_el0" : "=r"(v));
+		return v;
+	}
+#elif defined(M_VISUAL)
 #ifndef _M_AMD64
 #pragma warning(push)
 #pragma warning(disable:4035)

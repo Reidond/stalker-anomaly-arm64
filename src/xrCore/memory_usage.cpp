@@ -1,6 +1,29 @@
 #include "stdafx.h"
+#ifndef XR_PLATFORM_APPLE
 #include <malloc.h>
+#endif
 #include <errno.h>
+
+#ifdef XR_PLATFORM_APPLE
+// Mach / malloc-zone queries live in Platform/PlatformApple.cpp (their headers clash with xrCore's thread_t)
+size_t xr_apple_heap_bytes_in_use();
+void xr_apple_vm_info(size_t* free_bytes, size_t* reserved, size_t* committed);
+
+XRCORE_API void vminfo(size_t* _free, size_t* reserved, size_t* committed)
+{
+	xr_apple_vm_info(_free, reserved, committed);
+}
+
+XRCORE_API void log_vminfo()
+{
+	size_t w_free, w_reserved, w_committed;
+	vminfo(&w_free, &w_reserved, &w_committed);
+	Msg("* [apple]: free[%lld K], reserved[%lld K], committed[%lld K]", (long long)(w_free / 1024),
+	    (long long)(w_reserved / 1024), (long long)(w_committed / 1024));
+}
+
+size_t xrMemory::mem_usage() { return xr_apple_heap_bytes_in_use(); }
+#else // XR_PLATFORM_APPLE
 
 XRCORE_API void vminfo(size_t* _free, size_t* reserved, size_t* committed)
 {
@@ -65,3 +88,4 @@ size_t xrMemory::mem_usage()
 	}
 	return bytesUsed;
 }
+#endif // XR_PLATFORM_APPLE

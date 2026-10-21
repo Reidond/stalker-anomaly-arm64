@@ -44,6 +44,14 @@ void CStreamReader::map(const u32& new_offset)
 		end_offset = m_archive_size;
 
 	m_current_window_size = end_offset - start_offset;
+	m_current_map_length = m_current_window_size;
+#ifdef XR_PLATFORM_APPLE
+	// bounded window onto the archive / file; 'start_offset' is a multiple of the page size
+	void* view = mmap(NULL, m_current_window_size, PROT_READ, MAP_PRIVATE,
+	                  int(intptr_t(m_file_mapping_handle)) - 1, (off_t)start_offset);
+	R_ASSERT2(view != MAP_FAILED, "cannot map a window of the file");
+	m_current_map_view_of_file = (u8*)view;
+#else
 	m_current_map_view_of_file = (u8*)
 		MapViewOfFile(
 			m_file_mapping_handle,
@@ -52,6 +60,7 @@ void CStreamReader::map(const u32& new_offset)
 			start_offset,
 			m_current_window_size
 		);
+#endif
 	m_current_pointer = m_current_map_view_of_file;
 
 	u32 difference = pure_start_offset - start_offset;

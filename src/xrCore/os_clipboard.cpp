@@ -9,6 +9,43 @@
 #pragma hdrstop
 #include "os_clipboard.h"
 
+#ifdef XR_PLATFORM_APPLE
+// Process-local clipboard. The system pasteboard needs AppKit / UIKit, which xrCore stays free of; the window layer
+// can mirror this text into SDL_SetClipboardText / SDL_GetClipboardText.
+#include <mutex>
+#include <string>
+
+static std::mutex g_clip_lock;
+static std::string g_clip;
+
+void os_clipboard::copy_to_clipboard(LPCSTR buf)
+{
+	std::lock_guard<std::mutex> g(g_clip_lock);
+	g_clip = buf ? buf : "";
+}
+
+void os_clipboard::paste_from_clipboard(LPSTR buffer, u32 const& buffer_size)
+{
+	VERIFY(buffer);
+	VERIFY(buffer_size > 0);
+	std::lock_guard<std::mutex> g(g_clip_lock);
+	strncpy_s(buffer, buffer_size, g_clip.c_str(), buffer_size - 1);
+	buffer[buffer_size - 1] = 0;
+	for (u32 i = 0; i < strlen(buffer); ++i)
+	{
+		char c = buffer[i];
+		if (((isprint((unsigned char)c) == 0) && (c != char(-1))) || c == '\t' || c == '\n')
+			buffer[i] = ' ';
+	}
+}
+
+void os_clipboard::update_clipboard(LPCSTR string)
+{
+	std::lock_guard<std::mutex> g(g_clip_lock);
+	g_clip += string ? string : "";
+}
+#else // XR_PLATFORM_APPLE
+
 void os_clipboard::copy_to_clipboard(LPCSTR buf)
 {
 	if (!OpenClipboard(0))
@@ -89,3 +126,4 @@ void os_clipboard::update_clipboard(LPCSTR string)
     xr_free (buffer);
 #endif // #ifdef _EDITOR
 }
+#endif // XR_PLATFORM_APPLE

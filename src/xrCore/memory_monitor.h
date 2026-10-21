@@ -1,7 +1,7 @@
 #ifndef MEMORY_MONITOR_H
 #define MEMORY_MONITOR_H
 
-#ifdef DEBUG
+#if defined(DEBUG) && !defined(XR_PLATFORM_APPLE) // Windows-only tool (writes dumps to d:/)
 #ifndef _EDITOR
 #define USE_MEMORY_MONITOR
 #endif // _EDITOR

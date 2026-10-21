@@ -3,12 +3,14 @@
 
 #include "fs_internal.h"
 
+#ifndef XR_PLATFORM_APPLE
 #pragma warning(disable:4995)
 #include <io.h>
 #include <direct.h>
 #include <fcntl.h>
 #include <sys\stat.h>
 #pragma warning(default:4995)
+#endif
 
 //typedef void DUMMY_STUFF (const void*,const u32&,void*);
 //XRCORE_API DUMMY_STUFF *g_dummy_stuff = 0;
@@ -185,7 +187,7 @@ void FileCompress(const char* fn, const char* sign, void* data, u32 size)
 	MARK M;
 	mk_mark(M, sign);
 
-	int H = open(fn, O_BINARY | O_CREAT | O_WRONLY | O_TRUNC, S_IREAD | S_IWRITE);
+	int H = _open(fn, O_BINARY | O_CREAT | O_WRONLY | O_TRUNC, S_IREAD | S_IWRITE);
 	R_ASSERT2(H > 0, fn);
 	_write(H, &M, 8);
 	_writeLZ(H, data, size);
@@ -197,7 +199,7 @@ void* FileDecompress(const char* fn, const char* sign, u32* size)
 	MARK M, F;
 	mk_mark(M, sign);
 
-	int H = open(fn, O_BINARY | O_RDONLY);
+	int H = _open(fn, O_BINARY | O_RDONLY);
 	R_ASSERT2(H > 0, fn);
 	_read(H, &F, 8);
 	if (strncmp(M, F, 8) != 0)
@@ -525,7 +527,11 @@ CPackReader::~CPackReader()
     unregister_file_mapping(base_address, Size);
 #endif // DEBUG
 
+#ifdef XR_PLATFORM_APPLE
+	munmap(base_address, map_size);
+#else
 	UnmapViewOfFile(base_address);
+#endif
 };
 //---------------------------------------------------
 // file stream
@@ -553,6 +559,52 @@ CCompressedReader::~CCompressedReader()
 };
 
 
+#ifdef XR_PLATFORM_APPLE
+// Read-write view of a whole loose file (save games and the like): a shared mapping, one per open file.
+CVirtualFileRW::CVirtualFileRW(const char* cFileName)
+{
+	int fd = ::open(xr_native_path(cFileName), O_RDWR);
+	R_ASSERT3(fd >= 0, cFileName, Debug.error2string(GetLastError()));
+	struct stat st;
+	R_ASSERT3(fstat(fd, &st) == 0, cFileName, Debug.error2string(GetLastError()));
+	Size = (int)st.st_size;
+	R_ASSERT3(Size, cFileName, Debug.error2string(GetLastError()));
+
+	void* view = mmap(NULL, (size_t)Size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+	R_ASSERT3(view != MAP_FAILED, cFileName, Debug.error2string(GetLastError()));
+	data = (char*)view;
+	hSrcFile = (void*)(intptr_t)(fd + 1);
+	hSrcMap = NULL;
+}
+
+CVirtualFileRW::~CVirtualFileRW()
+{
+	munmap((void*)data, (size_t)Size);
+	::close(int(intptr_t(hSrcFile)) - 1);
+}
+
+CVirtualFileReader::CVirtualFileReader(const char* cFileName)
+{
+	int fd = ::open(xr_native_path(cFileName), O_RDONLY);
+	R_ASSERT3(fd >= 0, cFileName, Debug.error2string(GetLastError()));
+	struct stat st;
+	R_ASSERT3(fstat(fd, &st) == 0, cFileName, Debug.error2string(GetLastError()));
+	Size = (int)st.st_size;
+	R_ASSERT3(Size, cFileName, Debug.error2string(GetLastError()));
+
+	void* view = mmap(NULL, (size_t)Size, PROT_READ, MAP_PRIVATE, fd, 0);
+	R_ASSERT3(view != MAP_FAILED, cFileName, Debug.error2string(GetLastError()));
+	data = (char*)view;
+	hSrcFile = (void*)(intptr_t)(fd + 1);
+	hSrcMap = NULL;
+}
+
+CVirtualFileReader::~CVirtualFileReader()
+{
+	munmap((void*)data, (size_t)Size);
+	::close(int(intptr_t(hSrcFile)) - 1);
+}
+#else // XR_PLATFORM_APPLE
 CVirtualFileRW::CVirtualFileRW(const char* cFileName)
 {
 	// Open the file
@@ -612,3 +664,4 @@ CVirtualFileReader::~CVirtualFileReader()
 	CloseHandle(hSrcMap);
 	CloseHandle(hSrcFile);
 }
+#endif // XR_PLATFORM_APPLE
