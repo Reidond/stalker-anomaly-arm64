@@ -2,6 +2,7 @@
 .*
 !.gitignore
 !.gitattributes
+!.gitmodules
 
 # exclude binaries and temporary files
 _build/
@@ -42,3 +43,7 @@ compressor/mod/
 __pycache__/
 # iOS port: local Anomaly game files (downloaded archive and extracted install)
 /game/
+
+# iOS port: CMake build trees and per-user presets (signing team)
+/build/
+/CMakeUserPresets.json

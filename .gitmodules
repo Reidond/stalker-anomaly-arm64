@@ -1,3 +1,28 @@
 [submodule "src/3rd party/optick-git"]
 	path = src/3rd party/optick-git
 	url = https://github.com/bombomby/optick.git
+[submodule "external/SDL"]
+	path = external/SDL
+	url = https://github.com/libsdl-org/SDL.git
+	shallow = true
+[submodule "external/openal-soft"]
+	path = external/openal-soft
+	url = https://github.com/kcat/openal-soft.git
+	shallow = true
+[submodule "external/LuaJIT"]
+	path = external/LuaJIT
+	url = https://github.com/LuaJIT/LuaJIT.git
+	shallow = true
+	branch = v2.1
+[submodule "external/ogg"]
+	path = external/ogg
+	url = https://github.com/xiph/ogg.git
+	shallow = true
+[submodule "external/vorbis"]
+	path = external/vorbis
+	url = https://github.com/xiph/vorbis.git
+	shallow = true
+[submodule "external/theora"]
+	path = external/theora
+	url = https://github.com/xiph/theora.git
+	shallow = true
