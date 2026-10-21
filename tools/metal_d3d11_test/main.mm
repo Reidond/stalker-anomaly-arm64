@@ -250,6 +250,18 @@ fragment float4 ui_ps(UIOut in [[stage_in]], texture2d<float> t [[texture(0)]], 
     return in.col * t.sample(s, in.uv);
 }
 
+struct ProbeCB { float4 dir; };
+fragment float4 cube_ps(UIOut in [[stage_in]], constant ProbeCB& cb [[buffer(0)]], texturecube<float> t [[texture(0)]],
+                        sampler s [[sampler(0)]])
+{
+    return t.sample(s, cb.dir.xyz);
+}
+fragment float4 vol_ps(UIOut in [[stage_in]], constant ProbeCB& cb [[buffer(0)]], texture3d<float> t [[texture(0)]],
+                       sampler s [[sampler(0)]])
+{
+    return t.sample(s, float3(0.5, 0.5, cb.dir.z));
+}
+
 kernel void fill_cs(texture2d<float, access::write> outT [[texture(64)]], constant float4& color [[buffer(0)]],
                     uint2 gid [[thread_position_in_grid]])
 {
@@ -339,6 +351,11 @@ struct App
     ID3D11VertexShader *gbufVS = nullptr, *quadVS = nullptr, *uiVS = nullptr;
     ID3D11PixelShader *gbufPS = nullptr, *lightPS = nullptr, *combinePS = nullptr, *uiPS = nullptr;
     ID3D11ComputeShader* fillCS = nullptr;
+    ID3D11PixelShader *cubePS = nullptr, *volPS = nullptr;
+    ID3D11Buffer* cbProbe = nullptr;
+    ID3D11Texture2D *texCube = nullptr, *texUpdate = nullptr;
+    ID3D11Texture3D* tex3D = nullptr;
+    ID3D11ShaderResourceView *srvCube = nullptr, *srv3D = nullptr, *srvUpdate = nullptr;
     ID3D11InputLayout *sceneLayout = nullptr, *uiLayout = nullptr;
     // states
     ID3D11RasterizerState *rsCullBack = nullptr, *rsNoCull = nullptr;
@@ -643,6 +660,18 @@ bool createPipeline(App& a)
     bytes = shaderBytes(ShaderStage::Pixel, "ui_ps", r);
     CHECK_HR(a.dev->CreatePixelShader(bytes.data(), bytes.size(), nullptr, &a.uiPS));
 
+    for (int k = 0; k < 2; ++k)
+    {
+        r = ShaderReflection();
+        r.cbuffers = {cbuf("ProbeCB", 0, 16, {var("dir", 0, 16, D3D_SVC_VECTOR, 1, 4)})};
+        ResourceBinding t = texBind("s_probe", 0);
+        t.dimension = k == 0 ? D3D_SRV_DIMENSION_TEXTURECUBE : D3D_SRV_DIMENSION_TEXTURE3D;
+        r.resources = {t, smpBind("smp_probe", 0)};
+        r.colorOutputs = 1;
+        bytes = shaderBytes(ShaderStage::Pixel, k == 0 ? "cube_ps" : "vol_ps", r);
+        CHECK_HR(a.dev->CreatePixelShader(bytes.data(), bytes.size(), nullptr, k == 0 ? &a.cubePS : &a.volPS));
+    }
+
     r = ShaderReflection();
     r.cbuffers = {cbuf("FillCB", 0, 16, {var("color", 0, 16, D3D_SVC_VECTOR, 1, 4)})};
     ResourceBinding u;
@@ -728,6 +757,7 @@ bool createResources(App& a)
     if (!createBuffer(a, &a.cbCombine, 32, D3D11_USAGE_DYNAMIC, D3D11_BIND_CONSTANT_BUFFER)) return false;
     if (!createBuffer(a, &a.cbUI, 16, D3D11_USAGE_DYNAMIC, D3D11_BIND_CONSTANT_BUFFER)) return false;
     if (!createBuffer(a, &a.cbFill, 16, D3D11_USAGE_DYNAMIC, D3D11_BIND_CONSTANT_BUFFER)) return false;
+    if (!createBuffer(a, &a.cbProbe, 16, D3D11_USAGE_DYNAMIC, D3D11_BIND_CONSTANT_BUFFER)) return false;
 
     auto makeTex = [&](ID3D11Texture2D** t, ID3D11ShaderResourceView** s, const MipChain& c, int size, DXGI_FORMAT f) {
         D3D11_TEXTURE2D_DESC d{};
@@ -806,6 +836,45 @@ bool createResources(App& a)
         CHECK_HR(a.dev->CreateShaderResourceView(a.texCopy, nullptr, &a.srvCopy));
     }
 
+    // cube map (6 solid faces), 3D texture (4 solid slices), UpdateSubresource on a DEFAULT texture
+    {
+        static const uint8_t faces[6][4] = {{200, 50, 50, 255}, {50, 200, 50, 255}, {50, 50, 200, 255},
+                                            {200, 200, 50, 255}, {200, 50, 200, 255}, {50, 200, 200, 255}};
+        uint8_t texels[6][4 * 4 * 4];
+        D3D11_SUBRESOURCE_DATA init[6];
+        for (int f = 0; f < 6; ++f)
+        {
+            for (int i = 0; i < 16; ++i)
+                std::memcpy(&texels[f][i * 4], faces[f], 4);
+            init[f] = {texels[f], 16, 0};
+        }
+        D3D11_TEXTURE2D_DESC d{};
+        d.Width = d.Height = 4; d.MipLevels = 1; d.ArraySize = 6; d.Format = DXGI_FORMAT_R8G8B8A8_UNORM; d.SampleDesc.Count = 1;
+        d.Usage = D3D11_USAGE_IMMUTABLE; d.BindFlags = D3D11_BIND_SHADER_RESOURCE; d.MiscFlags = D3D11_RESOURCE_MISC_TEXTURECUBE;
+        CHECK_HR(a.dev->CreateTexture2D(&d, init, &a.texCube));
+        CHECK_HR(a.dev->CreateShaderResourceView(a.texCube, nullptr, &a.srvCube));
+
+        static const uint8_t slices[4][4] = {{255, 0, 0, 255}, {0, 255, 0, 255}, {0, 0, 255, 255}, {255, 255, 255, 255}};
+        uint8_t vol[4 * 4 * 4 * 4];
+        for (int z = 0; z < 4; ++z)
+            for (int i = 0; i < 16; ++i)
+                std::memcpy(&vol[(z * 16 + i) * 4], slices[z], 4);
+        D3D11_TEXTURE3D_DESC v{};
+        v.Width = v.Height = v.Depth = 4; v.MipLevels = 1; v.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        v.Usage = D3D11_USAGE_IMMUTABLE; v.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+        D3D11_SUBRESOURCE_DATA vi{vol, 16, 64};
+        CHECK_HR(a.dev->CreateTexture3D(&v, &vi, &a.tex3D));
+        CHECK_HR(a.dev->CreateShaderResourceView(a.tex3D, nullptr, &a.srv3D));
+
+        D3D11_TEXTURE2D_DESC u{};
+        u.Width = u.Height = 8; u.MipLevels = 1; u.ArraySize = 1; u.Format = DXGI_FORMAT_R8G8B8A8_UNORM; u.SampleDesc.Count = 1;
+        u.Usage = D3D11_USAGE_DEFAULT; u.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+        CHECK_HR(a.dev->CreateTexture2D(&u, nullptr, &a.texUpdate));
+        CHECK_HR(a.dev->CreateShaderResourceView(a.texUpdate, nullptr, &a.srvUpdate));
+        uint32_t px[64];
+        for (auto& p : px) p = 0xffff80ffu; // ABGR: R=255 G=128 B=255
+        a.ctx->UpdateSubresource(a.texUpdate, 0, nullptr, px, 8 * 4, 0);
+    }
     // DDS through the D3DX11 replacement, the way R4's texture_load does it (skip the top mip, IMMUTABLE)
     {
         const uint8_t col[3] = {0, 200, 100};
@@ -1238,6 +1307,20 @@ bool renderFrame(App& a)
         // 10: DDS loaded through D3DX11CreateTextureFromMemory (first mip skipped), 11: same via a STAGING copy
         drawQuad(a, sx(10), sy, 64, 64, 0.5f, white, a.srvDDS, a.smpLinear);
         drawQuad(a, sx(11), sy, 64, 64, 0.5f, white, a.srvDDSStaged, a.smpLinear);
+        // 12/13: cube map sampled along +X and -Z, 14: 3D texture slice 2, 15: UpdateSubresource
+        auto probe = [&](int i, ID3D11PixelShader* ps, ID3D11ShaderResourceView* srv, float x, float y, float z) {
+            const float dir[4] = {x, y, z, 0};
+            writeCB(a, a.cbProbe, dir);
+            ID3D11Buffer* pcb = a.cbProbe;
+            c->PSSetConstantBuffers(0, 1, &pcb);
+            c->PSSetShader(ps, nullptr, 0);
+            drawQuad(a, sx(i), sy, 64, 64, 0.5f, white, srv, a.smpPoint);
+        };
+        probe(12, a.cubePS, a.srvCube, 1, 0, 0);
+        probe(13, a.cubePS, a.srvCube, 0, 0, -1);
+        probe(14, a.volPS, a.srv3D, 0, 0, 0.625f);
+        c->PSSetShader(a.uiPS, nullptr, 0);
+        drawQuad(a, sx(15), sy, 64, 64, 0.5f, white, a.srvUpdate, a.smpPoint);
     }
 
     // sync point for the CPU throttle
@@ -1383,6 +1466,10 @@ void verifyCapture(App& a, const CaptureResult& cap)
         {"BC1 texture", {255, 130, 0}, 10},
         {"DDS via D3DX11CreateTextureFromMemory", {0, 203, 99}, 10},
         {"DDS loaded as STAGING then CopyResource", {0, 203, 99}, 10},
+        {"cube map, +X face", {200, 50, 50}, 3},
+        {"cube map, -Z face", {50, 200, 200}, 3},
+        {"3D texture, slice 2", {0, 0, 255}, 3},
+        {"UpdateSubresource on a DEFAULT texture", {255, 128, 255}, 3},
     };
     const int sy = a.H - 88;
     int bad = 0;
