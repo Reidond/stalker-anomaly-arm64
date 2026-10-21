@@ -11,7 +11,7 @@
 
 #pragma comment(lib,"winmm.lib")
 
-#ifdef DEBUG
+#if defined(DEBUG) && !defined(XR_PLATFORM_APPLE)
 # include <malloc.h>
 #endif // DEBUG
 
@@ -172,7 +172,7 @@ void xrCore::_initialize(LPCSTR _ApplicationName, LogCallback cb, BOOL init_fs, 
 		Msg("Game started: %s\n", timeInDMYHMSMMM().c_str());
 		EFS._initialize();
 #ifdef DEBUG
-#ifndef _EDITOR
+#if !defined(_EDITOR) && !defined(XR_PLATFORM_APPLE)
         Msg("Process heap 0x%08x", GetProcessHeap());
 #endif
 #endif // DEBUG
