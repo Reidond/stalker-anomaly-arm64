@@ -882,6 +882,7 @@ BOOL SetFileAttributes(const char* path, DWORD attr);
 // ---------------------------------------------------------------------------------------------
 typedef const GUID& REFGUID;
 typedef const GUID& REFCLSID;
+typedef const GUID& REFIID; // IID is GUID above; xrNetServer/net_shared.h names REFIID
 inline bool operator==(const GUID& a, const GUID& b) { return memcmp(&a, &b, sizeof(GUID)) == 0; }
 inline bool operator!=(const GUID& a, const GUID& b) { return !(a == b); }
 inline bool IsEqualGUID(const GUID& a, const GUID& b) { return a == b; }
