@@ -978,9 +978,18 @@ void CHW::selectResolution(u32& dwWidth, u32& dwHeight, BOOL bWindowed)
         GetMonitorResolution(psCurrentVidMode[0], psCurrentVidMode[1]);
 
 #if defined(XR_PLATFORM_IOS)
-	// the window always covers the screen: the drawable size is the only resolution there is
+	// the window always covers the screen. The render size is the screen's pixels, or vid_mode when that is smaller (a render scale
+	// for the iPad: the Metal layer scales the drawable to the view)
 	if (xr_apple_window::GetClientSize(Device.m_hWnd, dwWidth, dwHeight))
+	{
+		if (g_screenmode != 0 && psCurrentVidMode[0] >= 320 && psCurrentVidMode[1] >= 240 && psCurrentVidMode[0] <= dwWidth &&
+			psCurrentVidMode[1] <= dwHeight)
+		{
+			dwWidth = psCurrentVidMode[0];
+			dwHeight = psCurrentVidMode[1];
+		}
 		return;
+	}
 #endif
 	if (g_screenmode == 0)
 	{
