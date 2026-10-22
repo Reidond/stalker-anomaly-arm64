@@ -27,8 +27,12 @@
 
 namespace luabind {
 
+    namespace detail { void set_main_state(lua_State* L); } // ref.cpp
+
     void open(lua_State* L)
     {
+        detail::set_main_state(L);
+
         // get the global class registry, or create one if it doesn't exist
         // (it's global within a lua state)
         detail::class_registry* r = nullptr;

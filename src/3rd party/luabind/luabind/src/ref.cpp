@@ -138,8 +138,16 @@ namespace luabind { namespace detail
 		return ref;
 	}
 
+	// The main thread of the (one) Lua VM, set by luabind::open(). A lua_reference remembers the state it was made on, which is
+	// usually the coroutine a script runs in and can be collected long before the reference is released (when a C++ object holding
+	// a functor dies, or when the VM closes): unref must not touch that thread's stack. The registry is shared by all threads.
+	static lua_State* g_main_state = 0;
+	void set_main_state(lua_State* L) { g_main_state = L; }
+
 	void LUABIND_API unref(lua_State *L, int ref)
 	{
+		if (g_main_state)
+			L = g_main_state;
 		try
 		{
 			int t = LUA_REGISTRYINDEX;

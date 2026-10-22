@@ -311,10 +311,15 @@ CScriptStorage::CScriptStorage()
 #endif //-USE_LUA_STUDIO
 }
 
+namespace luabind { namespace detail { void set_main_state(lua_State* L); } } // luabind/src/ref.cpp
+
 CScriptStorage::~CScriptStorage()
 {
 	if (m_virtual_machine)
+	{
 		lua_close(m_virtual_machine);
+		luabind::detail::set_main_state(0); // luabind releases its registry slots on the main thread, which is gone now
+	}
 }
 
 extern int luaopen_lua_extensions(lua_State* L, bool IsDebug = false);
@@ -394,7 +399,10 @@ BOOL lua_debug = FALSE;
 void CScriptStorage::reinit()
 {
 	if (m_virtual_machine)
+	{
 		lua_close(m_virtual_machine);
+		luabind::detail::set_main_state(0);
+	}
 
 #ifdef USE_GSC_MEM_ALLOC
     m_virtual_machine = lua_newstate(lua_alloc, NULL);
