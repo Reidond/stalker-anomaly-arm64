@@ -1,0 +1,10 @@
+# The options menu on the iPad (docs/ios-port/SETTINGS.md): Settings from the main menu by keyboard (Down three times, Return), then a
+# screenshot of the Visual / Basic page. The screenshot is written to Library/Application Support/Anomaly/appdata/screenshots.
+#   tools/ios/ipad.sh script tools/ios/scripts/settings_menu.txt
+1 console r_screenshot_mode png
+6 key Down
+7 key Down
+8 key Down
+9 key Return
+13 console screenshot ipad_options_basic
+15 quit
