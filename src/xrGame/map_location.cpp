@@ -350,7 +350,14 @@ void CMapLocation::CalcLevelName()
 
 bool CMapLocation::Update() //returns actual
 {
+#ifdef XR_PLATFORM_APPLE
+	// Updated twice in one device frame (the map update runs on the parallel thread and is queued once per CLevel::OnFrame; a
+	// load that runs inside a frame lets a second OnFrame in before dwFrame advances): the result of the first one is current.
+	if (m_cached.m_updatedFrame == Device.dwFrame)
+		return m_cached.m_Actuality;
+#else
 	R_ASSERT(m_cached.m_updatedFrame!=Device.dwFrame);
+#endif
 
 	if (m_flags.test(eTTL))
 	{
