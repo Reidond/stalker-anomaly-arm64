@@ -140,7 +140,10 @@ void CEffect_Rain::Born(Item& dest, float radius, float speed)
 
 	// Born
 	float height = max_distance;
-	RenewItem(dest, height, RayPick(dest.P, dest.D, height, collide::rqtBoth));
+	// RayPick shortens `height` (a reference), and RenewItem reads it: MSVC evaluated the arguments right to left, so the
+	// call came first. clang on arm64 goes left to right and passed the unshortened height (rain fell through roofs).
+	const BOOL hit = RayPick(dest.P, dest.D, height, collide::rqtBoth);
+	RenewItem(dest, height, hit);
 }
 
 BOOL CEffect_Rain::RayPick(const Fvector& s, const Fvector& d, float& range, collide::rq_target tgt)
