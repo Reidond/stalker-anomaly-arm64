@@ -40,9 +40,9 @@ list(APPEND xrengine_sources
 )
 
 # Third-party code xrEngine compiles itself (the Windows solution has imgui.vcxproj and giflib.vcxproj). Dear ImGui
-# without its DX9/10/11 backends: the renderer draws it. imconfig.h routes IM_ASSERT to the engine log, so it takes the
+# without its DX9/DX10 backends: the renderer draws it through the stock DX11 backend, which runs on the Metal shim. imconfig.h routes IM_ASSERT to the engine log, so it takes the
 # engine include configuration.
-anomaly_vcxproj_sources(imgui_sources "${ANOMALY_SRC_DIR}/3rd party/imgui/imgui.vcxproj" EXCLUDE "backends/")
+anomaly_vcxproj_sources(imgui_sources "${ANOMALY_SRC_DIR}/3rd party/imgui/imgui.vcxproj" EXCLUDE "backends/imgui_impl_dx9" "backends/imgui_impl_dx10")
 anomaly_add_module(xrImGui SOURCES ${imgui_sources} INCLUDE_DIRS "${ANOMALY_SRC_DIR}/3rd party/imgui")
 anomaly_vcxproj_sources(giflib_sources "${ANOMALY_SRC_DIR}/3rd party/giflib/giflib.vcxproj")
 anomaly_add_module(giflib SOURCES ${giflib_sources} INCLUDE_DIRS "${ANOMALY_SRC_DIR}/3rd party/giflib")
