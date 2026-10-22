@@ -49,6 +49,7 @@ IC void CGameVertexPathManager::setup(
 	);
 	m_evaluator = &parameters;
 	m_evaluator->m_vertex_id = _index_type(-1);
+	m_start_is_accessible = true; // is_accessible() reads it; it was uninitialised for the very call that sets it
 	m_start_is_accessible = is_accessible(_start_node_index);
 }
 
