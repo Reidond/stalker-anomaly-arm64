@@ -118,6 +118,9 @@ hard_stop=$(( timeout_s - 60 ))
             printf "%.1f key Space\n",   36*s
             printf "%.1f key Space\n",   48*s
         }'
+        # a cold shader cache makes the loading take minutes, so the "press any key" of its end cannot be on a fixed time:
+        # keep tapping (Left Shift is the least harmful key once the game runs)
+        awk -v s="$scale" -v end="${quit_after:-$hard_stop}" 'BEGIN{ for (t = 60; t < end / s; t += 15) printf "%.1f key Left Shift\n", t*s }'
     elif [ "$menu_only" = 0 ]; then
         echo "4 console start server(sweep_base/single/alife/load) client(localhost)"
         # every loading screen (also the one of a reload) waits for "press any key" and the game does not run until then; a tap of Left Shift (sprint) is the least harmful key
