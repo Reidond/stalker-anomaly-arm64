@@ -250,6 +250,8 @@ void Shutdown()
 
 bool IsRunning() { return g_app.running; }
 
+bool InGame() { return g_app.running && g_pGameLevel && g_pGameLevel->bReady && Device.dwPrecacheFrame == 0; }
+
 void HandleEvent(const SDL_Event& event)
 {
 	if (g_app.core_ready)

@@ -62,6 +62,10 @@ ENGINE_API void Shutdown();
 
 ENGINE_API bool IsRunning();
 
+// True while a single-player level is loaded and running: not loading, not the main menu. The app saves only then when it goes to the
+// background.
+ENGINE_API bool InGame();
+
 // An event the app received in SDL_AppEvent. SDL3's callback loop takes every event out of the queue before the engine's
 // frame (Frame() pumps only what is left, which is nothing outside the long loads), so the app has to hand them over.
 ENGINE_API void HandleEvent(const SDL_Event& event);
