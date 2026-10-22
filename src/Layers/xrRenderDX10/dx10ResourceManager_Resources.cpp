@@ -185,9 +185,11 @@ SVS* CResourceManager::_CreateVS(LPCSTR _name)
 
 		// duplicate and zero-terminate
 		IReader* file = FS.r_open(cname);
+		bool stubbed = false;
 		//	TODO: DX10: HACK: Implement all shaders. Remove this for PS
 		if (!file)
 		{
+			stubbed = true;
 			string1024 tmp;
 			xr_sprintf(tmp, "DX10: %s is missing. Replace with stub_default.vs", cname);
 			Msg(tmp);
@@ -237,7 +239,7 @@ SVS* CResourceManager::_CreateVS(LPCSTR _name)
 			make_string("Shader compilation failed, check your log file for additional information.")
 		);
 #if defined(XR_PLATFORM_APPLE)
-		mtl_d3d11::SetDebugName(_vs->vs, name);
+		mtl_d3d11::SetDebugName(_vs->vs, stubbed ? (xr_string(name) + " [missing, stub_default]").c_str() : name);
 #endif
 
 		return _vs;
@@ -311,9 +313,11 @@ SPS* CResourceManager::_CreatePS(LPCSTR _name)
 
 		// duplicate and zero-terminate
 		IReader* file = FS.r_open(cname);
+		bool stubbed = false;
 		//	TODO: DX10: HACK: Implement all shaders. Remove this for PS
 		if (!file)
 		{
+			stubbed = true;
 			string1024 tmp;
 			//	TODO: HACK: Test failure
 			//Memory.mem_compact();
@@ -379,7 +383,7 @@ SPS* CResourceManager::_CreatePS(LPCSTR _name)
 			make_string("Shader compilation failed, check your log file for additional information.")
 		);
 #if defined(XR_PLATFORM_APPLE)
-		mtl_d3d11::SetDebugName(_ps->ps, name);
+		mtl_d3d11::SetDebugName(_ps->ps, stubbed ? (xr_string(name) + " [missing, stub_default]").c_str() : name);
 #endif
 
 		return _ps;
