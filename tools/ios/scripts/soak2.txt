@@ -1,0 +1,449 @@
+# 21 minute soak in the Cordon, second pass: teleports to eight spots in turn so the scene changes, re-equips the AK-74 with the combat wheel
+# (the PDA leaves the hands empty, as in stock), walks, fires, opens the PDA and the inventory. usage: tools/ios/ipad.sh script tools/ios/scripts/soak2.txt -dbg
+8 console start server(ipad_armed/single/alife/load) client(localhost)
+45 key Space
+50 console g_god on
+50 console g_unlimitedammo on
+52 padon
+55 console run_string ipad_debug.tp(54.9, 3.5, 157.1)
+56 console run_string ipad_debug.state("soak2 0")
+57 paddown r1
+58 padaxis rx 1
+60 padaxis rx 0
+61 padup r1
+63 padaxis ly -1
+73 padaxis ly 0
+74 padaxis rx 1
+75 padaxis rx 0
+76 padaxis ly -1
+86 padaxis ly 0
+87 padaxis l2 1
+88 padaxis r2 1
+90 padaxis r2 0
+91 padaxis l2 0
+92 pad touchpad 300
+96 pad circle
+98 paddown l1
+100 padup l1
+102 pad create 300
+106 pad circle
+115 console run_string ipad_debug.tp(29.9, -1.2, 192.4)
+116 console run_string ipad_debug.state("soak2 1")
+117 paddown r1
+118 padaxis rx 1
+120 padaxis rx 0
+121 padup r1
+123 padaxis ly -1
+133 padaxis ly 0
+134 padaxis rx -1
+135 padaxis rx 0
+136 padaxis ly -1
+146 padaxis ly 0
+147 padaxis l2 1
+148 padaxis r2 1
+150 padaxis r2 0
+151 padaxis l2 0
+152 pad touchpad 300
+156 pad circle
+158 paddown l1
+160 padup l1
+162 pad create 300
+166 pad circle
+175 console run_string ipad_debug.tp(-5.3, 12.4, 170.8)
+176 console run_string ipad_debug.state("soak2 2")
+177 paddown r1
+178 padaxis rx 1
+180 padaxis rx 0
+181 padup r1
+183 padaxis ly -1
+193 padaxis ly 0
+194 padaxis rx 1
+195 padaxis rx 0
+196 padaxis ly -1
+206 padaxis ly 0
+207 padaxis l2 1
+208 padaxis r2 1
+210 padaxis r2 0
+211 padaxis l2 0
+212 pad touchpad 300
+216 pad circle
+218 paddown l1
+220 padup l1
+222 pad create 300
+226 pad circle
+235 console run_string ipad_debug.tp(-34.7, 19.3, 162.1)
+236 console run_string ipad_debug.state("soak2 3")
+237 paddown r1
+238 padaxis rx 1
+240 padaxis rx 0
+241 padup r1
+243 padaxis ly -1
+253 padaxis ly 0
+254 padaxis rx -1
+255 padaxis rx 0
+256 padaxis ly -1
+266 padaxis ly 0
+267 padaxis l2 1
+268 padaxis r2 1
+270 padaxis r2 0
+271 padaxis l2 0
+272 pad touchpad 300
+276 pad circle
+278 paddown l1
+280 padup l1
+282 pad create 300
+286 pad circle
+295 console run_string ipad_debug.tp(-64.1, 23.3, 162.6)
+296 console run_string ipad_debug.state("soak2 4")
+297 paddown r1
+298 padaxis rx 1
+300 padaxis rx 0
+301 padup r1
+303 padaxis ly -1
+313 padaxis ly 0
+314 padaxis rx 1
+315 padaxis rx 0
+316 padaxis ly -1
+326 padaxis ly 0
+327 padaxis l2 1
+328 padaxis r2 1
+330 padaxis r2 0
+331 padaxis l2 0
+332 pad touchpad 300
+336 pad circle
+338 paddown l1
+340 padup l1
+342 pad create 300
+346 pad circle
+355 console run_string ipad_debug.tp(-85.5, 26.4, 166.1)
+356 console run_string ipad_debug.state("soak2 5")
+357 paddown r1
+358 padaxis rx 1
+360 padaxis rx 0
+361 padup r1
+363 padaxis ly -1
+373 padaxis ly 0
+374 padaxis rx -1
+375 padaxis rx 0
+376 padaxis ly -1
+386 padaxis ly 0
+387 padaxis l2 1
+388 padaxis r2 1
+390 padaxis r2 0
+391 padaxis l2 0
+392 pad touchpad 300
+396 pad circle
+398 paddown l1
+400 padup l1
+402 pad create 300
+406 pad circle
+415 console run_string ipad_debug.tp(-116.8, 12.8, 192.6)
+416 console run_string ipad_debug.state("soak2 6")
+417 paddown r1
+418 padaxis rx 1
+420 padaxis rx 0
+421 padup r1
+423 padaxis ly -1
+433 padaxis ly 0
+434 padaxis rx 1
+435 padaxis rx 0
+436 padaxis ly -1
+446 padaxis ly 0
+447 padaxis l2 1
+448 padaxis r2 1
+450 padaxis r2 0
+451 padaxis l2 0
+452 pad touchpad 300
+456 pad circle
+458 paddown l1
+460 padup l1
+462 pad create 300
+466 pad circle
+475 console run_string ipad_debug.tp(-152.1, 11.6, 219.7)
+476 console run_string ipad_debug.state("soak2 7")
+477 paddown r1
+478 padaxis rx 1
+480 padaxis rx 0
+481 padup r1
+483 padaxis ly -1
+493 padaxis ly 0
+494 padaxis rx -1
+495 padaxis rx 0
+496 padaxis ly -1
+506 padaxis ly 0
+507 padaxis l2 1
+508 padaxis r2 1
+510 padaxis r2 0
+511 padaxis l2 0
+512 pad touchpad 300
+516 pad circle
+518 paddown l1
+520 padup l1
+522 pad create 300
+526 pad circle
+535 console run_string ipad_debug.tp(54.9, 3.5, 157.1)
+536 console run_string ipad_debug.state("soak2 8")
+537 paddown r1
+538 padaxis rx 1
+540 padaxis rx 0
+541 padup r1
+543 padaxis ly -1
+553 padaxis ly 0
+554 padaxis rx 1
+555 padaxis rx 0
+556 padaxis ly -1
+566 padaxis ly 0
+567 padaxis l2 1
+568 padaxis r2 1
+570 padaxis r2 0
+571 padaxis l2 0
+572 pad touchpad 300
+576 pad circle
+578 paddown l1
+580 padup l1
+582 pad create 300
+586 pad circle
+595 console run_string ipad_debug.tp(29.9, -1.2, 192.4)
+596 console run_string ipad_debug.state("soak2 9")
+597 paddown r1
+598 padaxis rx 1
+600 padaxis rx 0
+601 padup r1
+603 padaxis ly -1
+613 padaxis ly 0
+614 padaxis rx -1
+615 padaxis rx 0
+616 padaxis ly -1
+626 padaxis ly 0
+627 padaxis l2 1
+628 padaxis r2 1
+630 padaxis r2 0
+631 padaxis l2 0
+632 pad touchpad 300
+636 pad circle
+638 paddown l1
+640 padup l1
+642 pad create 300
+646 pad circle
+655 console run_string ipad_debug.tp(-5.3, 12.4, 170.8)
+656 console run_string ipad_debug.state("soak2 10")
+657 paddown r1
+658 padaxis rx 1
+660 padaxis rx 0
+661 padup r1
+663 padaxis ly -1
+673 padaxis ly 0
+674 padaxis rx 1
+675 padaxis rx 0
+676 padaxis ly -1
+686 padaxis ly 0
+687 padaxis l2 1
+688 padaxis r2 1
+690 padaxis r2 0
+691 padaxis l2 0
+692 pad touchpad 300
+696 pad circle
+698 paddown l1
+700 padup l1
+702 pad create 300
+706 pad circle
+715 console run_string ipad_debug.tp(-34.7, 19.3, 162.1)
+716 console run_string ipad_debug.state("soak2 11")
+717 paddown r1
+718 padaxis rx 1
+720 padaxis rx 0
+721 padup r1
+723 padaxis ly -1
+733 padaxis ly 0
+734 padaxis rx -1
+735 padaxis rx 0
+736 padaxis ly -1
+746 padaxis ly 0
+747 padaxis l2 1
+748 padaxis r2 1
+750 padaxis r2 0
+751 padaxis l2 0
+752 pad touchpad 300
+756 pad circle
+758 paddown l1
+760 padup l1
+762 pad create 300
+766 pad circle
+775 console run_string ipad_debug.tp(-64.1, 23.3, 162.6)
+776 console run_string ipad_debug.state("soak2 12")
+777 paddown r1
+778 padaxis rx 1
+780 padaxis rx 0
+781 padup r1
+783 padaxis ly -1
+793 padaxis ly 0
+794 padaxis rx 1
+795 padaxis rx 0
+796 padaxis ly -1
+806 padaxis ly 0
+807 padaxis l2 1
+808 padaxis r2 1
+810 padaxis r2 0
+811 padaxis l2 0
+812 pad touchpad 300
+816 pad circle
+818 paddown l1
+820 padup l1
+822 pad create 300
+826 pad circle
+835 console run_string ipad_debug.tp(-85.5, 26.4, 166.1)
+836 console run_string ipad_debug.state("soak2 13")
+837 paddown r1
+838 padaxis rx 1
+840 padaxis rx 0
+841 padup r1
+843 padaxis ly -1
+853 padaxis ly 0
+854 padaxis rx -1
+855 padaxis rx 0
+856 padaxis ly -1
+866 padaxis ly 0
+867 padaxis l2 1
+868 padaxis r2 1
+870 padaxis r2 0
+871 padaxis l2 0
+872 pad touchpad 300
+876 pad circle
+878 paddown l1
+880 padup l1
+882 pad create 300
+886 pad circle
+895 console run_string ipad_debug.tp(-116.8, 12.8, 192.6)
+896 console run_string ipad_debug.state("soak2 14")
+897 paddown r1
+898 padaxis rx 1
+900 padaxis rx 0
+901 padup r1
+903 padaxis ly -1
+913 padaxis ly 0
+914 padaxis rx 1
+915 padaxis rx 0
+916 padaxis ly -1
+926 padaxis ly 0
+927 padaxis l2 1
+928 padaxis r2 1
+930 padaxis r2 0
+931 padaxis l2 0
+932 pad touchpad 300
+936 pad circle
+938 paddown l1
+940 padup l1
+942 pad create 300
+946 pad circle
+955 console run_string ipad_debug.tp(-152.1, 11.6, 219.7)
+956 console run_string ipad_debug.state("soak2 15")
+957 paddown r1
+958 padaxis rx 1
+960 padaxis rx 0
+961 padup r1
+963 padaxis ly -1
+973 padaxis ly 0
+974 padaxis rx -1
+975 padaxis rx 0
+976 padaxis ly -1
+986 padaxis ly 0
+987 padaxis l2 1
+988 padaxis r2 1
+990 padaxis r2 0
+991 padaxis l2 0
+992 pad touchpad 300
+996 pad circle
+998 paddown l1
+1000 padup l1
+1002 pad create 300
+1006 pad circle
+1015 console run_string ipad_debug.tp(54.9, 3.5, 157.1)
+1016 console run_string ipad_debug.state("soak2 16")
+1017 paddown r1
+1018 padaxis rx 1
+1020 padaxis rx 0
+1021 padup r1
+1023 padaxis ly -1
+1033 padaxis ly 0
+1034 padaxis rx 1
+1035 padaxis rx 0
+1036 padaxis ly -1
+1046 padaxis ly 0
+1047 padaxis l2 1
+1048 padaxis r2 1
+1050 padaxis r2 0
+1051 padaxis l2 0
+1052 pad touchpad 300
+1056 pad circle
+1058 paddown l1
+1060 padup l1
+1062 pad create 300
+1066 pad circle
+1075 console run_string ipad_debug.tp(29.9, -1.2, 192.4)
+1076 console run_string ipad_debug.state("soak2 17")
+1077 paddown r1
+1078 padaxis rx 1
+1080 padaxis rx 0
+1081 padup r1
+1083 padaxis ly -1
+1093 padaxis ly 0
+1094 padaxis rx -1
+1095 padaxis rx 0
+1096 padaxis ly -1
+1106 padaxis ly 0
+1107 padaxis l2 1
+1108 padaxis r2 1
+1110 padaxis r2 0
+1111 padaxis l2 0
+1112 pad touchpad 300
+1116 pad circle
+1118 paddown l1
+1120 padup l1
+1122 pad create 300
+1126 pad circle
+1135 console run_string ipad_debug.tp(-5.3, 12.4, 170.8)
+1136 console run_string ipad_debug.state("soak2 18")
+1137 paddown r1
+1138 padaxis rx 1
+1140 padaxis rx 0
+1141 padup r1
+1143 padaxis ly -1
+1153 padaxis ly 0
+1154 padaxis rx 1
+1155 padaxis rx 0
+1156 padaxis ly -1
+1166 padaxis ly 0
+1167 padaxis l2 1
+1168 padaxis r2 1
+1170 padaxis r2 0
+1171 padaxis l2 0
+1172 pad touchpad 300
+1176 pad circle
+1178 paddown l1
+1180 padup l1
+1182 pad create 300
+1186 pad circle
+1195 console run_string ipad_debug.tp(-34.7, 19.3, 162.1)
+1196 console run_string ipad_debug.state("soak2 19")
+1197 paddown r1
+1198 padaxis rx 1
+1200 padaxis rx 0
+1201 padup r1
+1203 padaxis ly -1
+1213 padaxis ly 0
+1214 padaxis rx -1
+1215 padaxis rx 0
+1216 padaxis ly -1
+1226 padaxis ly 0
+1227 padaxis l2 1
+1228 padaxis r2 1
+1230 padaxis r2 0
+1231 padaxis l2 0
+1232 pad touchpad 300
+1236 pad circle
+1238 paddown l1
+1240 padup l1
+1242 pad create 300
+1246 pad circle
+1258 console run_string ipad_debug.state("soak2 end")
+1261 quit

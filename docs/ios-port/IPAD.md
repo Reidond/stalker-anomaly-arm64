@@ -9,10 +9,10 @@ with the free Personal Team, `RelWithDebInfo` build, game data in `Documents/Ano
 | App boots, finds the data and the overlay | Yes. Engine up 3.5 s after launch (7.8 s the very first time) |
 | Main menu | Yes, 60 fps |
 | New game (faction dialog, Start, two loads, the Cordon) | Yes, about 45 s from "Start" to the first world frame |
-| Play | Walking, rain, AI ticking, outdoors and interiors, teleporting around the level: 55 to 60 fps |
+| Play | Walking, rain, AI ticking, outdoors and interiors, teleporting around the level: 60 fps in the field, 49 to 55 at the village ([long runs](#long-runs-stability-and-thermal)) |
 | Save, load | Yes (`save`, the menu, and an automatic save when the app loses the screen) |
 | Background and return | Yes: the game pauses, saves first, resumes at 60 fps |
-| DualSense, sound | See [Hands-on](#hands-on-session) |
+| DualSense, sound | Virtual pad on the iPad: yes. First hands-on session: sound and look fine; the rest is [deferred to M5](#deferred-to-m5-hands-on-dualsense-test) |
 
 ## Install
 
@@ -157,6 +157,9 @@ would need the renderer to reload them. With 4.2 GB of headroom at the preset th
   or within 30 s of the previous one. So a jetsam kill or a force quit of the backgrounded app loses nothing.
 - **Terminate**. `SDL_EVENT_TERMINATING` (rare: a suspended app is killed without being told) leaves the level through the engine's disconnect
   (`KERNEL:disconnect` and `quit`), for up to 4 s. A normal quit (the menu's Exit, the script's `quit`) goes the same way and was clean in every run.
+- **Sound output**. The session is `Ambient` (mixes with other apps, yields to calls). When the sound is "gone" look at the route first: the engine log says
+  `SOUND: audio session ready, output route: <port name> (<port type>)` at start (the speaker is `Speaker`, in the iPad's language, then `(Speaker)`) and `SOUND: output route changed: ...` when a device appears or goes away. The
+  one report of lost sound was the iPad's output moving to AirPods Max that had connected on their own; the speaker was silent because nothing was sent to it.
 - **Screen awake**. `SetKeepScreenAwake` keeps the idle timer off while the game is in the foreground. A 6-minute session with no touch
   stayed lit (see the idle result below).
 - **Frame pacing**. The app runs on SDL's `CADisplayLink` at the display's rate and presents with three drawables. The iPad Air's panel is 60 Hz
@@ -173,6 +176,23 @@ scheduler, AI, Lua) about 2.8 ms. Lua's `lua_pcall` is 0.66 s, 8% of the main th
 by Lua. A secondary engine thread uses 36% of a core. So: **GPU bound** at the native size, at 1600x1200 and above; at the preset GPU and
 vsync, with the CPU at about 45% of a frame.
 
+## Long runs: stability and thermal
+
+Two soaks with the virtual DualSense on the `ipad_armed` save (god mode on, `-dbg`): `tools/ios/scripts/soak.txt` (27 minutes) and `soak2.txt` (21 minutes).
+Both ended with exit code 0: no crash, no memory warning, no lifecycle event, the screen stayed on.
+
+- **Soak 1**: walks west from the village for 10 minutes (220 m), then stands against the edge of the walkable area for 16 more, so it is mostly one scene. 162
+  samples of the 10 s line: 60.0 fps on average (one 52 fps window while the level was still streaming in), GPU 14.4 ms (max 16.5), footprint 3.94 to 4.10 GB
+  (about 100 MB of growth after the first 3 minutes, 4 MB a minute), at least 4.09 GB available, thermal Nominal the whole time.
+- **Soak 2**: teleports to eight spots in turn, re-equips the AK-74 with the combat wheel, walks, fires, opens the PDA and the inventory. 125 samples: 55.2 fps on
+  average, 45 at worst, footprint 3.96 to 4.07 GB. The frame rate depends on the place and repeats from lap to lap: the open field is 56 to 60 fps, the
+  village is 49 to 55 (GPU 15.2 to 16.2 ms against a 16.7 ms frame, max 22). So the preset is not a flat 60: the heaviest spots are GPU bound just under it.
+- **Thermal**: Nominal to Serious after 4.6 minutes in soak 2 (the iPad had been run for an hour), and it stayed Serious for the remaining 16. The same spot
+  gave the same frame rate before and after (village 51.9 Nominal, then 55.6 and 55.1 Serious; the next spot 49.1, then 51.6 and 50.9), and the GPU time did not
+  move, so no throttling shows at Serious. Soak 1 started cool and never left Nominal. Critical was never seen.
+- Four more runs with `MallocGuardEdges`, `MallocScribble` and `MallocStackLogging` (`ANOMALY_LAUNCH_ENV`) loaded the save, played a minute and exited cleanly:
+  the heap abort of Known issues did not show in them or in the two soaks (about 3 hours of play in all).
+
 ## Launch arguments
 
 | Argument | Meaning |
@@ -184,7 +204,7 @@ vsync, with the CPU at about 45% of a frame.
 
 Test scripts in `tools/ios/scripts/`: `new_game.txt` (menu, faction dialog, Start, the Cordon, a walk, a save: makes the `ipad_test` save),
 `load_game.txt`, `tour.txt` (four places of the Cordon), `res_sweep.sh`, `sweep_gpu.txt`, `memory_pressure.txt`. The shell log line every 10 s has
-fps, CPU ms inside `Frame()`, GPU ms, footprint (peak) and available memory.
+fps, CPU ms inside `Frame()`, GPU ms, footprint (peak), available memory and the thermal state. `soak.txt` and `soak2.txt` are the long runs (below).
 
 ## Known issues
 
@@ -198,6 +218,8 @@ fps, CPU ms inside `Frame()`, GPU ms, footprint (peak) and available memory.
   iPad (the push script skips `bin/`), so OpenAL Soft runs on its defaults.
 - Runtime changes of `vid_mode` through the console work, but the engine saves the last one at exit, and it becomes the next start's size.
 - The main menu's "Exit to Windows" quits the app.
+- The Load game list was not screenshotted again after the colour fix (it uses the same Lua colours as the inventory list, which was). In a script the virtual
+  pad's analog stick moves the cursor sprite but the menu does not see a hover or a click from it; the D-pad nudge (96 UI units a step) does click.
 - The save screenshot (`.dds`) next to a save is black (the Load game preview shows black or noise).
 - Three `SIGABRT`s from libmalloc (`pointer being freed was not allocated`) in about 35 runs, at different places (vkd3d, `CloseLog` at shutdown): a
   double free or a foreign pointer somewhere, passed to the crash-sweep session.
@@ -223,6 +245,10 @@ dash and its kind; actions without an item (Quick save, Drop, Safe mode, ...) ar
 follows the stick with a frame-rate independent lerp, and it closes instantly because the wheel is used often. A label is always on screen, so nothing
 depends on the motion.
 
+Two things that look like bugs and are not. The touchpad opens the PDA from the game, but while the PDA is up the pad is in the menu context, where the
+touchpad press is a click: **Circle** (`ESC`) closes it (Create does the same for the inventory). And closing the PDA leaves the hands empty, as in stock Anomaly
+(the PDA is the held item of slot 8): take the weapon out again with the combat wheel (R1, pick slot 3) or its slot key. `pad_test.txt` and the soaks do both.
+
 Not done: the Controls screen has no Gamepad column. A game started by script leaves the PDA and the outfit in the backpack (`slots(true)` moves the PDA to its
 slot; a normal new game from the menu was not checked), and the 3D PDA only rises from its slot.
 
@@ -233,8 +259,17 @@ negative numbers (`GetARGB(255, 216, 186, 140)` is -2573684, the alpha in the si
 is undefined for a negative value: x86 wrapped it, arm64 saturates it to 0. Every Lua-set colour became `00000000`, fully transparent (the list's
 glyph quads were being drawn, with vertex colour 0). Integer parameters now go through `long long`. This is very likely the Mac's "dark rectangles".
 
-## Hands-on session
+## Deferred to M5: hands-on DualSense test
 
-First session (before the controller fix): menu and loading fine, the look stick smooth and stable frame rate, sound good (it went to the AirPods Max once the
+First session (before the controller fix): menu and loading fine, the look stick smooth and a stable frame rate, sound good (it went to the AirPods Max once the
 iPad had them connected), background and return fine. Movement, Create, touchpad, L1 and R1 did nothing, the list text and the item icons were missing:
-all of it fixed above. A second session with the fixed build is pending.
+all of it fixed above, and re-checked with the virtual DualSense. The second session, with a real pad and the fixed build, moves to M5 (PLAN.md).
+Load the `ipad_armed` save (`tools/ios/scripts/pad_test.txt` makes it: AK-74 in hand, PDA in slot 8, outfit, quick slots F1 medkit, F3 bread, F4 flask).
+
+- [ ] Menu: virtual cursor with the left stick, Cross to click, Circle to go back
+- [ ] Move, look, jump, crouch, sprint
+- [ ] Aim (L2) and shoot (R2) with the AK-74; reload
+- [ ] Inventory (Create), PDA (touchpad press, press again to close); drag and drop with the cursor
+- [ ] Radial wheels: hold L1 (items) and R1 (combat), pick with the right stick, flip pages with D-pad left/right, release to use
+- [ ] Rumble on a hit, light bar colour, adaptive trigger resistance
+- [ ] Sound (effects, music, ambience); PS button or Control Center and back: pause, resume, sound

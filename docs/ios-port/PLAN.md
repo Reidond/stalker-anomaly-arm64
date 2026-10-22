@@ -95,7 +95,7 @@ Gamepad: `xr_input_xinput.*` is commented out, so the engine has no working game
 | M2 | Metal renderer on macOS | Main menu, then Cordon renders with lighting, at about PC-low quality |
 | M3 | Input: SDL3 keyboard/mouse, DualSense layer, UI cursor, haptics | Full playthrough of the first quests on a pad, on the Mac |
 | M4 | iPad build: app bundle, signing, data import, memory, lifecycle, LuaJIT interpreter | Plays on the iPad at a stable 30+ fps with a sensible preset |
-| M5 | Polish: performance, addons via Files, adaptive triggers, crash logs | Daily-driver quality |
+| M5 | Polish: performance, addons via Files, adaptive triggers, crash logs; hands-on DualSense test on the iPad (checklist in IPAD.md) | Daily-driver quality |
 
 The Mac comes first because it has the same Metal, GameController and CPU architecture as the
 iPad, plus a debugger, fast iteration, and no 7-day signing or jetsam. That leaves only packaging
