@@ -93,9 +93,11 @@ HRESULT SwapChain::Present(UINT syncInterval, UINT flags)
     id<CAMetalDrawable> d = drawable_;
     drawable_ = nil;
     void (^pre)(id<MTLCommandBuffer>) = nil;
-    if (captureRequested_ && d)
+    // a drawable acquired before RequestCapture is still framebufferOnly: the capture waits for the next one
+    if (captureRequested_ && d && !d.texture.framebufferOnly)
     {
         captureRequested_ = false;
+        layer_.framebufferOnly = !cfg_.allowReadback;
         id<MTLTexture> src = d.texture;
         const NSUInteger w = src.width, h = src.height;
         id<MTLBuffer> buf = [dev_->mtl newBufferWithLength:w * h * 4 options:MTLResourceStorageModeShared];
@@ -136,6 +138,22 @@ HRESULT SwapChain::Present(UINT syncInterval, UINT flags)
     }
     ctx->present(d, pre);
     return S_OK;
+}
+
+void SwapChain::requestCapture()
+{
+    layer_.framebufferOnly = NO;
+    captureRequested_ = true;
+}
+
+bool SwapChain::pollCapture(CaptureResult* out)
+{
+    std::lock_guard<std::mutex> lk(captureMutex_);
+    if (!captureReady_)
+        return false;
+    *out = std::move(capture_);
+    captureReady_ = false;
+    return true;
 }
 
 bool SwapChain::waitCapture(CaptureResult* out)
@@ -266,6 +284,10 @@ void RequestCapture(IDXGISwapChain1* sc) { static_cast<SwapChain*>(static_cast<I
 bool WaitForCapture(IDXGISwapChain1* sc, CaptureResult* out)
 {
     return static_cast<SwapChain*>(static_cast<IDXGISwapChain3*>(sc))->waitCapture(out);
+}
+bool PollCapture(IDXGISwapChain1* sc, CaptureResult* out)
+{
+    return static_cast<SwapChain*>(static_cast<IDXGISwapChain3*>(sc))->pollCapture(out);
 }
 
 // TextureCore::current for back buffers is defined here because it needs the swap chain.
