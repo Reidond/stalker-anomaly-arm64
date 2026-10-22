@@ -1118,6 +1118,9 @@
     <ClCompile Include="r4_rendertarget_phase_PP.cpp">
       <Filter>Core_Target</Filter>
     </ClCompile>
+    <ClCompile Include="r4_rendertarget_phase_upscale.cpp">
+      <Filter>Core_Target</Filter>
+    </ClCompile>
     <ClCompile Include="r4_rendertarget_phase_rain.cpp">
       <Filter>Core_Target</Filter>
     </ClCompile>

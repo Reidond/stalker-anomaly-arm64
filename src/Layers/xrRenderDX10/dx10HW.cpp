@@ -59,6 +59,13 @@ CHW::CHW() :
 //pBaseRT(NULL),
 //pBaseZB(NULL)
 {
+#if defined(USE_DX11)
+    pBaseRT = nullptr;
+    pBaseZB = nullptr;
+    pUIZB = nullptr;
+    m_SceneWidth = m_SceneHeight = 0;
+    m_SceneScaled = false;
+#endif
     Device.seqAppActivate.Add(this);
     Device.seqAppDeactivate.Add(this);
 }
@@ -734,6 +741,7 @@ void CHW::DestroyDevice()
 
     _SHOW_REF("refCount:pBaseZB", pBaseZB);
     _RELEASE(pBaseZB);
+    _RELEASE(pUIZB);
 
     _SHOW_REF("refCount:pBaseRT", pBaseRT);
     _RELEASE(pBaseRT);
@@ -870,6 +878,7 @@ void CHW::Reset(HWND hwnd)
     _SHOW_REF("refCount:pBaseRT", pBaseRT);
 
     _RELEASE(pBaseZB);
+    _RELEASE(pUIZB);
     _RELEASE(pBaseRT);
 
 #if defined(USE_DX11)
@@ -1137,6 +1146,7 @@ void CHW::OnAppActivate()
         if (!strstr(Core.Params, dxgiOld)) {
             _SHOW_REF("refCount:pBaseZB", pBaseZB);
             _RELEASE(pBaseZB);
+            _RELEASE(pUIZB);
 
             _SHOW_REF("refCount:pBaseRT", pBaseRT);
             _RELEASE(pBaseRT);
@@ -1183,6 +1193,7 @@ void CHW::OnAppDeactivate()
         if (!strstr(Core.Params, dxgiOld)) {
             _SHOW_REF("refCount:pBaseZB", pBaseZB);
             _RELEASE(pBaseZB);
+            _RELEASE(pUIZB);
 
             _SHOW_REF("refCount:pBaseRT", pBaseRT);
             _RELEASE(pBaseRT);
@@ -1530,16 +1541,60 @@ void CHW::UpdateViews()
     //	Create Depth/stencil buffer
     //	HACK: DX10: hard depth buffer format
 	//R_CHK	(pDevice->GetDepthStencilSurface	(&pBaseZB));
+#if defined(USE_DX11)
+    UpdateSceneSize(sd.Width, sd.Height);
+    for (int role = 0; role < 2; ++role)
+    {
+        // role 0: the scene's depth (pBaseZB), role 1: the depth that goes with the swap chain (pUIZB)
+        if (role == 1)
+        {
+            if (m_SceneScaled)
+            {
+                // What draws into the back buffer after the upscale is 2D: no depth buffer (22 MB and its traffic at 2732x2048)
+                pUIZB = nullptr;
+            }
+            else
+            {
+                pUIZB = pBaseZB;
+                pUIZB->AddRef();
+            }
+            break;
+        }
+        ID3DDepthStencilView*& view = role == 0 ? pBaseZB : pUIZB;
+        ID3DTexture2D* pDepthStencil = NULL;
+
+        D3D_TEXTURE2D_DESC descDepth;
+        descDepth.Width  = role == 0 ? m_SceneWidth : sd.Width;
+        descDepth.Height = role == 0 ? m_SceneHeight : sd.Height;
+        descDepth.MipLevels          = 1;
+        descDepth.ArraySize          = 1;
+        descDepth.Format             = DXGI_FORMAT_D24_UNORM_S8_UINT;
+        descDepth.SampleDesc.Count   = 1;
+        descDepth.SampleDesc.Quality = 0;
+        descDepth.Usage              = D3D_USAGE_DEFAULT;
+        descDepth.BindFlags          = D3D_BIND_DEPTH_STENCIL;
+        descDepth.CPUAccessFlags     = 0;
+        descDepth.MiscFlags          = 0;
+
+        R = pDevice->CreateTexture2D(
+                &descDepth,      // Texture desc
+                NULL,            // Initial data
+                &pDepthStencil); // [out] Texture
+
+        R_CHK(R);
+
+        //	Create Depth/stencil view
+        R = pDevice->CreateDepthStencilView(pDepthStencil, NULL, &view);
+        R_CHK(R);
+
+        pDepthStencil->Release();
+    }
+#else
 	ID3DTexture2D* pDepthStencil = NULL;
 
     D3D_TEXTURE2D_DESC descDepth;
-#if defined(USE_DX11)
-	descDepth.Width  = sd.Width;
-	descDepth.Height = sd.Height;
-#elif defined(USE_DX10)
     descDepth.Width  = sd.BufferDesc.Width;
 	descDepth.Height = sd.BufferDesc.Height;
-#endif
 	descDepth.MipLevels          = 1;
 	descDepth.ArraySize          = 1;
 	descDepth.Format             = DXGI_FORMAT_D24_UNORM_S8_UINT;
@@ -1562,5 +1617,29 @@ void CHW::UpdateViews()
     R_CHK(R);
 
     pDepthStencil->Release();
+#endif
 }
+
+#if defined(USE_DX11)
+void CHW::UpdateSceneSize(u32 outWidth, u32 outHeight)
+{
+    float scale = ps_r__render_scale;
+    clamp(scale, 0.25f, 1.0f);
+#if !defined(XR_PLATFORM_APPLE)
+    scale = 1.0f; // the render scale is only exercised on the Metal backend
+#endif
+    m_SceneScaled = scale < 0.999f;
+    if (!m_SceneScaled)
+    {
+        m_SceneWidth = outWidth;
+        m_SceneHeight = outHeight;
+        return;
+    }
+    // Even sizes: several render targets are half or quarter size
+    m_SceneWidth = std::max<u32>(64, u32(float(outWidth) * scale + 0.5f) & ~1u);
+    m_SceneHeight = std::max<u32>(64, u32(float(outHeight) * scale + 0.5f) & ~1u);
+    Msg("* Render scale %.2f: the scene renders at %ux%u, the output is %ux%u", scale, m_SceneWidth, m_SceneHeight,
+        outWidth, outHeight);
+}
+#endif
 #endif

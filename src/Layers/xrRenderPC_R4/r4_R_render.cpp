@@ -183,6 +183,19 @@ void CRender::render_menu()
 	RCache.set_Stencil(FALSE);
 	RCache.set_ColorWriteEnable();
 
+	if (HW.SceneScaled())
+	{
+		// Render scale: the menu is 2D and belongs at the output's resolution, but the "generic" targets the PP-UI is normally drawn
+		// into are scene sized. Draw it straight into the back buffer instead; what OnRenderPPUI_PP puts into the distortion mask
+		// is not applied then.
+		Target->u_setrt(Device.dwWidth, Device.dwHeight, HW.pBaseRT, NULL, NULL, HW_UIZB);
+		rmNormal();
+		FLOAT ColorRGBA[4] = {0.0f, 0.0f, 0.0f, 1.0f};
+		HW.pContext->ClearRenderTargetView(HW.pBaseRT, ColorRGBA);
+		g_pGamePersistent->OnRenderPPUI_main(); // PP-UI
+		return;
+	}
+
 	// Main Render
 	{
 		Target->u_setrt(Target->rt_Generic_0, 0, 0, HW.pBaseZB); // LDR RT
@@ -198,7 +211,7 @@ void CRender::render_menu()
 	}
 
 	// Actual Display
-	Target->u_setrt(Device.dwWidth, Device.dwHeight, HW.pBaseRT,NULL,NULL, HW.pBaseZB);
+	Target->u_setrt(Device.dwWidth, Device.dwHeight, HW.pBaseRT,NULL,NULL, HW_UIZB);
 	RCache.set_Shader(Target->s_menu);
 	RCache.set_Geometry(Target->g_menu);
 
@@ -248,7 +261,7 @@ void CRender::Render()
 	if (!(g_pGameLevel && g_hud)
 		|| bMenu)
 	{
-		Target->u_setrt(Device.dwWidth, Device.dwHeight, HW.pBaseRT,NULL,NULL, HW.pBaseZB);
+		Target->u_setrt(Device.dwWidth, Device.dwHeight, HW.pBaseRT,NULL,NULL, HW_UIZB);
 		return;
 	}
 
@@ -358,7 +371,7 @@ void CRender::Render()
 
 	if (RImplementation.o.ssfx_motionvectors)
 	{
-		Target->u_setrt(Device.dwWidth, Device.dwHeight, 0, 0, Target->rt_ssfx_motion_vectors->pRT, 0);
+		Target->u_setrt(HW.SceneW(), HW.SceneH(), 0, 0, Target->rt_ssfx_motion_vectors->pRT, 0);
 
 		FLOAT ColorRGBA[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
 		HW.pContext->ClearRenderTargetView(Target->rt_ssfx_motion_vectors->pRT, ColorRGBA);
@@ -374,7 +387,7 @@ void CRender::Render()
 
 	if (ps_r2_ls_flags.test(R2FLAG_TERRAIN_PREPASS))
 	{
-		Target->u_setrt(Device.dwWidth, Device.dwHeight, NULL, NULL, NULL, !RImplementation.o.dx10_msaa ? HW.pBaseZB : Target->rt_MSAADepth->pZRT);
+		Target->u_setrt(HW.SceneW(), HW.SceneH(), NULL, NULL, NULL, !RImplementation.o.dx10_msaa ? HW.pBaseZB : Target->rt_MSAADepth->pZRT);
 		r_dsgraph_render_landscape(0, false);
 	}
 
@@ -700,6 +713,12 @@ void CRender::render_Reticle()
 	RImplementation.o.distortion = FALSE;
 }
 
+void CRender::FinishScene()
+{
+	if (Target)
+		Target->phase_upscale();
+}
+
 void CRender::RenderToTarget(RRT target)
 {
 	ref_rt* RT = nullptr;
@@ -715,6 +734,13 @@ void CRender::RenderToTarget(RRT target)
 	default:
 		Debug.fatal(DEBUG_INFO, "None or wrong Target specified: %i", target);
 		break;
+	}
+
+	if (HW.SceneScaled() && target == rtSVP)
+	{
+		// the scope picture is a scene: the finished image is in rt_SceneOut, the back buffer has not been written
+		HW.pContext->CopyResource((*RT)->pSurface, Target->rt_SceneOut->pSurface);
+		return;
 	}
 
 	ID3DTexture2D* pBuffer = nullptr;
