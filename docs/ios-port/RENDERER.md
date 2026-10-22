@@ -467,13 +467,14 @@ a bilinear filter as the Metal layer would): `scene_quality_scale_0.67.png`, `sc
 ### What was checked
 
 On the Mac, at 0.67 and 0.5 with both upscalers: the main menu (render_menu path), the loading screen, the in-game HUD, the inventory,
-the PDA dialog, the pause menu (all at native resolution: `22_scale_ui.script`), changes of `r__render_scale`, `r__upscaler` and
+the PDA dialog, the pause menu (all at native resolution: `22_scale_ui.script`), the 3D PDA in the hand (`25_scale_pda3d.script`:
+the map on its screen is the same at 1.0 and 0.67), changes of `r__render_scale`, `r__upscaler` and
 `r__upscale_sharpness` at run time (each scale change is a 150 to 200 ms device reset, `21_scale_live.script`), a return to 1.0, the
 screenshot console command (the output size) and the cursor (`23_scale_cursor.script`: it ends up in the same place at 1.0 and 0.67; the
 scripted pointer does not land on the coordinates it is given at either scale, which was not investigated). On the iPad: the game start,
 100 s in the Cordon at every scale, one on-device screenshot (the frame and the HUD bars are native-sharp); the menus, inventory and PDA
 were looked at on the Mac only.
-Not exercised: the 3D PDA and a scoped weapon (second viewport) with a render scale, MSAA, HDR10, the Windows build (the new code
+Not exercised: a scoped weapon (second viewport) with a render scale, MSAA, HDR10, the Windows build (the new code
 is Apple-only or no-op there), touch input on the iPad (the pointer and cursor code is unchanged and works on `Device.dwWidth`).
 
 ### Temporal upscaling and frame interpolation: what R4 would have to provide

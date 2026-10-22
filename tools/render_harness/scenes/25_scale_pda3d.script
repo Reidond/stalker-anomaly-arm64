@@ -1,0 +1,11 @@
+# Render scale: the 3D PDA (its screen is UI drawn into the back buffer at the start of CLevel::OnRender and copied into rt_ui_pda, which
+# the scene then samples) must look the same at every scale. Compare the shots of runs with -x "r__render_scale 1.0" and 0.67.
+1 console run_string xr_harness.env(12,0,"w_clear1")
+2 console run_string ipad_debug.slots(true)
+3 console g_3d_pda on
+4 console run_string xr_harness.tp(-2.8,2.8,82.7,200)
+8 key P
+15 console screenshot 25_a_pda3d
+18 key P
+22 console screenshot 25_b_closed
+24 quit
