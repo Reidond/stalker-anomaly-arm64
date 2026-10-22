@@ -1,0 +1,6 @@
+# The hut the new game starts in, heavy rain: the rain must not draw over the interior.
+1 console run_string xr_harness.env(9,0,"w_rain3")
+28 console run_string xr_harness.ray()
+29 console run_string xr_harness.status()
+30 console screenshot 03b_interior_rain
+32 quit

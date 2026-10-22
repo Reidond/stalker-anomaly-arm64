@@ -14,6 +14,10 @@ set -euo pipefail
 root=$(cd "$(dirname "$0")/../.." && pwd)
 app=${ANOMALY_APP:-$root/build/macos-arm64-release/src/Platform/App/anomaly.app}
 data=${ANOMALY_DATA_ROOT:-$root/game/Anomaly}
+if [ ! -d "$data/db" ]; then # a worktree has no game/: the main checkout's one
+    data=$(dirname "$(git -C "$root" rev-parse --git-common-dir)")/game/Anomaly
+fi
+[ -d "$data/db" ] || { echo "game data not found (set ANOMALY_DATA_ROOT)" >&2; exit 1; }
 tag=$(date +%Y%m%d-%H%M%S)
 preset=""
 size=""
@@ -57,14 +61,27 @@ for scene in "${scenes[@]}"; do
     if head -1 "$src" | grep -q '^# standalone' || [ $scene = _newgame ]; then
         cp "$src" "$script"
     else
-        cat "$root/tools/render_harness/scenes/_load.script" "$src" > "$script"
+        # the scene's times count from the level being ready: shift them past the load script's waitlevel step
+        { cat "$root/tools/render_harness/scenes/_load.script"
+          awk '/^[ \t]*#/ || NF == 0 { print; next } { $1 = $1 + 16; print }' "$src"; } > "$script"
     fi
 
     args=(--data-root "$data" --script "$script" --exit-after "$limit" -dbg)
     [ -n "$size" ] && args+=(--size "$size")
     echo "== $scene (tag $tag${preset:+, preset $preset})"
     start=$(date +%s)
-    open -g -j -W -n --env ANOMALY_STATE_ROOT="$state" --stdout "$run/stdout.txt" --stderr "$run/stderr.txt" "$app" --args "${args[@]}" || true
+    open -g -j -n --env ANOMALY_STATE_ROOT="$state" --stdout "$run/stdout.txt" --stderr "$run/stderr.txt" "$app" --args "${args[@]}" || true
+    # wait for the run to end; the engine sometimes hangs in its crash handler on the way out, so after the script asked to quit
+    # it gets 40 s, and the run as a whole `limit` + 90 s, before it is killed
+    shell_log=$state/Logs/Anomaly/anomaly-shell.log
+    done_at=0
+    while pgrep -f "$script" > /dev/null; do
+        sleep 1
+        now=$(date +%s)
+        if [ $done_at = 0 ] && grep -aq "script asked to quit\|Anomaly shell shutting down\|--exit-after .* reached" "$shell_log" 2>/dev/null; then done_at=$now; fi
+        if [ $done_at != 0 ] && [ $(( now - done_at )) -gt 40 ]; then echo "   ! process did not exit after shutdown, killing" ; pkill -9 -f "$script" || true; fi
+        if [ $(( now - start )) -gt $(( limit + 90 )) ]; then echo "   ! run took too long, killing"; pkill -9 -f "$script" || true; fi
+    done
     echo "   $(( $(date +%s) - start )) s"
 
     mkdir -p "$run/shots"
@@ -73,5 +90,5 @@ for scene in "${scenes[@]}"; do
     cp "$state/Logs/Anomaly/anomaly-shell.log" "$run/shell.log" 2>/dev/null || true
     [ $scene = _newgame ] && cp "$appdata"/savedgames/h_cordon.* "$saves/" 2>/dev/null || true
     echo "   shots: $(ls "$run/shots" | tr '\n' ' ')"
-    grep -a "SCRIPT ERROR\|! screenshot\|fatal\|FATAL" "$run/engine.log" 2>/dev/null | head -5 | sed 's/^/   ! /' || true
+    grep -a "SCRIPT ERROR\|! screenshot\|Fatal Error\|FATAL" "$run/engine.log" 2>/dev/null | head -5 | sed 's/^/   ! /' || true
 done

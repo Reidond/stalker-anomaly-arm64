@@ -1,7 +1,6 @@
-# Outdoors in heavy rain, afternoon.
-1 console run_string xr_harness.freeze()
-2 console run_string xr_harness.weather("w_rain3")
-3 console run_string xr_harness.time(15,0)
-4 console run_string xr_harness.tp(-2.8,2.8,82.7,200)
-16 console screenshot 05_rain
-18 quit
+# Outdoors in heavy rain (9:00, w_rain3).
+1 console run_string xr_harness.env(9,0,"w_rain3")
+3 console run_string xr_harness.tp(-2.8,2.8,82.7,200)
+29 console run_string xr_harness.status()
+30 console screenshot 05_rain
+32 quit

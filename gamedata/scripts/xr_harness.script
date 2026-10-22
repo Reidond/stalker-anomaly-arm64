@@ -3,6 +3,7 @@
 
 local function log(fmt, ...)
 	printf("%s", "HARNESS " .. string.format(fmt, ...))
+	exec_console_cmd("flush") -- the engine log is buffered and a scripted run can be killed on the way out
 end
 
 -- prints where the player is and the Cordon's named places
@@ -67,9 +68,56 @@ function weather(name)
 	log("weather %s", name)
 end
 
--- stops the clock and the weather so repeated screenshots show the same sky
+-- practically stops the clock so repeated screenshots show the same sky (set the time first, then the weather)
 function freeze()
-	exec_console_cmd("time_factor 0.0001")
-	exec_console_cmd("g_god on")
-	log("frozen")
+	level.set_time_factor(0.0001)
+	log("frozen factor=%.4f", level.get_time_factor())
+end
+
+-- where the clock and the weather are (the environment follows the game time)
+function status()
+	log("status time=%02d:%02d weather=%s weight=%.2f rain=%.2f factor=%.4f sun=%s",
+		level.get_time_hours(), level.get_time_minutes(), level.get_weather(), level.get_weather_weight(),
+		level.rain_factor(), level.get_time_factor(), tostring(level.is_sun_visible and level.is_sun_visible() or "?"))
+end
+
+-- the distance the crosshair ray reports (the engine's static-geometry ray query); ~0 or huge means the query misses
+function ray()
+	log("ray target_dist=%.2f", level.get_target_dist())
+end
+
+-- sets the clock and the weather in one go: time first, then the weather (changing the time makes the weather manager pick a new
+-- weather), and keeps the manager from choosing another one while a scene is shot
+function env(hh, mm, name)
+	local now = level.get_time_hours() * 60 + level.get_time_minutes()
+	local want = hh * 60 + (mm or 0)
+	local delta = (want - now) % (24 * 60)
+	level.change_game_time(0, math.floor(delta / 60), delta % 60)
+	level.set_weather(name, true)
+	local wm = level_weathers.get_weather_manager()
+	if wm then
+		wm.update = function() end
+	end
+	safe()
+	status()
+end
+
+-- keeps the player alive and clean (teleporting into a camp or an anomaly field would end the shot in a death screen)
+local safe_registered = false
+local function keep_safe()
+	local a = db.actor
+	if a then
+		a:set_health_ex(1)
+		pcall(function() a.radiation = 0 end)
+		pcall(function() a.bleeding = 0 end)
+	end
+end
+
+function safe()
+	if not safe_registered then
+		safe_registered = true
+		RegisterScriptCallback("actor_on_update", keep_safe)
+	end
+	keep_safe()
+	log("safe")
 end

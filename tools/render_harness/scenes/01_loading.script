@@ -1,7 +1,7 @@
 # standalone
-# A loading screen: frames are only drawn by the loader, so the screenshot waits for the Nth of them.
+# The loading screen ("Press any key to continue") once the level has loaded; it is on screen until a key is pressed.
 1 console r_screenshot_mode png
 2 console start server(h_cordon/single/alife/load) client(localhost)
-2.5 console screenshot 01_loading 80
 3 waitlevel 300 l01_escape
-6 quit
+6 console screenshot 01_loading
+10 quit

@@ -1,8 +1,6 @@
 # The PDA (tasks page).
-1 console run_string xr_harness.freeze()
-2 console run_string xr_harness.weather("w_clear1")
-3 console run_string xr_harness.time(12,0)
-4 key P
-9 console screenshot 07_pda
-11 key Escape
-13 quit
+1 console run_string xr_harness.env(12,0,"w_clear1")
+26 key P
+30 console screenshot 07_pda
+32 key Escape
+34 quit
