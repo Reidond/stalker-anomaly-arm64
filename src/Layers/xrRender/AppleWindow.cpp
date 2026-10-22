@@ -128,13 +128,14 @@ void ApplyWindowMode(HWND hwnd, u32 screenmode, u32 width, u32 height, bool move
         SDL_SetWindowPosition(window, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED);
     }
     SDL_ShowWindow(window);
-    SDL_RaiseWindow(window);
+    if (!xr_window::IsBackground())
+        SDL_RaiseWindow(window);
 #endif
 }
 
 void Raise(HWND hwnd)
 {
-    if (ToWindow(hwnd))
+    if (ToWindow(hwnd) && !xr_window::IsBackground())
         SDL_RaiseWindow(ToWindow(hwnd));
 }
 

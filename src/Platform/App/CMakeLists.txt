@@ -13,7 +13,7 @@ include(AnomalyGameApp)
 
 add_executable(anomaly main.cpp Unattended.mm)
 target_include_directories(anomaly PRIVATE "${PROJECT_SOURCE_DIR}/src")
-target_link_libraries(anomaly PRIVATE xrEngine xrGame xrRender_R4 anomaly_apple_shell "-framework Foundation")
+target_link_libraries(anomaly PRIVATE xrEngine xrGame xrRender_R4 anomaly_apple_shell "-framework Foundation" "$<$<NOT:$<BOOL:${ANOMALY_IOS}>>:-framework AppKit>")
 anomaly_configure_game_app(anomaly DISPLAY_NAME "Anomaly")
 
 # The Monolith gamedata overlay (the repository's gamedata/: scripts, configs and shaders the engine build needs next to the
