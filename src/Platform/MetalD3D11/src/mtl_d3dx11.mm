@@ -235,7 +235,10 @@ HRESULT D3DX11CreateTextureFromMemory(ID3D11Device* pDevice, LPCVOID pSrcData, S
 
     const UINT first = def(li.FirstMipLevel, 0);
     if (first >= d.info.MipLevels)
+    {
+        Log("D3DX11CreateTextureFromMemory: FirstMipLevel %u but the image has %u mip level(s)", first, d.info.MipLevels);
         return finish(E_INVALIDARG);
+    }
     const UINT srcW = std::max<UINT>(d.info.Width >> first, 1);
     const UINT srcH = std::max<UINT>(d.info.Height >> first, 1);
     const UINT srcD = std::max<UINT>(d.info.Depth >> first, 1);
@@ -308,6 +311,9 @@ HRESULT D3DX11CreateTextureFromMemory(ID3D11Device* pDevice, LPCVOID pSrcData, S
         hr = pDevice->CreateTexture2D(&td, init.data(), &t);
         *ppTexture = t;
     }
+    if (FAILED(hr))
+        Log("D3DX11CreateTextureFromMemory: texture creation failed 0x%08x (%ux%u, %u mip(s), format %u)", unsigned(hr), w, h,
+            mips, unsigned(fmt));
     return finish(hr);
 }
 
