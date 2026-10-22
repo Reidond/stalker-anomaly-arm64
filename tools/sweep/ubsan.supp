@@ -1,2 +1,17 @@
-# UBSan suppressions for the crash-sweep runs (docs/ios-port/SANITIZERS.md). One line per suppression, with the reason.
-# Format: <check>:<source file pattern>. Entries are added only after the report was read and judged to be noise.
+# UBSan suppressions for the crash-sweep runs (docs/ios-port/SANITIZERS.md). Format: <check>:<source file pattern>.
+# Each entry says why. Anything that is not here is a finding, fixed or listed in the pull request.
+
+# --- third-party code, reports read and judged intentional ------------------------------------------------------------------
+# LuaJIT: signed shifts by design (the ULEB128 bytecode reader, arm64 assembler immediates, upvalue flags) and a NULL-based
+# member offset in the parser. Upstream behaviour, compiled this way everywhere LuaJIT runs.
+shift-base:*lj_*
+null:*lj_*
+# libvorbis: codebook decoding shifts a signed int into the sign bit.
+shift-base:*vorbis/lib/*
+# LZO (the engine's save/archive compressor): `m_pos = ip - off` style pointer arithmetic with unsigned offsets.
+pointer-overflow:*rt_lzo*
+
+# --- idiom ------------------------------------------------------------------------------------------------------------------
+# `&*v.begin()` and `&v[0]` on an empty xr_vector: the engine's way to say "pointer to the data, or null", never dereferenced.
+# libc++ reports the reference binding. Real null dereferences are reported at their own line, not here.
+null:*wrap_iter.h

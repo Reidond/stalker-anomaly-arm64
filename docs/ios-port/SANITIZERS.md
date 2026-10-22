@@ -50,13 +50,14 @@ top frames, the UBSan reports grouped by place. `tools/sweep/triage.py <stderr.t
 
 What the runner sets up, none of it needed by hand:
 
-- **No interruption of the person at the Mac.** `SDL_MAC_BACKGROUND_APP=1 SDL_WINDOW_ACTIVATE_WHEN_SHOWN=0
-  SDL_WINDOW_ACTIVATE_WHEN_RAISED=0 ALSOFT_DRIVERS=null`: no Dock icon, no focus, no Space, silent. The window is windowed and
-  small (`rs_screenmode windowed`, `vid_mode 1260x818` = 630x409 points on a 2x display, written to the run's `user.ltx`).
-  The app is killed after `--timeout` (default 1500 s) and when the script is interrupted.
-- **Its own HOME.** `CFFIXED_USER_HOME=build/sweep-home` (override: `SWEEP_HOME`): saves, logs, `user.ltx`, shader and overlay
+- **No interruption of the person at the Mac.** The app is started through LaunchServices, hidden and in the background (`open -g -j
+  -W -n --env ... --stdout f --stderr f anomaly.app --args ...`); starting the bundle's binary directly still steals the focus for a
+  moment. `--script` and `--exit-after` make the app run unattended by themselves ([INTEGRATION.md](INTEGRATION.md#unattended-runs):
+  windowed at `--size`, silent, no Space, App Nap off). `--exit-after` is the hard limit; the runner's watchdog kills the app after
+  `--timeout` (default 1500 s) and when the script is interrupted.
+- **Its own state.** `ANOMALY_STATE_ROOT=build/sweep-state` (override: `--state`): saves, logs, `user.ltx`, shader and overlay
   caches are separate from any other run of the app, so a sweep never rewrites someone else's log or save. The first run there
-  translates the shaders again. Core Foundation honours `CFFIXED_USER_HOME`; `HOME` alone does not move `NSSearchPathForDirectoriesInDomains`.
+  translates the shaders again.
 - **The overlay from the checkout** (`ANOMALY_OVERLAY=<repo>/gamedata`), so the driver script needs no relink.
 - **`-dbg`**, which registers the debug commands (`jump_to_level`, `g_god`, `g_unlimitedammo`, `run_string`, `run_script`; without
   it the build, compiled as `MASTER_GOLD`, has none of them).
