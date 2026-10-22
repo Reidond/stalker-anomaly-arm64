@@ -686,6 +686,10 @@ public:
 	}
 };
 
+#if defined(XR_PLATFORM_APPLE)
+void AppleQueueScreenshot(LPCSTR name, int delay);
+#endif
+
 class CCC_Screenshot : public IConsole_Command
 {
 public:
@@ -700,6 +704,13 @@ public:
 
 		string_path name;
 		name[0] = 0;
+#if defined(XR_PLATFORM_APPLE)
+		// screenshot [name] [frames to wait first]: the file is `<name>.png|jpg` in $screenshots$
+		int delay = 0;
+		sscanf(args, "%s %d", name, &delay);
+		AppleQueueScreenshot(xr_strlen(name) ? name : 0, delay);
+		return;
+#endif
 		sscanf(args, "%s", name);
 		LPCSTR image = xr_strlen(name) ? name : 0;
 		::Render->Screenshot(IRender_interface::SM_NORMAL, image);

@@ -12,6 +12,97 @@
 #define	GAMESAVE_SIZE	128
 
 extern u32 ps_r_screenshot_token;
+extern int ps_r4_hdr10_on;
+
+#if defined(XR_PLATFORM_APPLE)
+#include <mtl_d3d11/mtl_d3d11.h>
+
+// The Metal back buffer holds nothing once it was presented, so a screenshot is taken from the frame being presented:
+// the console command queues it (optionally some frames ahead), dxRenderDeviceRender::End asks the swap chain for a
+// capture before Present and writes the file when it arrives, one or two frames later. It is what is on screen,
+// post-processing and UI included.
+namespace
+{
+struct AppleShot
+{
+	bool queued = false;
+	bool armed = false;
+	int delay = 0;
+	int waited = 0;
+	string_path name = "";
+} g_apple_shot;
+} // namespace
+
+void AppleQueueScreenshot(LPCSTR name, int delay)
+{
+	if (g_apple_shot.queued || g_apple_shot.armed)
+	{
+		Msg("! screenshot: one is still pending");
+		return;
+	}
+	g_apple_shot.queued = true;
+	g_apple_shot.delay = delay < 0 ? 0 : delay;
+	g_apple_shot.name[0] = 0;
+	if (name && name[0])
+		xr_strcpy(g_apple_shot.name, sizeof(g_apple_shot.name), name);
+}
+
+void AppleScreenshotBeforePresent()
+{
+	if (!g_apple_shot.queued || ps_r4_hdr10_on)
+		return;
+	if (g_apple_shot.delay > 0)
+	{
+		--g_apple_shot.delay;
+		return;
+	}
+	g_apple_shot.queued = false;
+	g_apple_shot.armed = true;
+	g_apple_shot.waited = 0;
+	mtl_d3d11::RequestCapture(HW.m_pSwapChain);
+}
+
+void AppleScreenshotAfterPresent()
+{
+	if (!g_apple_shot.armed)
+		return;
+	mtl_d3d11::CaptureResult shot;
+	if (!mtl_d3d11::PollCapture(HW.m_pSwapChain, &shot))
+	{
+		if (++g_apple_shot.waited > 300)
+		{
+			g_apple_shot.armed = false;
+			Msg("! screenshot: no frame arrived");
+		}
+		return;
+	}
+	g_apple_shot.armed = false;
+	const bool png = ps_r_screenshot_token != 0;
+	std::vector<uint8_t> encoded;
+	if (!mtl_d3d11::EncodeCapture(shot, png ? 1 : 0, &encoded))
+	{
+		Msg("! screenshot: encoding failed");
+		return;
+	}
+	string_path buf;
+	if (g_apple_shot.name[0])
+		xr_sprintf(buf, sizeof(buf), "%s.%s", g_apple_shot.name, png ? "png" : "jpg");
+	else
+	{
+		string64 t_stemp;
+		xr_sprintf(buf, sizeof(buf), "ss_%s_%s_(%s).%s", Core.UserName, timestamp(t_stemp),
+		           (g_pGameLevel) ? g_pGameLevel->name().c_str() : "mainmenu", png ? "png" : "jpg");
+	}
+	if (IWriter* fs = FS.w_open("$screenshots$", buf))
+	{
+		fs->w(encoded.data(), (u32)encoded.size());
+		FS.w_close(fs);
+		Msg("* screenshot: %s (%ux%u, %u KB)", buf, shot.width, shot.height, (u32)(encoded.size() / 1024));
+	}
+	else
+		Msg("! screenshot: cannot write %s", buf);
+}
+#endif // XR_PLATFORM_APPLE
 
 IC u32 convert(float c)
 {
@@ -42,8 +133,6 @@ IC void MouseRayFromPoint(Fvector& direction, int x, int y, Fmatrix& m_CamMat)
 
 #define SM_FOR_SEND_WIDTH 640
 #define SM_FOR_SEND_HEIGHT 480
-
-extern int ps_r4_hdr10_on;
 
 #if defined(USE_DX10) || defined(USE_DX11)
 void CRender::ScreenshotImpl(ScreenshotMode mode, LPCSTR name, CMemoryWriter* memory_writer)
@@ -167,6 +256,10 @@ void CRender::ScreenshotImpl(ScreenshotMode mode, LPCSTR name, CMemoryWriter* me
 		break;
 	case IRender_interface::SM_NORMAL:
 		{
+#if defined(XR_PLATFORM_APPLE)
+			AppleQueueScreenshot(name, 0);
+			break;
+#endif
 			string64 t_stemp;
 			string_path buf;
 			xr_sprintf(buf, sizeof(buf), "ss_%s_%s_(%s).%s", Core.UserName, timestamp(t_stemp),

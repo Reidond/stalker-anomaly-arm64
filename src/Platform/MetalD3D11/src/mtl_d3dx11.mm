@@ -453,6 +453,62 @@ HRESULT D3DX11LoadTextureFromTexture(ID3D11DeviceContext* pContext, ID3D11Resour
 
 namespace
 {
+// RGBA8 -> JPG/PNG/TIFF/GIF through ImageIO; `opaque` drops the alpha channel.
+bool EncodeRGBA8(std::vector<uint8_t>& rgba, uint32_t width, uint32_t height, D3DX11_IMAGE_FILE_FORMAT fmt, bool opaque,
+                 std::vector<uint8_t>* out)
+{
+    if (opaque)
+        for (size_t i = 3; i < rgba.size(); i += 4)
+            rgba[i] = 255;
+    CFDataRef pixels = CFDataCreate(nullptr, rgba.data(), CFIndex(rgba.size()));
+    CGDataProviderRef provider = CGDataProviderCreateWithCFData(pixels);
+    CGColorSpaceRef cs = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
+    CGImageRef image = CGImageCreate(width, height, 8, 32, size_t(width) * 4, cs,
+                                     kCGBitmapByteOrderDefault | (opaque ? kCGImageAlphaNoneSkipLast : kCGImageAlphaLast),
+                                     provider, nullptr, false, kCGRenderingIntentDefault);
+    CFStringRef uti = fmt == D3DX11_IFF_JPG ? CFSTR("public.jpeg") : fmt == D3DX11_IFF_PNG ? CFSTR("public.png")
+                      : fmt == D3DX11_IFF_TIFF ? CFSTR("public.tiff") : CFSTR("com.compuserve.gif");
+    CFMutableDataRef data = CFDataCreateMutable(nullptr, 0);
+    CGImageDestinationRef dest = image ? CGImageDestinationCreateWithData(data, uti, 1, nullptr) : nullptr;
+    bool ok = false;
+    if (dest)
+    {
+        float q = 0.9f;
+        CFNumberRef quality = CFNumberCreate(nullptr, kCFNumberFloatType, &q);
+        const void* keys[] = {kCGImageDestinationLossyCompressionQuality};
+        const void* values[] = {quality};
+        CFDictionaryRef props = CFDictionaryCreate(nullptr, keys, values, 1, &kCFTypeDictionaryKeyCallBacks,
+                                                   &kCFTypeDictionaryValueCallBacks);
+        CGImageDestinationAddImage(dest, image, props);
+        ok = CGImageDestinationFinalize(dest);
+        CFRelease(props);
+        CFRelease(quality);
+        CFRelease(dest);
+    }
+    if (ok)
+        out->assign(CFDataGetBytePtr(data), CFDataGetBytePtr(data) + CFDataGetLength(data));
+    CFRelease(data);
+    if (image)
+        CGImageRelease(image);
+    CGColorSpaceRelease(cs);
+    CGDataProviderRelease(provider);
+    CFRelease(pixels);
+    return ok;
+}
+} // namespace
+
+namespace mtl_d3d11
+{
+bool EncodeCapture(const CaptureResult& image, int format, std::vector<uint8_t>* out)
+{
+    std::vector<uint8_t> rgba = image.rgba;
+    return out && rgba.size() == size_t(image.width) * image.height * 4 &&
+           EncodeRGBA8(rgba, image.width, image.height, format == 0 ? D3DX11_IFF_JPG : D3DX11_IFF_PNG, true, out);
+}
+} // namespace mtl_d3d11
+
+namespace
+{
 class MemBlob final : public ComObject<ID3D10Blob>
 {
 public:
@@ -478,44 +534,8 @@ HRESULT D3DX11SaveTextureToMemory(ID3D11DeviceContext* pContext, ID3D11Resource*
         if (!readbackRGBA8(pContext, pSrc, t, &rgba))
             return E_NOTIMPL;
         const bool opaque = fmt == D3DX11_IFF_JPG || t->dxgi == DXGI_FORMAT_B8G8R8X8_UNORM;
-        if (opaque)
-            for (size_t i = 3; i < rgba.size(); i += 4)
-                rgba[i] = 255;
-        CFDataRef pixels = CFDataCreate(nullptr, rgba.data(), CFIndex(rgba.size()));
-        CGDataProviderRef provider = CGDataProviderCreateWithCFData(pixels);
-        CGColorSpaceRef cs = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
-        CGImageRef image = CGImageCreate(t->width, t->height, 8, 32, size_t(t->width) * 4, cs,
-                                         kCGBitmapByteOrderDefault | (opaque ? kCGImageAlphaNoneSkipLast : kCGImageAlphaLast),
-                                         provider, nullptr, false, kCGRenderingIntentDefault);
-        CFStringRef uti = fmt == D3DX11_IFF_JPG ? CFSTR("public.jpeg") : fmt == D3DX11_IFF_PNG ? CFSTR("public.png")
-                          : fmt == D3DX11_IFF_TIFF ? CFSTR("public.tiff") : CFSTR("com.compuserve.gif");
-        CFMutableDataRef data = CFDataCreateMutable(nullptr, 0);
-        CGImageDestinationRef dest = image ? CGImageDestinationCreateWithData(data, uti, 1, nullptr) : nullptr;
-        bool ok = false;
-        if (dest)
-        {
-            float q = 0.9f;
-            CFNumberRef quality = CFNumberCreate(nullptr, kCFNumberFloatType, &q);
-            const void* keys[] = {kCGImageDestinationLossyCompressionQuality};
-            const void* values[] = {quality};
-            CFDictionaryRef props = CFDictionaryCreate(nullptr, keys, values, 1, &kCFTypeDictionaryKeyCallBacks,
-                                                       &kCFTypeDictionaryValueCallBacks);
-            CGImageDestinationAddImage(dest, image, props);
-            ok = CGImageDestinationFinalize(dest);
-            CFRelease(props);
-            CFRelease(quality);
-            CFRelease(dest);
-        }
         std::vector<uint8_t> encoded;
-        if (ok)
-            encoded.assign(CFDataGetBytePtr(data), CFDataGetBytePtr(data) + CFDataGetLength(data));
-        CFRelease(data);
-        if (image)
-            CGImageRelease(image);
-        CGColorSpaceRelease(cs);
-        CGDataProviderRelease(provider);
-        CFRelease(pixels);
-        if (!ok)
+        if (!EncodeRGBA8(rgba, t->width, t->height, fmt, opaque, &encoded))
             return E_FAIL;
         *ppBlob = new MemBlob(std::move(encoded));
         return S_OK;

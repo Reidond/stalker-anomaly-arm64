@@ -34,8 +34,9 @@ public:
     MTLPixelFormat layerFormat() const { return pixelFormat_; }
 
     // Capture support (tools/tests)
-    void requestCapture() { captureRequested_ = true; }
+    void requestCapture();
     bool waitCapture(CaptureResult* out);
+    bool pollCapture(CaptureResult* out);
 
 private:
     Device* dev_;

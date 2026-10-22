@@ -59,8 +59,16 @@ struct CaptureResult
     uint32_t height = 0;
     std::vector<uint8_t> rgba;
 };
+// RequestCapture makes the layer's drawables readable (framebufferOnly = NO) and arms the capture for the first
+// Present whose drawable allows it, so a swap chain created without allowReadback pays nothing until a screenshot is
+// asked for (the capture then lands one or two frames later). WaitForCapture blocks until the frame arrived;
+// PollCapture does not (use it from a thread that is also the one presenting).
 void RequestCapture(IDXGISwapChain1* pSwapChain);
 bool WaitForCapture(IDXGISwapChain1* pSwapChain, CaptureResult* out);
+bool PollCapture(IDXGISwapChain1* pSwapChain, CaptureResult* out);
+
+// Encodes a capture as JPEG (format 0) or PNG (format 1) with ImageIO.
+bool EncodeCapture(const CaptureResult& image, int format, std::vector<uint8_t>* out);
 
 struct Stats
 {
