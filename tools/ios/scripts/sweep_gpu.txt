@@ -1,7 +1,8 @@
 # GPU cost of each graphics setting. Loads ipad_test, renders at 1920x1440 (GPU bound: at the preset's 1366x1024 the GPU ms is hidden
 # behind vsync), stands in a Cordon field, and changes one setting every 20 s, undoing the previous one. Run with -dbg:
-#   tools/ios/ipad.sh script tools/ios/scripts/sweep_gpu.txt -dbg
-# then read the 10 s lines (gpu ms) next to the SWEEP markers. Run `--device-preset reset` afterwards: the engine saves the last vid_mode.
+#   tools/ios/ipad.sh script tools/ios/scripts/sweep_gpu.txt -dbg --unlocked-graphics
+# then read the 10 s lines (gpu ms) next to the SWEEP markers. `--unlocked-graphics` is needed: the device profile locks these settings
+# (docs/ios-port/SETTINGS.md). The engine saves the last vid_mode, and the profile puts the right one back at the next normal start.
 5 console vid_mode 1920x1440
 8 console start server(ipad_test/single/alife/load) client(localhost)
 45 key Space

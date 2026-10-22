@@ -5,6 +5,9 @@
 #include "x_ray.h"
 #include "xr_ioconsole.h"
 #include "xr_ioc_cmd.h"
+#ifdef XR_PLATFORM_APPLE
+#include "xr_graphics_profile.h"
+#endif
 //#include "fbasicvisual.h"
 #include "cameramanager.h"
 #include "environment.h"
@@ -1039,6 +1042,9 @@ void CCC_Register()
 	CMD1(CCC_SaveCFG, "cfg_save");
 	CMD1(CCC_LoadCFG, "cfg_load");
 	CMD1(CCC_DumpCVars, "dump_cvar");
+#ifdef XR_PLATFORM_APPLE
+	xr_gfx::RegisterCommands();
+#endif
     CMD4(CCC_Integer, "dump_cvar_enable", &dump_cvar_enable, 0, 1);
 
 #ifdef DEBUG

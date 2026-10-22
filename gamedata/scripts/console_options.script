@@ -1,0 +1,124 @@
+--- Console-like graphics and display options (Apple builds; docs/ios-port/SETTINGS.md).
+--
+-- On an iPad or a Mac the engine picks a graphics profile for the device and locks what it sets (xr_graphics_profile.cpp). The
+-- stock options menu offers about a hundred of those settings, so this script reduces it to what a console offers: the mode
+-- (Quality or Performance), the frame rate, field of view, brightness, motion blur, the HUD and the crosshair. The rest of the menu
+-- (sound, controls, gameplay, language, weather) is untouched.
+--
+-- Nothing here does anything unless the engine says the locks are on: `gfx_locks_active` is exported by the Apple builds only (it
+-- does not exist on Windows) and is false with `--unlocked-graphics` and `--graphics-profile none`. Even if an addon puts a
+-- hidden row back into the menu, applying it goes through the console, and the console refuses locked settings.
+
+local function active()
+	return gfx_locks_active ~= nil and gfx_locks_active()
+end
+
+function is_active()
+	return active()
+end
+
+-- Menu paths (ids joined with "/") that are removed whole.
+local DROP = {
+	["video/advanced"] = true,                -- every graphics quality setting: the profile sets them
+	["modded_exes/visual/graphics"] = true,   -- decal and rain ranges, shadow LOD: the profile
+	["modded_exes/visual/particles"] = true,  -- particle budget: the profile
+	["modded_exes/visual/hdr10"] = true,      -- not exercised on Metal
+	["modded_exes/optimizations"] = true,     -- engine tuning and Lua GC: not a player's setting on a console
+	["modded_exes/debug"] = true,             -- logging and crash switches
+}
+
+-- Rows removed from pages that stay (id -> page path): the 3D scope switch changes how the scene is rendered.
+local DROP_ROWS = {
+	["modded_exes/visual/3d_scopes"] = { r__3Dfakescope = true },
+}
+
+-- The brightness setting: the gamma ramp (rs_c_gamma) is ignored on a Metal layer, so brightness is the renderer's exposure.
+local BRIGHTNESS_CMD = "r__exposure"
+
+local function frame_caps()
+	local content = {{"auto", "gfx_fps_auto"}}
+	local caps = gfx_frame_caps and gfx_frame_caps() or {30, 60}
+	for i = 1, #caps do
+		content[#content + 1] = {tostring(caps[i]), "gfx_fps_" .. caps[i]}
+	end
+	return content
+end
+
+local function find_row(rows, id)
+	for _, row in ipairs(rows) do
+		if row.id == id then
+			return row
+		end
+	end
+end
+
+-- The rows of "video/basic" on a console.
+local function basic_rows(stock)
+	local rows = {}
+	rows[#rows + 1] = find_row(stock, "slide_vid")
+	rows[#rows + 1] = {
+		id = "gfx_desc", type = "desc", text = "ui_mm_gfx_desc", clr = {255, 125, 175, 200},
+	}
+	rows[#rows + 1] = {
+		id = "gfx_mode", type = "list", val = 0, cmd = "gfx_mode", def = "quality", hint = "gfx_mode", vid = true,
+		content = {{"quality", "gfx_mode_quality"}, {"performance", "gfx_mode_performance"}},
+	}
+	rows[#rows + 1] = {
+		id = "gfx_fps", type = "list", val = 0, cmd = "gfx_fps", def = "auto", hint = "gfx_fps",
+		content = {frame_caps},
+	}
+	rows[#rows + 1] = {
+		id = "brightness", type = "track", val = 2, cmd = BRIGHTNESS_CMD, hint = "gfx_brightness", min = 0.6, max = 1.6, step = 0.05, def = 1,
+	}
+	rows[#rows + 1] = { id = "fov", type = "track", val = 2, cmd = "fov", min = 45, max = 90, step = 1 }
+	local hud_fov = find_row(stock, "hud_fov")
+	if hud_fov then
+		rows[#rows + 1] = hud_fov
+	end
+	rows[#rows + 1] = {
+		id = "mblur_enable", type = "check", val = 1, cmd = "r2_mblur_enabled", hint = "video_advanced_mblur_enable", def = false,
+	}
+	-- a desktop has windows: the Mac keeps the display mode; the iPad has one
+	if gfx_is_mac and gfx_is_mac() then
+		local screen_mode = find_row(stock, "screen_mode")
+		if screen_mode then
+			rows[#rows + 1] = screen_mode
+		end
+	end
+	return rows
+end
+
+-- Reduces `options` (ui_options.options) to the console menu. Call after every script has added to it and before the options
+-- are indexed (ui_options.init_opt_coder).
+function apply(options)
+	if not active() then
+		return false
+	end
+
+	local function walk(group, path)
+		for i = #group.gr, 1, -1 do
+			local child = group.gr[i]
+			local child_path = path ~= "" and (path .. "/" .. child.id) or child.id
+			if DROP[child_path] then
+				table.remove(group.gr, i)
+			else
+				local drop_rows = DROP_ROWS[child_path]
+				if drop_rows and child.gr then
+					for j = #child.gr, 1, -1 do
+						if drop_rows[child.gr[j].id] then
+							table.remove(child.gr, j)
+						end
+					end
+				end
+				if child_path == "video/basic" and child.gr then
+					child.gr = basic_rows(child.gr)
+				elseif child.gr and not child.sh then
+					walk(child, child_path)
+				end
+			end
+		end
+	end
+
+	walk({ gr = options }, "")
+	return true
+end

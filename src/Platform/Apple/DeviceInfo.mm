@@ -5,12 +5,14 @@
 #include <SDL3/SDL.h>
 
 #import <Foundation/Foundation.h>
+#import <Metal/Metal.h>
 #include <TargetConditionals.h>
 #if TARGET_OS_IOS
 #import <UIKit/UIKit.h>
 #include <os/proc.h>
 #else
 #import <AppKit/AppKit.h>
+#include <IOKit/IOKitLib.h>
 #endif
 
 #include <mach/mach.h>
@@ -18,7 +20,9 @@
 #include <sys/sysctl.h>
 
 #include <algorithm>
+#include <cctype>
 #include <cstdio>
+#include <cstdlib>
 
 namespace AppleShell
 {
@@ -190,4 +194,73 @@ DisplayInfo QueryDisplayInfo(SDL_Window* window)
     return info;
 }
 
+
+// ---------------------------------------------------------------------------------------------
+// Graphics profile hardware (GraphicsProfile.h)
+// ---------------------------------------------------------------------------------------------
+
+namespace Internal
+{
+Graphics::Hardware DetectHardware()
+{
+    Graphics::Hardware hw;
+    @autoreleasepool
+    {
+#if TARGET_OS_IOS
+        hw.family = UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad ? "ipad" : "iphone";
+        hw.machine = SysctlString("hw.machine");
+#else
+        hw.family = "mac";
+        hw.machine = SysctlString("hw.model");
+        hw.chip = SysctlString("machdep.cpu.brand_string");
+#endif
+        hw.memory_bytes = NSProcessInfo.processInfo.physicalMemory;
+
+        // "Apple M2 Pro" (a Mac), "Apple M3 GPU" or "Apple A17 Pro GPU" (iPadOS): the Metal device's name
+        if (id<MTLDevice> device = MTLCreateSystemDefaultDevice())
+        {
+            std::string name = device.name.UTF8String ? device.name.UTF8String : "";
+            if (name.size() > 4 && name.compare(name.size() - 4, 4, " GPU") == 0)
+                name.resize(name.size() - 4);
+            if (!name.empty())
+                hw.chip = name;
+        }
+        // M1 = 1, M2 = 2 ...; A14 = 1, A15 = 2 ...
+        for (size_t i = 0; i + 1 < hw.chip.size(); ++i)
+        {
+            if ((hw.chip[i] == 'M' || hw.chip[i] == 'A') && isdigit((unsigned char)hw.chip[i + 1]) && (i == 0 || hw.chip[i - 1] == ' '))
+            {
+                const int number = atoi(hw.chip.c_str() + i + 1);
+                hw.chip_generation = hw.chip[i] == 'M' ? number : std::max(0, number - 13);
+                break;
+            }
+        }
+#if !TARGET_OS_IOS
+        // the GPU core count is in the registry on Apple Silicon Macs
+        io_service_t accelerator = IOServiceGetMatchingService(kIOMainPortDefault, IOServiceMatching("AGXAccelerator"));
+        if (accelerator)
+        {
+            CFTypeRef cores = IORegistryEntryCreateCFProperty(accelerator, CFSTR("gpu-core-count"), kCFAllocatorDefault, 0);
+            if (cores)
+            {
+                if (CFGetTypeID(cores) == CFNumberGetTypeID())
+                {
+                    int n = 0;
+                    CFNumberGetValue((CFNumberRef)cores, kCFNumberIntType, &n);
+                    hw.gpu_cores = n;
+                }
+                CFRelease(cores);
+            }
+            IOObjectRelease(accelerator);
+        }
+        hw.builtin_display = CGDisplayIsBuiltin(CGMainDisplayID()) != 0;
+#endif
+    }
+    const DisplayInfo display = QueryDisplayInfo(nullptr);
+    hw.native_width = display.native_width;
+    hw.native_height = display.native_height;
+    hw.max_refresh_hz = display.max_refresh_hz;
+    return hw;
+}
+} // namespace Internal
 } // namespace AppleShell

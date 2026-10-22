@@ -10,7 +10,8 @@
 # (ANOMALY_STATE_ROOT), so it neither reads nor changes the player's settings and saves. The app runs unattended
 # (offscreen, background); see docs/ios-port/INTEGRATION.md.
 #
-# Environment: HARNESS_COLD_SHADERS=1 (empty shader cache), HARNESS_ENV="VAR=value ..." (passed to the app),
+# Environment: HARNESS_COLD_SHADERS=1 (empty shader cache), HARNESS_ENV="VAR=value ..." (passed to the app), HARNESS_ARGS="..." (more
+# app arguments; `-p preset` already adds `--graphics-profile none`),
 # HARNESS_FOOTPRINT=1 (writes footprint.txt: `footprint` of the app at about 40 s; tools/render_harness/perf_report.sh reads it).
 set -euo pipefail
 
@@ -47,6 +48,8 @@ mkdir -p "$saves"
 
 for scene in "${scenes[@]}"; do
     src=$root/tools/render_harness/scenes/$scene.script
+    # a path to a script file works too (tools/profile_measure.py script)
+    if [ -f "$scene" ]; then src=$(cd "$(dirname "$scene")" && pwd)/$(basename "$scene"); scene=$(basename "${scene%.*}"); fi
     [ -f "$src" ] || { echo "no scene $src" >&2; exit 2; }
     run=$out/$tag/$scene
     rm -rf "$run"
@@ -73,6 +76,11 @@ for scene in "${scenes[@]}"; do
 
     args=(--data-root "$data" --script "$script" --exit-after "$limit" -dbg)
     [ -n "$size" ] && args+=(--size "$size")
+    # the Mac's graphics profile (docs/ios-port/SETTINGS.md) overrides user.ltx: a `-p preset` run is about the preset's own values, so it
+    # runs without a profile. HARNESS_ARGS adds anything else, e.g. "--graphics-profile ipad" or "--unlocked-graphics".
+    [ -n "$preset" ] && args+=(--graphics-profile none)
+    # shellcheck disable=SC2206
+    [ -n "${HARNESS_ARGS:-}" ] && args+=(${HARNESS_ARGS})
     echo "== $scene (tag $tag${preset:+, preset $preset})"
     start=$(date +%s)
     envargs=()

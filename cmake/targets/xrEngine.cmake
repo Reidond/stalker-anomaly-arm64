@@ -37,6 +37,7 @@ anomaly_vcxproj_sources(xrengine_sources "${ANOMALY_SRC_DIR}/xrEngine/xrEngine.v
 list(APPEND xrengine_sources
     "${ANOMALY_SRC_DIR}/xrEngine/xr_window_sdl.cpp"
     "${ANOMALY_SRC_DIR}/xrEngine/xr_platform_stubs_apple.cpp"
+    "${ANOMALY_SRC_DIR}/xrEngine/xr_graphics_profile.cpp"
 )
 
 # Third-party code xrEngine compiles itself (the Windows solution has imgui.vcxproj and giflib.vcxproj). Dear ImGui

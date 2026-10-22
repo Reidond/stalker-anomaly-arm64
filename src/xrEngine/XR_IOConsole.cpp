@@ -12,6 +12,9 @@
 #include "xr_input.h"
 #include "xr_ioc_cmd.h"
 #include "GameFont.h"
+#ifdef XR_PLATFORM_APPLE
+#include "xr_graphics_profile.h"
+#endif
 
 #include "../Include/xrRender/UIRender.h"
 
@@ -627,6 +630,9 @@ void CConsole::ExecuteCommand(LPCSTR cmd_str, bool record_cmd)
 		IConsole_Command* cc = it->second;
 		if (cc && cc->bEnabled)
 		{
+#ifdef XR_PLATFORM_APPLE
+			xr_gfx::DefaultsScope gfx_defaults(first); // default_controls sets graphics starting values
+#endif
 			if (cc->bLowerCaseArgs)
 			{
 				strlwr(last);
@@ -635,7 +641,11 @@ void CConsole::ExecuteCommand(LPCSTR cmd_str, bool record_cmd)
 			{
 				if (cc->bEmptyArgsHandled)
 				{
-					cc->Execute(last);
+#ifdef XR_PLATFORM_APPLE
+					// device graphics profile: a locked setting stays as the profile set it (xr_graphics_profile.h)
+					if (!xr_gfx::Refuse(first, last))
+#endif
+						cc->Execute(last);
 				}
 				else
 				{
@@ -646,10 +656,15 @@ void CConsole::ExecuteCommand(LPCSTR cmd_str, bool record_cmd)
 			}
 			else
 			{
-				cc->Execute(last);
-				if (record_cmd)
+#ifdef XR_PLATFORM_APPLE
+				if (!xr_gfx::Refuse(first, last))
+#endif
 				{
-					cc->add_to_LRU((LPCSTR)last);
+					cc->Execute(last);
+					if (record_cmd)
+					{
+						cc->add_to_LRU((LPCSTR)last);
+					}
 				}
 			}
 		}

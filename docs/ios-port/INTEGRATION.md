@@ -74,6 +74,8 @@ com.andriishafar.anomaly AnomalyDataRoot <path>`, the default `~/Documents/Anoma
 | `--script <file>` | scripted run: console commands, synthetic keys and mouse (below) |
 | `--unattended [--size <w>x<h>]` | background-safe run (below); implied by `--script` and `--exit-after` |
 | `--foreground` | with `--script` or `--exit-after`: a normal, visible, focused run |
+| `--graphics-profile <id\|none>` | force a device graphics profile (e.g. `ipad-8gb`, `mac-pro`), or `none`: no profile, no locks, the full PC options menu ([SETTINGS.md](SETTINGS.md)) |
+| `--unlocked-graphics` | keep the profile as the starting values but let everything be changed (console, scripts, the full options menu); for testing and measuring |
 | `--show-launcher` | show the launcher (data status, how to copy data) even when the data is valid; it is shown by itself when the data is missing or incomplete |
 | anything else | the engine's command line, as on Windows (`-nosound`, `-nojit`, `-start ...`, ...), after `commandline.txt` (`~/Library/Application Support/Anomaly/commandline.txt`) |
 

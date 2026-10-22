@@ -18,6 +18,9 @@
 #include "x_ray.h"
 #include "std_classes.h"
 #include "GameFont.h"
+#ifdef XR_PLATFORM_APPLE
+#include "xr_graphics_profile.h"
+#endif
 #include "resource.h"
 #include "LightAnimLibrary.h"
 #include "../xrcdb/ispatial.h"
@@ -319,7 +322,13 @@ void destroyEngine()
 void execUserScript()
 {
 	Console->Execute("default_controls");
+#ifdef XR_PLATFORM_APPLE
+	xr_gfx::BeginUserConfig(); // the device profile's locks refuse stale values in user.ltx, then the profile is applied
+#endif
 	Console->ExecuteScript(Console->ConfigFile);
+#ifdef XR_PLATFORM_APPLE
+	xr_gfx::EndUserConfig();
+#endif
     if (Console->GetBool("dump_cvar_enable"))
 	    Console->Execute("dump_cvar");
 }

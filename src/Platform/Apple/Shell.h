@@ -254,9 +254,9 @@ struct InitParams
     bool keep_screen_awake = true;
 };
 
-// Command line flags the device preset adds to the engine's (e.g. "-smap1536"); empty without a preset.
-// The preset itself is merged into appdata/user.ltx by Init: on iOS the "ipad" preset (docs/ios-port/IPAD.md) the first time
-// and whenever its version is raised; `--device-preset ipad|reset|none` forces it on any platform, re-applies it, or skips it.
+// Command line flags the device's graphics profile adds to the engine's (e.g. "-smap1536"); empty without a profile. The profile
+// itself (GraphicsProfile.h, docs/ios-port/SETTINGS.md) is selected by Init from the hardware and applied by the engine after user.ltx;
+// `--graphics-profile <id|none>` forces or turns it off, `--unlocked-graphics` keeps it but lets everything be changed.
 const std::string& DevicePresetCommandLine();
 
 // Call after SDL_Init (the lifecycle watch needs it) and before anything else in the shell.

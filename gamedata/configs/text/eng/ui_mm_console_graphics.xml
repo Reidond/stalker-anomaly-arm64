@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="windows-1251"?>
+
+<!-- The console-like graphics options (gamedata/scripts/console_options.script, docs/ios-port/SETTINGS.md) -->
+<string_table>
+	<string id="ui_mm_gfx_desc">
+		<text>Graphics are set for this device. Quality shows the best picture it keeps at 60 frames per second; Performance keeps a safety margin, and runs at 120 where the display does.</text>
+	</string>
+	<string id="ui_mm_gfx_mode">
+		<text>Graphics mode</text>
+	</string>
+	<string id="ui_mm_gfx_mode_desc">
+		<text>Quality: the best picture the device keeps at 60 frames per second. Performance: lower render resolution for a steadier frame rate, or 120 frames per second on a 120 Hz display.</text>
+	</string>
+	<string id="ui_mm_lst_gfx_mode_quality">
+		<text>Quality</text>
+	</string>
+	<string id="ui_mm_lst_gfx_mode_performance">
+		<text>Performance</text>
+	</string>
+	<string id="ui_mm_gfx_fps">
+		<text>Frame rate</text>
+	</string>
+	<string id="ui_mm_gfx_fps_desc">
+		<text>Limits the frame rate. Auto uses the mode's rate: 60, or 120 in Performance mode on a 120 Hz display.</text>
+	</string>
+	<string id="ui_mm_lst_gfx_fps_auto">
+		<text>Auto</text>
+	</string>
+	<string id="ui_mm_lst_gfx_fps_30">
+		<text>30 fps</text>
+	</string>
+	<string id="ui_mm_lst_gfx_fps_60">
+		<text>60 fps</text>
+	</string>
+	<string id="ui_mm_lst_gfx_fps_120">
+		<text>120 fps</text>
+	</string>
+	<string id="ui_mm_gfx_brightness">
+		<text>Brightness</text>
+	</string>
+	<string id="ui_mm_gfx_brightness_desc">
+		<text>Overall brightness of the picture.</text>
+	</string>
+</string_table>

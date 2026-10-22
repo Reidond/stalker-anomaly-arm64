@@ -1,0 +1,5 @@
+# standalone
+# Prints the options tree the player sees (xr_harness.options_tree) and checks that no visible row has a locked command. Read the
+# "HARNESS OPTIONS" lines of the engine log. Run it with and without `--graphics-profile none` to compare with the PC menu.
+2 console run_string xr_harness.options_tree()
+5 quit

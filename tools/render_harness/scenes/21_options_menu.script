@@ -1,0 +1,7 @@
+# standalone
+# The options menu (docs/ios-port/SETTINGS.md): Settings from the main menu, then the Video page.
+1 console r_screenshot_mode png
+5 move 764 662
+6 click 764 662
+9 console screenshot 21_options_a
+12 quit
