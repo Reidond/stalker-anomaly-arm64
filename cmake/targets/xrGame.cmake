@@ -118,7 +118,13 @@ set(xrgame_compile_options
 # luaopen_socket_core_init and pdebug_init_init, called by CScriptStorage (absent targets are skipped)
 set(xrgame_link_targets luabind LuaJIT::luajit ode xrAPI xrCDB xrNetServer xrPhysics xrXMLParser gameinput lua_extensions)
 
-# One OBJECT library per shard, configured like anomaly_add_module() configures a module.
+# One OBJECT library per shard, configured like anomaly_add_module() configures a module. The Xcode generator cannot archive
+# $<TARGET_OBJECTS:...> into libxrGame.a (the file is never produced), so there each shard is a static library of its own and
+# `xrGame` is an INTERFACE library that links them.
+set(xrgame_shard_type OBJECT)
+if(CMAKE_GENERATOR STREQUAL "Xcode")
+    set(xrgame_shard_type STATIC)
+endif()
 set(xrgame_objects "")
 set(xrgame_shard_targets "")
 set(xrgame_pch_owner "")
@@ -130,7 +136,7 @@ foreach(shard IN LISTS XRGAME_SHARDS)
     if(count EQUAL 0)
         message(FATAL_ERROR "xrGame shard ${shard} has no sources")
     endif()
-    add_library(${tgt} OBJECT ${xrgame_sources_${shard}})
+    add_library(${tgt} ${xrgame_shard_type} ${xrgame_sources_${shard}})
     target_link_libraries(${tgt} PUBLIC Anomaly::EngineConfig)
     foreach(dep IN LISTS xrgame_link_targets)
         target_link_libraries(${tgt} PUBLIC "$<TARGET_NAME_IF_EXISTS:${dep}>")
@@ -167,10 +173,20 @@ endforeach()
 add_custom_target(xrGame_shards DEPENDS ${xrgame_shard_targets})
 set_target_properties(xrGame_shards PROPERTIES FOLDER "xrGame")
 
-anomaly_add_module(xrGame
-    SOURCES ${xrgame_objects}
-    INCLUDE_DIRS ${xrgame_include_dirs}
-    DEFINES XRGAME_EXPORTS
-    LINK ${xrgame_link_targets}
-)
-set_target_properties(xrGame PROPERTIES LINKER_LANGUAGE CXX)
+if(CMAKE_GENERATOR STREQUAL "Xcode")
+    add_library(xrGame INTERFACE)
+    add_library(Anomaly::xrGame ALIAS xrGame)
+    target_link_libraries(xrGame INTERFACE Anomaly::EngineConfig ${xrgame_shard_targets})
+    foreach(dep IN LISTS xrgame_link_targets)
+        target_link_libraries(xrGame INTERFACE "$<TARGET_NAME_IF_EXISTS:${dep}>")
+    endforeach()
+    set_property(GLOBAL APPEND PROPERTY ANOMALY_MODULE_TARGETS ${xrgame_shard_targets})
+else()
+    anomaly_add_module(xrGame
+        SOURCES ${xrgame_objects}
+        INCLUDE_DIRS ${xrgame_include_dirs}
+        DEFINES XRGAME_EXPORTS
+        LINK ${xrgame_link_targets}
+    )
+    set_target_properties(xrGame PROPERTIES LINKER_LANGUAGE CXX)
+endif()
