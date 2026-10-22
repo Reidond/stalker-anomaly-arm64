@@ -139,8 +139,11 @@ void CEffect_Rain::Born(Item& dest, float radius, float speed)
 	dest.fSpeed = ::Random.randF(drop_speed_min, drop_speed_max) * speed * clampr(Wind_Velocity * 1.5f, 0.5f, 1.0f);
 
 	// Born
+	// RayPick shortens `height` to the hit distance: it has to run before `height` is read as an argument (the order of
+	// evaluation of arguments is unspecified; x86 compilers ran the call first, arm64 clang reads `height` first)
 	float height = max_distance;
-	RenewItem(dest, height, RayPick(dest.P, dest.D, height, collide::rqtBoth));
+	const BOOL hit = RayPick(dest.P, dest.D, height, collide::rqtBoth);
+	RenewItem(dest, height, hit);
 }
 
 BOOL CEffect_Rain::RayPick(const Fvector& s, const Fvector& d, float& range, collide::rq_target tgt)
