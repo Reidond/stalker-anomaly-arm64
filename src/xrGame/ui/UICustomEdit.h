@@ -5,7 +5,6 @@
 namespace text_editor
 {
 	class ENGINE_API line_edit_control;
-	enum init_mode;
 };
 
 class CUICustomEdit : public CUIStatic

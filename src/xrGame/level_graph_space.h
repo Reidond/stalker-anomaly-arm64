@@ -8,6 +8,8 @@
 
 #pragma once
 
+class CLevelGraph;
+
 namespace LevelGraph
 {
 	class CHeader : private hdrNODES
@@ -40,7 +42,7 @@ namespace LevelGraph
 		ICF bool operator<(const LevelGraph::CVertex& vertex) const;
 		ICF bool operator>(const LevelGraph::CVertex& vertex) const;
 		ICF bool operator==(const LevelGraph::CVertex& vertex) const;
-		friend class CLevelGraph;
+		friend class ::CLevelGraph;
 	};
 	static_assert(sizeof(CVertex) == sizeof(NodeCompressed13), "Unexpected level graph vertex size");
 

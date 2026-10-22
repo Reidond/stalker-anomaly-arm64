@@ -3,6 +3,7 @@
 #include "../../../../xrServerEntities/script_export_space.h"
 
 class CPsyDogPhantom;
+class CPsyDogAura;
 
 class CPsyDog : public CAI_PseudoDog
 {

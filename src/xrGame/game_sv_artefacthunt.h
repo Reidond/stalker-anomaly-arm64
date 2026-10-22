@@ -7,6 +7,9 @@ class game_sv_ArtefactHunt : public game_sv_TeamDeathmatch
 private:
 	typedef game_sv_TeamDeathmatch inherited;
 
+#ifdef NONE
+#undef NONE // the Apple Win32 shim defines NONE (Common/PlatformApple.inl); this enumerator is older
+#endif
 	enum ARTEFACT_STATE
 	{
 		NONE,

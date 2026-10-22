@@ -12,7 +12,7 @@
 using namespace luabind;
 
 #pragma optimize("s",on)
-void CScriptFcolor::script_register(lua_State* L)
+template<> void CScriptFcolor::script_register(lua_State* L)
 {
 	module(L)
 	[

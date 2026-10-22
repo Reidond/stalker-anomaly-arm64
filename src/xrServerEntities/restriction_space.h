@@ -24,7 +24,7 @@ namespace RestrictionSpace
 		}
 	};
 
-	enum ERestrictorTypes
+	enum ERestrictorTypes : int
 	{
 		eDefaultRestrictorTypeNone = u8(0),
 		eDefaultRestrictorTypeOut = u8(1),

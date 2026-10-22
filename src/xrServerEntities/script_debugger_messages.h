@@ -1,5 +1,9 @@
 #pragma once
 
+#ifndef WM_USER
+#define WM_USER 0x0400 // from winuser.h; the Apple port has no window messages, the values only number the mailslot messages
+#endif
+
 struct StackTrace
 {
 	char szDesc[255];

@@ -42,7 +42,7 @@ IC void CGamePathManager::setup(
 		_goal_node_index,
 		parameters
 	);
-	goal_vertex = graph->vertex(goal_node_index);
+	goal_vertex = this->graph->vertex(this->goal_node_index);
 }
 
 TEMPLATE_SPECIALIZATION
@@ -57,7 +57,7 @@ TEMPLATE_SPECIALIZATION
 IC _dist_type CGamePathManager::estimate(const _index_type& node_index) const
 {
 	VERIFY(graph);
-	return (goal_vertex->game_point().distance_to(graph->vertex(node_index)->game_point()));
+	return (goal_vertex->game_point().distance_to(this->graph->vertex(node_index)->game_point()));
 }
 
 TEMPLATE_SPECIALIZATION
@@ -71,7 +71,7 @@ TEMPLATE_SPECIALIZATION
 IC bool CGamePathManager::is_accessible(const _index_type& vertex_id) const
 {
 	VERIFY(graph);
-	return (graph->accessible(vertex_id));
+	return (this->graph->accessible(vertex_id));
 }
 
 #undef TEMPLATE_SPECIALIZATION

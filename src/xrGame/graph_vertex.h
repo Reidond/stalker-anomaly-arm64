@@ -12,13 +12,13 @@
 
 template <
 	typename _data_type,
-	typename _vertex_id_type,
+	typename T_vertex_id_type,
 	typename _graph_type
 >
 class CVertex
 {
 public:
-	typedef _vertex_id_type _vertex_id_type;
+	typedef T_vertex_id_type _vertex_id_type;
 	typedef typename _graph_type::CEdge _edge_type;
 	typedef typename _edge_type::_edge_weight_type _edge_weight_type;
 	typedef xr_vector<_edge_type> EDGES;

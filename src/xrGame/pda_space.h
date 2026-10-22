@@ -1,7 +1,7 @@
 #pragma once
 
 //типы сообщений PDA
-enum EPdaMsg
+enum EPdaMsg : int
 {
 	ePdaMsgDialog,
 	//диалог

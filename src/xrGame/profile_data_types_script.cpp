@@ -24,4 +24,4 @@ void profile_data_script_registrator::script_register(lua_State* L)
 	];
 }
 
-DEFINE_MIXED_DELEGATE_SCRIPT(gamespy_profile::store_operation_cb, "store_operation_cb");
+template<> DEFINE_MIXED_DELEGATE_SCRIPT(gamespy_profile::store_operation_cb, "store_operation_cb");

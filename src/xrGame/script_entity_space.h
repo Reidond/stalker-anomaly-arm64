@@ -10,7 +10,7 @@
 
 namespace ScriptEntity
 {
-	enum EActionType
+	enum EActionType : int
 	{
 		eActionTypeMovement = u32(0),
 		eActionTypeWatch,
