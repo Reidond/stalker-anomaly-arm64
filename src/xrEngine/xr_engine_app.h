@@ -41,6 +41,10 @@ struct InitParams
 	// Stop after the console and settings (user.ltx) are up and before the renderer is loaded: what the smoke test
 	// uses while the other modules are not linked yet. The window exists then.
 	bool stop_before_renderer = false;
+	// Never take focus or the user's mouse (xr_window::SetBackground): for runs on a Mac somebody is working on.
+	bool background = false;
+	// Never show a window: the renderer draws offscreen and screenshots read it back (xr_window::SetOffscreen).
+	bool offscreen = false;
 };
 
 enum class InitResult

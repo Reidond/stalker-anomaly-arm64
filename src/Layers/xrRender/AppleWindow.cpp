@@ -36,6 +36,16 @@ bool AttachMetalLayer(HWND hwnd)
         return false;
     }
 
+    if (xr_window::IsOffscreen())
+    {
+        // no layer: the shim makes an offscreen swap chain of the size CHW asks for
+        mtl_d3d11::RegisterOffscreenWindow(hwnd);
+        u32 width = 0, height = 0;
+        if (GetDisplaySize(hwnd, width, height))
+            mtl_d3d11::SetDisplayMode(width, height, 60);
+        return true;
+    }
+
     auto it = g_views.find(hwnd);
     if (it == g_views.end())
     {
@@ -106,7 +116,7 @@ bool GetDisplaySize(HWND hwnd, u32& width, u32& height)
 void ApplyWindowMode(HWND hwnd, u32 screenmode, u32 width, u32 height, bool move_window)
 {
     SDL_Window* window = ToWindow(hwnd);
-    if (!window)
+    if (!window || xr_window::IsOffscreen())
         return;
 #if defined(XR_PLATFORM_IOS)
     // the window always covers the screen
@@ -128,20 +138,21 @@ void ApplyWindowMode(HWND hwnd, u32 screenmode, u32 width, u32 height, bool move
         SDL_SetWindowPosition(window, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED);
     }
     SDL_ShowWindow(window);
-    SDL_RaiseWindow(window);
+    if (!xr_window::IsBackground())
+        SDL_RaiseWindow(window);
 #endif
 }
 
 void Raise(HWND hwnd)
 {
-    if (ToWindow(hwnd))
+    if (ToWindow(hwnd) && !xr_window::IsOffscreen() && !xr_window::IsBackground())
         SDL_RaiseWindow(ToWindow(hwnd));
 }
 
 void Minimize(HWND hwnd)
 {
 #if !defined(XR_PLATFORM_IOS)
-    if (ToWindow(hwnd))
+    if (ToWindow(hwnd) && !xr_window::IsOffscreen())
         SDL_MinimizeWindow(ToWindow(hwnd));
 #else
     (void)hwnd;
@@ -151,7 +162,7 @@ void Minimize(HWND hwnd)
 void Restore(HWND hwnd)
 {
 #if !defined(XR_PLATFORM_IOS)
-    if (ToWindow(hwnd))
+    if (ToWindow(hwnd) && !xr_window::IsOffscreen())
         SDL_RestoreWindow(ToWindow(hwnd));
 #else
     (void)hwnd;

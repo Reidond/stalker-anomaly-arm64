@@ -16,7 +16,9 @@ set -eu
 
 here=${0:A:h}
 repo=${here:h:h}
-udid=${JITLAB_UDID:-00008122-000624961469001C}
+# Default: the first connected physical iPad, via devicectl.
+udid=${JITLAB_UDID:-$(xcrun devicectl list devices 2>/dev/null | awk '/iPad/ && /physical/ { for (i = 1; i <= NF; i++) if ($i ~ /^[0-9A-F]{8}-[0-9A-F]{16}$/) { print $i; exit } }')}
+[[ -n $udid ]] || { print -u2 "run_ipad.sh: no connected iPad found; set JITLAB_UDID"; exit 1 }
 build=${JITLAB_BUILD:-$repo/build/ios-arm64}
 bundle=com.andriishafar.anomaly.jitlab
 log=${JITLAB_LOG:-${TMPDIR:-/tmp}/jit_lab_console.log}

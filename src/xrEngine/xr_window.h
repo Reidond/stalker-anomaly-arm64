@@ -77,6 +77,17 @@ enum Mode
 // SetMode. `width`/`height` are points and only matter for a windowed Mac window. On iPadOS the window is always the
 // whole screen. Returns false (and logs) on failure. Safe to call twice; the second call returns the first window.
 ENGINE_API bool Create(const char* title, int width, int height);
+
+// Background mode (unattended runs, call before Create): the engine never takes focus from the user. It does not raise the
+// window, does not enable relative mouse mode or confine the cursor, and does not warp the real cursor; synthetic input
+// events (the app's --script) still reach the engine.
+ENGINE_API void SetBackground(bool background);
+ENGINE_API bool IsBackground();
+// Offscreen mode (unattended runs, call before Create): the window is never shown, raised or given a Metal view; the renderer
+// draws into an offscreen swap chain of the render resolution (xr_apple_window::AttachMetalLayer), and screenshots read that
+// texture back. The window object still exists for input events and the drawable size.
+ENGINE_API void SetOffscreen(bool offscreen);
+ENGINE_API bool IsOffscreen();
 ENGINE_API void Destroy();
 ENGINE_API SDL_Window* Get();
 inline HWND Handle() { return (HWND)Get(); }

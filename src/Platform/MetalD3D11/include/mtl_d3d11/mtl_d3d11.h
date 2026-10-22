@@ -33,7 +33,9 @@ HRESULT CreateDevice(const DeviceDesc* desc, ID3D11Device** ppDevice, ID3D11Devi
 
 struct SwapChainDesc
 {
-    void* metalLayer = nullptr;           // CAMetalLayer*
+    void* metalLayer = nullptr;           // CAMetalLayer*; null with offscreen
+    bool offscreen = false;               // no layer: the back buffer is a private MTLTexture of width x height (unattended runs);
+                                          // Present only ends the frame, screenshots come from RequestCapture
     UINT width = 0;                       // 0: use the layer's drawableSize
     UINT height = 0;
     DXGI_FORMAT format = DXGI_FORMAT_R8G8B8A8_UNORM; // R8G8B8A8/B8G8R8A8_UNORM -> BGRA8, R10G10B10A2 -> RGB10A2
@@ -47,6 +49,8 @@ HRESULT CreateSwapChain(ID3D11Device* pDevice, const SwapChainDesc* desc, IDXGIS
 // IDXGIFactory2::CreateSwapChainForHwnd receives the engine's window handle. Register the CAMetalLayer that
 // belongs to it (SDL_Metal_GetLayer) so the unmodified CHW code can create its swap chain.
 void RegisterWindowLayer(void* hwnd, void* caMetalLayer);
+// The window has no layer: CreateSwapChainForHwnd then makes an offscreen swap chain (SwapChainDesc::offscreen).
+void RegisterOffscreenWindow(void* hwnd);
 
 // What IDXGIOutput reports (desktop size and display-mode list). The platform layer sets it from SDL.
 void SetDisplayMode(UINT width, UINT height, UINT refreshHz);
@@ -59,8 +63,16 @@ struct CaptureResult
     uint32_t height = 0;
     std::vector<uint8_t> rgba;
 };
+// RequestCapture makes the layer's drawables readable (framebufferOnly = NO) and arms the capture for the first
+// Present whose drawable allows it, so a swap chain created without allowReadback pays nothing until a screenshot is
+// asked for (the capture then lands one or two frames later). WaitForCapture blocks until the frame arrived;
+// PollCapture does not (use it from a thread that is also the one presenting).
 void RequestCapture(IDXGISwapChain1* pSwapChain);
 bool WaitForCapture(IDXGISwapChain1* pSwapChain, CaptureResult* out);
+bool PollCapture(IDXGISwapChain1* pSwapChain, CaptureResult* out);
+
+// Encodes a capture as JPEG (format 0) or PNG (format 1) with ImageIO.
+bool EncodeCapture(const CaptureResult& image, int format, std::vector<uint8_t>* out);
 
 struct Stats
 {

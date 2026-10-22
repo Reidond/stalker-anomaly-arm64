@@ -86,10 +86,28 @@ Runs nobody watches must not disturb the Mac they run on. `--script` and `--exit
 with `--foreground`). Before `SDL_Init` the app sets SDL's `MAC_BACKGROUND_APP`, `WINDOW_ACTIVATE_WHEN_SHOWN` and
 `WINDOW_ACTIVATE_WHEN_RAISED` hints (no regular activation policy: no Dock icon, no focus, no new Space), points OpenAL Soft at its null
 device (`ALSOFT_DRIVERS=null`, unless the variable is already set) and opts out of App Nap and automatic termination with an
-`NSProcessInfo` activity, so frame pacing stays real while the window is in the background. The engine is started windowed at
-`--size` (default 1280x720 pixels) with `g_always_active on`, so losing focus does not pause it. These settings are written into
+`NSProcessInfo` activity, so frame pacing stays real while the app is in the background. There is no window at all: the
+engine renders into an offscreen swap chain of `--size` (default 1280x720 pixels; a private `MTLTexture`, no `CAMetalLayer`, no SDL
+Metal view; the hidden SDL window only carries input events and the size) and the engine runs with `g_always_active on`, so it never
+pauses for lack of focus. `--show-window` gives it a normal windowed window (still in the background) for debugging.
+`screenshot [name] [frames]` reads the frame back from the offscreen texture (or from the drawable of a real window, which is made
+readable only while a capture is pending) and writes `<name>.png` to `appdata/screenshots` (`r_screenshot_mode png|jpg`). These
+settings are written into
 `appdata/unattended.ltx` (a copy of `user.ltx` with the overrides appended) which the app passes as `-ltx unattended.ltx`; the
 engine loads and saves that file, so the player's `user.ltx` is not touched. A `-ltx` of your own on the command line wins.
+
+Unattended also means background: the app sets the Accessory activation policy before SDL exists, never raises the window, never
+turns on relative mouse mode or confines the cursor, and never warps it (`xr_window::SetBackground`); the scripted input events
+reach the engine all the same. Checked by sampling `lsappinfo front` every 0.25 s over a menu run and a Cordon run: the app was
+never frontmost, started directly or with `--show-window`.
+
+Recommended way to start one (LaunchServices starts it in the background, `-W` waits for it, output goes to files):
+
+```bash
+open -g -j -W -n --env ANOMALY_STATE_ROOT=<run-dir> --stdout <file> --stderr <file> \
+  build/macos-arm64-release/src/Platform/App/anomaly.app --args \
+  --data-root "$PWD/game/Anomaly" --script <file> --exit-after <hard-limit-seconds>
+```
 
 `ANOMALY_STATE_ROOT=<dir>` (macOS) moves everything the app writes to `<dir>/{Application Support,Caches,Logs}/Anomaly`: appdata
 (saves, `user.ltx`, screenshots, the engine log), the shader cache and the shell log. Scripted runs of different sessions then do

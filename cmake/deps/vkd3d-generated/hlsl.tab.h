@@ -161,7 +161,7 @@ struct state_block_index
 };
 
 
-#line 165 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.h"
+#line 165 "hlsl.tab.h"
 
 /* Token kinds.  */
 #ifndef HLSL_YYTOKENTYPE
@@ -354,7 +354,7 @@ union HLSL_YYSTYPE
     struct hlsl_state_block *state_block;
     struct state_block_index state_block_index;
 
-#line 358 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.h"
+#line 358 "hlsl.tab.h"
 
 };
 typedef union HLSL_YYSTYPE HLSL_YYSTYPE;
@@ -388,6 +388,6 @@ int hlsl_yyparse (void *scanner, struct hlsl_ctx *ctx);
 int yylex(HLSL_YYSTYPE *yylval_param, HLSL_YYLTYPE *yylloc_param, void *yyscanner);
 
 
-#line 392 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.h"
+#line 392 "hlsl.tab.h"
 
 #endif /* !YY_HLSL_YY_PRIVATE_TMP_CLAUDE_502_USERS_ANDRIISHAFAR_SRC_STALKER_ANOMALY_IOS_CLAUDE_WORKTREES_SHADER_XLAT_E6B22E_214A57E4_FE19_4F3E_900C_8C2987B7797A_SCRATCHPAD_EVAL_VKD3D_GEN_LIBS_VKD3D_SHADER_HLSL_TAB_H_INCLUDED  */

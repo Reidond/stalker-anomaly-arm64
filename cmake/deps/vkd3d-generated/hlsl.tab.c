@@ -7280,7 +7280,7 @@ static void validate_uav_type(struct hlsl_ctx *ctx, enum hlsl_sampler_dim dim,
 }
 
 
-#line 7284 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 7284 "hlsl.tab.c"
 
 #ifdef short
 # undef short
@@ -9622,331 +9622,331 @@ yydestruct (const char *yymsg,
     case YYSYMBOL_VAR_IDENTIFIER: /* VAR_IDENTIFIER  */
 #line 7301 "libs/vkd3d-shader/hlsl.y"
             { vkd3d_free(((*yyvaluep).name)); }
-#line 9626 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 9626 "hlsl.tab.c"
         break;
 
     case YYSYMBOL_NEW_IDENTIFIER: /* NEW_IDENTIFIER  */
 #line 7301 "libs/vkd3d-shader/hlsl.y"
             { vkd3d_free(((*yyvaluep).name)); }
-#line 9632 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 9632 "hlsl.tab.c"
         break;
 
     case YYSYMBOL_STRING: /* STRING  */
 #line 7301 "libs/vkd3d-shader/hlsl.y"
             { vkd3d_free(((*yyvaluep).name)); }
-#line 9638 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 9638 "hlsl.tab.c"
         break;
 
     case YYSYMBOL_TYPE_IDENTIFIER: /* TYPE_IDENTIFIER  */
 #line 7301 "libs/vkd3d-shader/hlsl.y"
             { vkd3d_free(((*yyvaluep).name)); }
-#line 9644 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 9644 "hlsl.tab.c"
         break;
 
     case YYSYMBOL_name_opt: /* name_opt  */
 #line 7301 "libs/vkd3d-shader/hlsl.y"
             { vkd3d_free(((*yyvaluep).name)); }
-#line 9650 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 9650 "hlsl.tab.c"
         break;
 
     case YYSYMBOL_any_identifier: /* any_identifier  */
 #line 7301 "libs/vkd3d-shader/hlsl.y"
             { vkd3d_free(((*yyvaluep).name)); }
-#line 9656 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 9656 "hlsl.tab.c"
         break;
 
     case YYSYMBOL_attribute_list: /* attribute_list  */
 #line 7241 "libs/vkd3d-shader/hlsl.y"
             { cleanup_parse_attribute_list(&((*yyvaluep).attr_list)); }
-#line 9662 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 9662 "hlsl.tab.c"
         break;
 
     case YYSYMBOL_attribute_list_optional: /* attribute_list_optional  */
 #line 7241 "libs/vkd3d-shader/hlsl.y"
             { cleanup_parse_attribute_list(&((*yyvaluep).attr_list)); }
-#line 9668 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 9668 "hlsl.tab.c"
         break;
 
     case YYSYMBOL_compound_statement: /* compound_statement  */
 #line 7271 "libs/vkd3d-shader/hlsl.y"
             { destroy_block(((*yyvaluep).block)); }
-#line 9674 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 9674 "hlsl.tab.c"
         break;
 
     case YYSYMBOL_var_identifier: /* var_identifier  */
 #line 7301 "libs/vkd3d-shader/hlsl.y"
             { vkd3d_free(((*yyvaluep).name)); }
-#line 9680 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 9680 "hlsl.tab.c"
         break;
 
     case YYSYMBOL_parameters: /* parameters  */
 #line 7308 "libs/vkd3d-shader/hlsl.y"
             { hlsl_func_parameters_cleanup(&((*yyvaluep).parameters)); }
-#line 9686 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 9686 "hlsl.tab.c"
         break;
 
     case YYSYMBOL_param_list: /* param_list  */
 #line 7308 "libs/vkd3d-shader/hlsl.y"
             { hlsl_func_parameters_cleanup(&((*yyvaluep).parameters)); }
-#line 9692 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 9692 "hlsl.tab.c"
         break;
 
     case YYSYMBOL_declaration_statement: /* declaration_statement  */
 #line 7271 "libs/vkd3d-shader/hlsl.y"
             { destroy_block(((*yyvaluep).block)); }
-#line 9698 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 9698 "hlsl.tab.c"
         break;
 
     case YYSYMBOL_type_specs: /* type_specs  */
 #line 7223 "libs/vkd3d-shader/hlsl.y"
             { destroy_parse_variable_defs(((*yyvaluep).list)); }
-#line 9704 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 9704 "hlsl.tab.c"
         break;
 
     case YYSYMBOL_type_spec: /* type_spec  */
 #line 7343 "libs/vkd3d-shader/hlsl.y"
             { free_parse_variable_def(((*yyvaluep).variable_def)); }
-#line 9710 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 9710 "hlsl.tab.c"
         break;
 
     case YYSYMBOL_declaration: /* declaration  */
 #line 7271 "libs/vkd3d-shader/hlsl.y"
             { destroy_block(((*yyvaluep).block)); }
-#line 9716 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 9716 "hlsl.tab.c"
         break;
 
     case YYSYMBOL_variables_def: /* variables_def  */
 #line 7223 "libs/vkd3d-shader/hlsl.y"
             { destroy_parse_variable_defs(((*yyvaluep).list)); }
-#line 9722 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 9722 "hlsl.tab.c"
         break;
 
     case YYSYMBOL_variables_def_typed: /* variables_def_typed  */
 #line 7223 "libs/vkd3d-shader/hlsl.y"
             { destroy_parse_variable_defs(((*yyvaluep).list)); }
-#line 9728 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 9728 "hlsl.tab.c"
         break;
 
     case YYSYMBOL_variable_decl: /* variable_decl  */
 #line 7343 "libs/vkd3d-shader/hlsl.y"
             { free_parse_variable_def(((*yyvaluep).variable_def)); }
-#line 9734 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 9734 "hlsl.tab.c"
         break;
 
     case YYSYMBOL_stateblock_lhs_identifier: /* stateblock_lhs_identifier  */
 #line 7301 "libs/vkd3d-shader/hlsl.y"
             { vkd3d_free(((*yyvaluep).name)); }
-#line 9740 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 9740 "hlsl.tab.c"
         break;
 
     case YYSYMBOL_state_block: /* state_block  */
 #line 7321 "libs/vkd3d-shader/hlsl.y"
             { hlsl_free_state_block(((*yyvaluep).state_block)); }
-#line 9746 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 9746 "hlsl.tab.c"
         break;
 
     case YYSYMBOL_state_block_list: /* state_block_list  */
 #line 7343 "libs/vkd3d-shader/hlsl.y"
             { free_parse_variable_def(((*yyvaluep).variable_def)); }
-#line 9752 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 9752 "hlsl.tab.c"
         break;
 
     case YYSYMBOL_variable_def: /* variable_def  */
 #line 7343 "libs/vkd3d-shader/hlsl.y"
             { free_parse_variable_def(((*yyvaluep).variable_def)); }
-#line 9758 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 9758 "hlsl.tab.c"
         break;
 
     case YYSYMBOL_variable_def_typed: /* variable_def_typed  */
 #line 7343 "libs/vkd3d-shader/hlsl.y"
             { free_parse_variable_def(((*yyvaluep).variable_def)); }
-#line 9764 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 9764 "hlsl.tab.c"
         break;
 
     case YYSYMBOL_complex_initializer: /* complex_initializer  */
 #line 7289 "libs/vkd3d-shader/hlsl.y"
             { cleanup_parse_initializer(&((*yyvaluep).initializer)); }
-#line 9770 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 9770 "hlsl.tab.c"
         break;
 
     case YYSYMBOL_complex_initializer_list: /* complex_initializer_list  */
 #line 7289 "libs/vkd3d-shader/hlsl.y"
             { cleanup_parse_initializer(&((*yyvaluep).initializer)); }
-#line 9776 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 9776 "hlsl.tab.c"
         break;
 
     case YYSYMBOL_initializer_expr: /* initializer_expr  */
 #line 7271 "libs/vkd3d-shader/hlsl.y"
             { destroy_block(((*yyvaluep).block)); }
-#line 9782 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 9782 "hlsl.tab.c"
         break;
 
     case YYSYMBOL_initializer_expr_list: /* initializer_expr_list  */
 #line 7289 "libs/vkd3d-shader/hlsl.y"
             { cleanup_parse_initializer(&((*yyvaluep).initializer)); }
-#line 9788 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 9788 "hlsl.tab.c"
         break;
 
     case YYSYMBOL_statement_list: /* statement_list  */
 #line 7271 "libs/vkd3d-shader/hlsl.y"
             { destroy_block(((*yyvaluep).block)); }
-#line 9794 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 9794 "hlsl.tab.c"
         break;
 
     case YYSYMBOL_statement: /* statement  */
 #line 7271 "libs/vkd3d-shader/hlsl.y"
             { destroy_block(((*yyvaluep).block)); }
-#line 9800 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 9800 "hlsl.tab.c"
         break;
 
     case YYSYMBOL_jump_statement: /* jump_statement  */
 #line 7271 "libs/vkd3d-shader/hlsl.y"
             { destroy_block(((*yyvaluep).block)); }
-#line 9806 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 9806 "hlsl.tab.c"
         break;
 
     case YYSYMBOL_selection_statement: /* selection_statement  */
 #line 7271 "libs/vkd3d-shader/hlsl.y"
             { destroy_block(((*yyvaluep).block)); }
-#line 9812 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 9812 "hlsl.tab.c"
         break;
 
     case YYSYMBOL_loop_statement: /* loop_statement  */
 #line 7271 "libs/vkd3d-shader/hlsl.y"
             { destroy_block(((*yyvaluep).block)); }
-#line 9818 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 9818 "hlsl.tab.c"
         break;
 
     case YYSYMBOL_switch_statement: /* switch_statement  */
 #line 7271 "libs/vkd3d-shader/hlsl.y"
             { destroy_block(((*yyvaluep).block)); }
-#line 9824 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 9824 "hlsl.tab.c"
         break;
 
     case YYSYMBOL_switch_case: /* switch_case  */
 #line 7326 "libs/vkd3d-shader/hlsl.y"
             { hlsl_free_ir_switch_case(((*yyvaluep).switch_case)); }
-#line 9830 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 9830 "hlsl.tab.c"
         break;
 
     case YYSYMBOL_switch_cases: /* switch_cases  */
 #line 7224 "libs/vkd3d-shader/hlsl.y"
             { destroy_switch_cases(((*yyvaluep).list)); }
-#line 9836 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 9836 "hlsl.tab.c"
         break;
 
     case YYSYMBOL_expr_optional: /* expr_optional  */
 #line 7271 "libs/vkd3d-shader/hlsl.y"
             { destroy_block(((*yyvaluep).block)); }
-#line 9842 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 9842 "hlsl.tab.c"
         break;
 
     case YYSYMBOL_expr_statement: /* expr_statement  */
 #line 7271 "libs/vkd3d-shader/hlsl.y"
             { destroy_block(((*yyvaluep).block)); }
-#line 9848 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 9848 "hlsl.tab.c"
         break;
 
     case YYSYMBOL_func_arguments: /* func_arguments  */
 #line 7289 "libs/vkd3d-shader/hlsl.y"
             { cleanup_parse_initializer(&((*yyvaluep).initializer)); }
-#line 9854 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 9854 "hlsl.tab.c"
         break;
 
     case YYSYMBOL_primary_expr: /* primary_expr  */
 #line 7271 "libs/vkd3d-shader/hlsl.y"
             { destroy_block(((*yyvaluep).block)); }
-#line 9860 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 9860 "hlsl.tab.c"
         break;
 
     case YYSYMBOL_postfix_expr: /* postfix_expr  */
 #line 7271 "libs/vkd3d-shader/hlsl.y"
             { destroy_block(((*yyvaluep).block)); }
-#line 9866 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 9866 "hlsl.tab.c"
         break;
 
     case YYSYMBOL_unary_expr: /* unary_expr  */
 #line 7271 "libs/vkd3d-shader/hlsl.y"
             { destroy_block(((*yyvaluep).block)); }
-#line 9872 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 9872 "hlsl.tab.c"
         break;
 
     case YYSYMBOL_mul_expr: /* mul_expr  */
 #line 7271 "libs/vkd3d-shader/hlsl.y"
             { destroy_block(((*yyvaluep).block)); }
-#line 9878 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 9878 "hlsl.tab.c"
         break;
 
     case YYSYMBOL_add_expr: /* add_expr  */
 #line 7271 "libs/vkd3d-shader/hlsl.y"
             { destroy_block(((*yyvaluep).block)); }
-#line 9884 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 9884 "hlsl.tab.c"
         break;
 
     case YYSYMBOL_shift_expr: /* shift_expr  */
 #line 7271 "libs/vkd3d-shader/hlsl.y"
             { destroy_block(((*yyvaluep).block)); }
-#line 9890 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 9890 "hlsl.tab.c"
         break;
 
     case YYSYMBOL_relational_expr: /* relational_expr  */
 #line 7271 "libs/vkd3d-shader/hlsl.y"
             { destroy_block(((*yyvaluep).block)); }
-#line 9896 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 9896 "hlsl.tab.c"
         break;
 
     case YYSYMBOL_equality_expr: /* equality_expr  */
 #line 7271 "libs/vkd3d-shader/hlsl.y"
             { destroy_block(((*yyvaluep).block)); }
-#line 9902 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 9902 "hlsl.tab.c"
         break;
 
     case YYSYMBOL_bitand_expr: /* bitand_expr  */
 #line 7271 "libs/vkd3d-shader/hlsl.y"
             { destroy_block(((*yyvaluep).block)); }
-#line 9908 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 9908 "hlsl.tab.c"
         break;
 
     case YYSYMBOL_bitxor_expr: /* bitxor_expr  */
 #line 7271 "libs/vkd3d-shader/hlsl.y"
             { destroy_block(((*yyvaluep).block)); }
-#line 9914 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 9914 "hlsl.tab.c"
         break;
 
     case YYSYMBOL_bitor_expr: /* bitor_expr  */
 #line 7271 "libs/vkd3d-shader/hlsl.y"
             { destroy_block(((*yyvaluep).block)); }
-#line 9920 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 9920 "hlsl.tab.c"
         break;
 
     case YYSYMBOL_logicand_expr: /* logicand_expr  */
 #line 7271 "libs/vkd3d-shader/hlsl.y"
             { destroy_block(((*yyvaluep).block)); }
-#line 9926 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 9926 "hlsl.tab.c"
         break;
 
     case YYSYMBOL_logicor_expr: /* logicor_expr  */
 #line 7271 "libs/vkd3d-shader/hlsl.y"
             { destroy_block(((*yyvaluep).block)); }
-#line 9932 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 9932 "hlsl.tab.c"
         break;
 
     case YYSYMBOL_conditional_expr: /* conditional_expr  */
 #line 7271 "libs/vkd3d-shader/hlsl.y"
             { destroy_block(((*yyvaluep).block)); }
-#line 9938 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 9938 "hlsl.tab.c"
         break;
 
     case YYSYMBOL_assignment_expr: /* assignment_expr  */
 #line 7271 "libs/vkd3d-shader/hlsl.y"
             { destroy_block(((*yyvaluep).block)); }
-#line 9944 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 9944 "hlsl.tab.c"
         break;
 
     case YYSYMBOL_expr: /* expr  */
 #line 7271 "libs/vkd3d-shader/hlsl.y"
             { destroy_block(((*yyvaluep).block)); }
-#line 9950 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 9950 "hlsl.tab.c"
         break;
 
       default:
@@ -10255,7 +10255,7 @@ yyreduce:
             hlsl_block_add_block(&ctx->static_initializers, (yyvsp[0].block));
             destroy_block((yyvsp[0].block));
         }
-#line 10259 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 10259 "hlsl.tab.c"
     break;
 
   case 10: /* name_opt: %empty  */
@@ -10263,7 +10263,7 @@ yyreduce:
         {
             (yyval.name) = NULL;
         }
-#line 10267 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 10267 "hlsl.tab.c"
     break;
 
   case 12: /* pass: KW_PASS name_opt annotations_opt '{' state_block_start state_block '}'  */
@@ -10271,7 +10271,7 @@ yyreduce:
         {
             add_pass(ctx, (yyvsp[-5].name), (yyvsp[-4].scope), (yyvsp[-1].state_block), &(yylsp[-6]));
         }
-#line 10275 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 10275 "hlsl.tab.c"
     break;
 
   case 13: /* annotations_list: variables_def_typed ';'  */
@@ -10282,7 +10282,7 @@ yyreduce:
             block = initialize_vars(ctx, (yyvsp[-1].list));
             destroy_block(block);
         }
-#line 10286 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 10286 "hlsl.tab.c"
     break;
 
   case 14: /* annotations_list: annotations_list variables_def_typed ';'  */
@@ -10293,7 +10293,7 @@ yyreduce:
             block = initialize_vars(ctx, (yyvsp[-1].list));
             destroy_block(block);
         }
-#line 10297 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 10297 "hlsl.tab.c"
     break;
 
   case 15: /* annotations_opt: %empty  */
@@ -10301,7 +10301,7 @@ yyreduce:
         {
             (yyval.scope) = NULL;
         }
-#line 10305 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 10305 "hlsl.tab.c"
     break;
 
   case 16: /* annotations_opt: '<' annotations_scope_start '>'  */
@@ -10310,7 +10310,7 @@ yyreduce:
             hlsl_pop_scope(ctx);
             (yyval.scope) = NULL;
         }
-#line 10314 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 10314 "hlsl.tab.c"
     break;
 
   case 17: /* annotations_opt: '<' annotations_scope_start annotations_list '>'  */
@@ -10321,7 +10321,7 @@ yyreduce:
             hlsl_pop_scope(ctx);
             (yyval.scope) = scope;
         }
-#line 10325 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 10325 "hlsl.tab.c"
     break;
 
   case 22: /* technique9: KW_TECHNIQUE name_opt annotations_opt '{' passes '}'  */
@@ -10332,7 +10332,7 @@ yyreduce:
 
             add_technique(ctx, (yyvsp[-4].name), scope, (yyvsp[-3].scope), "technique", &(yylsp[-5]));
         }
-#line 10336 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 10336 "hlsl.tab.c"
     break;
 
   case 23: /* technique10: KW_TECHNIQUE10 name_opt annotations_opt '{' passes '}'  */
@@ -10343,7 +10343,7 @@ yyreduce:
 
             add_technique(ctx, (yyvsp[-4].name), scope, (yyvsp[-3].scope), "technique10", &(yylsp[-5]));
         }
-#line 10347 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 10347 "hlsl.tab.c"
     break;
 
   case 24: /* technique11: KW_TECHNIQUE11 name_opt annotations_opt '{' passes '}'  */
@@ -10358,7 +10358,7 @@ yyreduce:
 
             add_technique(ctx, (yyvsp[-4].name), scope, (yyvsp[-3].scope), "technique11", &(yylsp[-5]));
         }
-#line 10362 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 10362 "hlsl.tab.c"
     break;
 
   case 32: /* effect_group: KW_FXGROUP any_identifier annotations_opt '{' scope_start group_techniques '}'  */
@@ -10368,7 +10368,7 @@ yyreduce:
             hlsl_pop_scope(ctx);
             add_effect_group(ctx, (yyvsp[-5].name), scope, (yyvsp[-4].scope), &(yylsp[-5]));
         }
-#line 10372 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 10372 "hlsl.tab.c"
     break;
 
   case 33: /* buffer_declaration: var_modifiers buffer_type any_identifier colon_attributes annotations_opt  */
@@ -10380,7 +10380,7 @@ yyreduce:
             if (!(ctx->cur_buffer = hlsl_new_buffer(ctx, (yyvsp[-3].buffer_type), (yyvsp[-2].name), (yyvsp[-4].modifiers), &(yyvsp[-1].colon_attributes).reg_reservation, (yyvsp[0].scope), &(yylsp[-2]))))
                 YYABORT;
         }
-#line 10384 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 10384 "hlsl.tab.c"
     break;
 
   case 34: /* buffer_body: '{' declaration_statement_list '}'  */
@@ -10388,7 +10388,7 @@ yyreduce:
         {
             ctx->cur_buffer = ctx->globals_buffer;
         }
-#line 10392 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 10392 "hlsl.tab.c"
     break;
 
   case 35: /* buffer_type: KW_CBUFFER  */
@@ -10396,7 +10396,7 @@ yyreduce:
         {
             (yyval.buffer_type) = HLSL_BUFFER_CONSTANT;
         }
-#line 10400 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 10400 "hlsl.tab.c"
     break;
 
   case 36: /* buffer_type: KW_TBUFFER  */
@@ -10404,7 +10404,7 @@ yyreduce:
         {
             (yyval.buffer_type) = HLSL_BUFFER_TEXTURE;
         }
-#line 10408 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 10408 "hlsl.tab.c"
     break;
 
   case 38: /* declaration_statement_list: declaration_statement_list declaration_statement  */
@@ -10412,7 +10412,7 @@ yyreduce:
         {
             destroy_block((yyvsp[0].block));
         }
-#line 10416 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 10416 "hlsl.tab.c"
     break;
 
   case 39: /* preproc_directive: PRE_LINE STRING  */
@@ -10432,7 +10432,7 @@ yyreduce:
             }
             vkd3d_free((yyvsp[0].name));
         }
-#line 10436 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 10436 "hlsl.tab.c"
     break;
 
   case 40: /* struct_declaration_without_vars: var_modifiers struct_spec ';'  */
@@ -10446,7 +10446,7 @@ yyreduce:
                 hlsl_error(ctx, &(yylsp[-2]), VKD3D_SHADER_ERROR_HLSL_INVALID_MODIFIER,
                         "Modifiers are not allowed on struct type declarations.");
         }
-#line 10450 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 10450 "hlsl.tab.c"
     break;
 
   case 43: /* named_struct_spec: KW_STRUCT any_identifier base_optional '{' fields_list '}'  */
@@ -10486,7 +10486,7 @@ yyreduce:
                 YYABORT;
             }
         }
-#line 10490 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 10490 "hlsl.tab.c"
     break;
 
   case 44: /* unnamed_struct_spec: KW_STRUCT '{' fields_list '}'  */
@@ -10494,7 +10494,7 @@ yyreduce:
         {
             (yyval.type) = hlsl_new_struct_type(ctx, NULL, (yyvsp[-1].fields).fields, (yyvsp[-1].fields).count);
         }
-#line 10498 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 10498 "hlsl.tab.c"
     break;
 
   case 48: /* base_optional: %empty  */
@@ -10502,7 +10502,7 @@ yyreduce:
         {
             (yyval.type) = NULL;
         }
-#line 10506 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 10506 "hlsl.tab.c"
     break;
 
   case 49: /* base_optional: ':' TYPE_IDENTIFIER  */
@@ -10517,7 +10517,7 @@ yyreduce:
             }
             vkd3d_free((yyvsp[0].name));
         }
-#line 10521 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 10521 "hlsl.tab.c"
     break;
 
   case 50: /* fields_list: %empty  */
@@ -10527,7 +10527,7 @@ yyreduce:
             (yyval.fields).count = 0;
             (yyval.fields).capacity = 0;
         }
-#line 10531 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 10531 "hlsl.tab.c"
     break;
 
   case 51: /* fields_list: fields_list field  */
@@ -10557,7 +10557,7 @@ yyreduce:
 
             (yyval.fields) = (yyvsp[-1].fields);
         }
-#line 10561 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 10561 "hlsl.tab.c"
     break;
 
   case 54: /* field: var_modifiers field_type variables_def ';'  */
@@ -10580,7 +10580,7 @@ yyreduce:
             if (!gen_struct_fields(ctx, &(yyval.fields), type, modifiers, (yyvsp[-1].list)))
                 YYABORT;
         }
-#line 10584 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 10584 "hlsl.tab.c"
     break;
 
   case 55: /* attribute: '[' any_identifier ']'  */
@@ -10596,7 +10596,7 @@ yyreduce:
             (yyval.attr)->loc = (yyloc);
             (yyval.attr)->args_count = 0;
         }
-#line 10600 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 10600 "hlsl.tab.c"
     break;
 
   case 56: /* attribute: '[' any_identifier '(' initializer_expr_list ')' ']'  */
@@ -10619,7 +10619,7 @@ yyreduce:
                 hlsl_src_from_node(&(yyval.attr)->args[i], (yyvsp[-2].initializer).args[i]);
             cleanup_parse_initializer(&(yyvsp[-2].initializer));
         }
-#line 10623 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 10623 "hlsl.tab.c"
     break;
 
   case 57: /* attribute_list: attribute  */
@@ -10633,7 +10633,7 @@ yyreduce:
             }
             (yyval.attr_list).attrs[0] = (yyvsp[0].attr);
         }
-#line 10637 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 10637 "hlsl.tab.c"
     break;
 
   case 58: /* attribute_list: attribute_list attribute  */
@@ -10650,7 +10650,7 @@ yyreduce:
             (yyval.attr_list).attrs = new_array;
             (yyval.attr_list).attrs[(yyval.attr_list).count++] = (yyvsp[0].attr);
         }
-#line 10654 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 10654 "hlsl.tab.c"
     break;
 
   case 59: /* attribute_list_optional: %empty  */
@@ -10659,7 +10659,7 @@ yyreduce:
             (yyval.attr_list).count = 0;
             (yyval.attr_list).attrs = NULL;
         }
-#line 10663 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 10663 "hlsl.tab.c"
     break;
 
   case 61: /* func_declaration: func_prototype compound_statement  */
@@ -10716,7 +10716,7 @@ yyreduce:
             if (!(yyvsp[-1].function).first)
                 parse_function_cleanup(&(yyvsp[-1].function));
         }
-#line 10720 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 10720 "hlsl.tab.c"
     break;
 
   case 62: /* func_declaration: func_prototype ';'  */
@@ -10726,7 +10726,7 @@ yyreduce:
             if (!(yyvsp[-1].function).first)
                 parse_function_cleanup(&(yyvsp[-1].function));
         }
-#line 10730 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 10730 "hlsl.tab.c"
     break;
 
   case 63: /* func_prototype_no_attrs: var_modifiers type var_identifier '(' parameters ')' colon_attributes  */
@@ -10852,7 +10852,7 @@ yyreduce:
 
             ctx->cur_function = (yyval.function).decl;
         }
-#line 10856 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 10856 "hlsl.tab.c"
     break;
 
   case 65: /* func_prototype: attribute_list func_prototype_no_attrs  */
@@ -10871,7 +10871,7 @@ yyreduce:
             }
             (yyval.function) = (yyvsp[0].function);
         }
-#line 10875 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 10875 "hlsl.tab.c"
     break;
 
   case 66: /* compound_statement: '{' '}'  */
@@ -10880,7 +10880,7 @@ yyreduce:
             if (!((yyval.block) = make_empty_block(ctx)))
                 YYABORT;
         }
-#line 10884 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 10884 "hlsl.tab.c"
     break;
 
   case 67: /* compound_statement: '{' statement_list '}'  */
@@ -10888,7 +10888,7 @@ yyreduce:
         {
             (yyval.block) = (yyvsp[-1].block);
         }
-#line 10892 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 10892 "hlsl.tab.c"
     break;
 
   case 68: /* scope_start: %empty  */
@@ -10896,7 +10896,7 @@ yyreduce:
         {
             hlsl_push_scope(ctx);
         }
-#line 10900 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 10900 "hlsl.tab.c"
     break;
 
   case 69: /* loop_scope_start: %empty  */
@@ -10905,7 +10905,7 @@ yyreduce:
             hlsl_push_scope(ctx);
             ctx->cur_scope->loop = true;
         }
-#line 10909 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 10909 "hlsl.tab.c"
     break;
 
   case 70: /* switch_scope_start: %empty  */
@@ -10914,7 +10914,7 @@ yyreduce:
             hlsl_push_scope(ctx);
             ctx->cur_scope->_switch = true;
         }
-#line 10918 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 10918 "hlsl.tab.c"
     break;
 
   case 71: /* annotations_scope_start: %empty  */
@@ -10923,7 +10923,7 @@ yyreduce:
             hlsl_push_scope(ctx);
             ctx->cur_scope->annotations = true;
         }
-#line 10927 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 10927 "hlsl.tab.c"
     break;
 
   case 74: /* colon_attributes: %empty  */
@@ -10933,7 +10933,7 @@ yyreduce:
             (yyval.colon_attributes).reg_reservation.reg_type = 0;
             (yyval.colon_attributes).reg_reservation.offset_type = 0;
         }
-#line 10937 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 10937 "hlsl.tab.c"
     break;
 
   case 75: /* colon_attributes: colon_attributes semantic  */
@@ -10942,7 +10942,7 @@ yyreduce:
             hlsl_cleanup_semantic(&(yyval.colon_attributes).semantic);
             (yyval.colon_attributes).semantic = (yyvsp[0].semantic);
         }
-#line 10946 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 10946 "hlsl.tab.c"
     break;
 
   case 76: /* colon_attributes: colon_attributes register_reservation  */
@@ -10955,7 +10955,7 @@ yyreduce:
             (yyval.colon_attributes).reg_reservation.reg_index = (yyvsp[0].reg_reservation).reg_index;
             (yyval.colon_attributes).reg_reservation.reg_space = (yyvsp[0].reg_reservation).reg_space;
         }
-#line 10959 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 10959 "hlsl.tab.c"
     break;
 
   case 77: /* colon_attributes: colon_attributes packoffset_reservation  */
@@ -10972,7 +10972,7 @@ yyreduce:
                 (yyval.colon_attributes).reg_reservation.offset_index = (yyvsp[0].reg_reservation).offset_index;
             }
         }
-#line 10976 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 10976 "hlsl.tab.c"
     break;
 
   case 78: /* semantic: ':' any_identifier  */
@@ -11005,7 +11005,7 @@ yyreduce:
             (yyval.semantic).reported_duplicated_input_incompatible_next_index = 0;
             *p = 0;
         }
-#line 11009 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 11009 "hlsl.tab.c"
     break;
 
   case 79: /* register_reservation: ':' KW_REGISTER '(' any_identifier ')'  */
@@ -11018,7 +11018,7 @@ yyreduce:
 
             vkd3d_free((yyvsp[-1].name));
         }
-#line 11022 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 11022 "hlsl.tab.c"
     break;
 
   case 80: /* register_reservation: ':' KW_REGISTER '(' any_identifier '[' expr ']' ')'  */
@@ -11034,7 +11034,7 @@ yyreduce:
             vkd3d_free((yyvsp[-4].name));
             vkd3d_free((yyvsp[-2].block));
         }
-#line 11038 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 11038 "hlsl.tab.c"
     break;
 
   case 81: /* register_reservation: ':' KW_REGISTER '(' any_identifier ',' any_identifier ')'  */
@@ -11060,7 +11060,7 @@ yyreduce:
             vkd3d_free((yyvsp[-3].name));
             vkd3d_free((yyvsp[-1].name));
         }
-#line 11064 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 11064 "hlsl.tab.c"
     break;
 
   case 82: /* register_reservation: ':' KW_REGISTER '(' any_identifier '[' expr ']' ',' any_identifier ')'  */
@@ -11082,7 +11082,7 @@ yyreduce:
             vkd3d_free((yyvsp[-4].block));
             vkd3d_free((yyvsp[-1].name));
         }
-#line 11086 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 11086 "hlsl.tab.c"
     break;
 
   case 83: /* register_reservation: ':' KW_REGISTER '(' any_identifier ',' any_identifier '[' expr ']' ')'  */
@@ -11101,7 +11101,7 @@ yyreduce:
             vkd3d_free((yyvsp[-4].name));
             vkd3d_free((yyvsp[-2].block));
         }
-#line 11105 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 11105 "hlsl.tab.c"
     break;
 
   case 84: /* register_reservation: ':' KW_REGISTER '(' any_identifier ',' any_identifier ',' any_identifier ')'  */
@@ -11122,7 +11122,7 @@ yyreduce:
             vkd3d_free((yyvsp[-3].name));
             vkd3d_free((yyvsp[-1].name));
         }
-#line 11126 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 11126 "hlsl.tab.c"
     break;
 
   case 85: /* register_reservation: ':' KW_REGISTER '(' any_identifier ',' any_identifier '[' expr ']' ',' any_identifier ')'  */
@@ -11146,7 +11146,7 @@ yyreduce:
             vkd3d_free((yyvsp[-4].block));
             vkd3d_free((yyvsp[-1].name));
         }
-#line 11150 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 11150 "hlsl.tab.c"
     break;
 
   case 86: /* packoffset_reservation: ':' KW_PACKOFFSET '(' any_identifier ')'  */
@@ -11156,7 +11156,7 @@ yyreduce:
 
             vkd3d_free((yyvsp[-1].name));
         }
-#line 11160 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 11160 "hlsl.tab.c"
     break;
 
   case 87: /* packoffset_reservation: ':' KW_PACKOFFSET '(' any_identifier '.' any_identifier ')'  */
@@ -11167,7 +11167,7 @@ yyreduce:
             vkd3d_free((yyvsp[-3].name));
             vkd3d_free((yyvsp[-1].name));
         }
-#line 11171 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 11171 "hlsl.tab.c"
     break;
 
   case 88: /* parameters: scope_start  */
@@ -11175,7 +11175,7 @@ yyreduce:
         {
             memset(&(yyval.parameters), 0, sizeof((yyval.parameters)));
         }
-#line 11179 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 11179 "hlsl.tab.c"
     break;
 
   case 89: /* parameters: scope_start KW_VOID  */
@@ -11183,7 +11183,7 @@ yyreduce:
         {
             memset(&(yyval.parameters), 0, sizeof((yyval.parameters)));
         }
-#line 11187 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 11187 "hlsl.tab.c"
     break;
 
   case 90: /* parameters: scope_start param_list  */
@@ -11191,7 +11191,7 @@ yyreduce:
         {
             (yyval.parameters) = (yyvsp[0].parameters);
         }
-#line 11195 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 11195 "hlsl.tab.c"
     break;
 
   case 91: /* param_list: parameter  */
@@ -11204,7 +11204,7 @@ yyreduce:
                 YYABORT;
             }
         }
-#line 11208 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 11208 "hlsl.tab.c"
     break;
 
   case 92: /* param_list: param_list ',' parameter  */
@@ -11214,7 +11214,7 @@ yyreduce:
             if (!add_func_parameter(ctx, &(yyval.parameters), &(yyvsp[0].parameter), &(yylsp[0])))
                 YYABORT;
         }
-#line 11218 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 11218 "hlsl.tab.c"
     break;
 
   case 94: /* parameter: parameter_decl '=' complex_initializer  */
@@ -11223,7 +11223,7 @@ yyreduce:
             (yyval.parameter) = (yyvsp[-2].parameter);
             (yyval.parameter).initializer = (yyvsp[0].initializer);
         }
-#line 11227 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 11227 "hlsl.tab.c"
     break;
 
   case 95: /* parameter_decl: var_modifiers type_no_void any_identifier arrays colon_attributes  */
@@ -11282,7 +11282,7 @@ yyreduce:
 
             memset(&(yyval.parameter).initializer, 0, sizeof((yyval.parameter).initializer));
         }
-#line 11286 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 11286 "hlsl.tab.c"
     break;
 
   case 96: /* texture_type: KW_BUFFER  */
@@ -11290,7 +11290,7 @@ yyreduce:
         {
             (yyval.sampler_dim) = HLSL_SAMPLER_DIM_BUFFER;
         }
-#line 11294 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 11294 "hlsl.tab.c"
     break;
 
   case 97: /* texture_type: KW_STRUCTUREDBUFFER  */
@@ -11298,7 +11298,7 @@ yyreduce:
         {
             (yyval.sampler_dim) = HLSL_SAMPLER_DIM_STRUCTURED_BUFFER;
         }
-#line 11302 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 11302 "hlsl.tab.c"
     break;
 
   case 98: /* texture_type: KW_TEXTURE1D  */
@@ -11306,7 +11306,7 @@ yyreduce:
         {
             (yyval.sampler_dim) = HLSL_SAMPLER_DIM_1D;
         }
-#line 11310 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 11310 "hlsl.tab.c"
     break;
 
   case 99: /* texture_type: KW_TEXTURE2D  */
@@ -11314,7 +11314,7 @@ yyreduce:
         {
             (yyval.sampler_dim) = HLSL_SAMPLER_DIM_2D;
         }
-#line 11318 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 11318 "hlsl.tab.c"
     break;
 
   case 100: /* texture_type: KW_TEXTURE3D  */
@@ -11322,7 +11322,7 @@ yyreduce:
         {
             (yyval.sampler_dim) = HLSL_SAMPLER_DIM_3D;
         }
-#line 11326 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 11326 "hlsl.tab.c"
     break;
 
   case 101: /* texture_type: KW_TEXTURECUBE  */
@@ -11330,7 +11330,7 @@ yyreduce:
         {
             (yyval.sampler_dim) = HLSL_SAMPLER_DIM_CUBE;
         }
-#line 11334 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 11334 "hlsl.tab.c"
     break;
 
   case 102: /* texture_type: KW_TEXTURE1DARRAY  */
@@ -11338,7 +11338,7 @@ yyreduce:
         {
             (yyval.sampler_dim) = HLSL_SAMPLER_DIM_1DARRAY;
         }
-#line 11342 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 11342 "hlsl.tab.c"
     break;
 
   case 103: /* texture_type: KW_TEXTURE2DARRAY  */
@@ -11346,7 +11346,7 @@ yyreduce:
         {
             (yyval.sampler_dim) = HLSL_SAMPLER_DIM_2DARRAY;
         }
-#line 11350 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 11350 "hlsl.tab.c"
     break;
 
   case 104: /* texture_type: KW_TEXTURECUBEARRAY  */
@@ -11354,7 +11354,7 @@ yyreduce:
         {
             (yyval.sampler_dim) = HLSL_SAMPLER_DIM_CUBEARRAY;
         }
-#line 11358 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 11358 "hlsl.tab.c"
     break;
 
   case 105: /* texture_ms_type: KW_TEXTURE2DMS  */
@@ -11362,7 +11362,7 @@ yyreduce:
         {
             (yyval.sampler_dim) = HLSL_SAMPLER_DIM_2DMS;
         }
-#line 11366 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 11366 "hlsl.tab.c"
     break;
 
   case 106: /* texture_ms_type: KW_TEXTURE2DMSARRAY  */
@@ -11370,7 +11370,7 @@ yyreduce:
         {
             (yyval.sampler_dim) = HLSL_SAMPLER_DIM_2DMSARRAY;
         }
-#line 11374 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 11374 "hlsl.tab.c"
     break;
 
   case 107: /* uav_type: KW_RWBUFFER  */
@@ -11378,7 +11378,7 @@ yyreduce:
         {
             (yyval.sampler_dim) = HLSL_SAMPLER_DIM_BUFFER;
         }
-#line 11382 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 11382 "hlsl.tab.c"
     break;
 
   case 108: /* uav_type: KW_RWSTRUCTUREDBUFFER  */
@@ -11386,7 +11386,7 @@ yyreduce:
         {
             (yyval.sampler_dim) = HLSL_SAMPLER_DIM_STRUCTURED_BUFFER;
         }
-#line 11390 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 11390 "hlsl.tab.c"
     break;
 
   case 109: /* uav_type: KW_RWTEXTURE1D  */
@@ -11394,7 +11394,7 @@ yyreduce:
         {
             (yyval.sampler_dim) = HLSL_SAMPLER_DIM_1D;
         }
-#line 11398 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 11398 "hlsl.tab.c"
     break;
 
   case 110: /* uav_type: KW_RWTEXTURE1DARRAY  */
@@ -11402,7 +11402,7 @@ yyreduce:
         {
             (yyval.sampler_dim) = HLSL_SAMPLER_DIM_1DARRAY;
         }
-#line 11406 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 11406 "hlsl.tab.c"
     break;
 
   case 111: /* uav_type: KW_RWTEXTURE2D  */
@@ -11410,7 +11410,7 @@ yyreduce:
         {
             (yyval.sampler_dim) = HLSL_SAMPLER_DIM_2D;
         }
-#line 11414 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 11414 "hlsl.tab.c"
     break;
 
   case 112: /* uav_type: KW_RWTEXTURE2DARRAY  */
@@ -11418,7 +11418,7 @@ yyreduce:
         {
             (yyval.sampler_dim) = HLSL_SAMPLER_DIM_2DARRAY;
         }
-#line 11422 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 11422 "hlsl.tab.c"
     break;
 
   case 113: /* uav_type: KW_RWTEXTURE3D  */
@@ -11426,7 +11426,7 @@ yyreduce:
         {
             (yyval.sampler_dim) = HLSL_SAMPLER_DIM_3D;
         }
-#line 11430 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 11430 "hlsl.tab.c"
     break;
 
   case 114: /* rov_type: KW_RASTERIZERORDEREDBUFFER  */
@@ -11434,7 +11434,7 @@ yyreduce:
         {
             (yyval.sampler_dim) = HLSL_SAMPLER_DIM_BUFFER;
         }
-#line 11438 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 11438 "hlsl.tab.c"
     break;
 
   case 115: /* rov_type: KW_RASTERIZERORDEREDSTRUCTUREDBUFFER  */
@@ -11442,7 +11442,7 @@ yyreduce:
         {
             (yyval.sampler_dim) = HLSL_SAMPLER_DIM_STRUCTURED_BUFFER;
         }
-#line 11446 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 11446 "hlsl.tab.c"
     break;
 
   case 116: /* rov_type: KW_RASTERIZERORDEREDTEXTURE1D  */
@@ -11450,7 +11450,7 @@ yyreduce:
         {
             (yyval.sampler_dim) = HLSL_SAMPLER_DIM_1D;
         }
-#line 11454 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 11454 "hlsl.tab.c"
     break;
 
   case 117: /* rov_type: KW_RASTERIZERORDEREDTEXTURE1DARRAY  */
@@ -11458,7 +11458,7 @@ yyreduce:
         {
             (yyval.sampler_dim) = HLSL_SAMPLER_DIM_1DARRAY;
         }
-#line 11462 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 11462 "hlsl.tab.c"
     break;
 
   case 118: /* rov_type: KW_RASTERIZERORDEREDTEXTURE2D  */
@@ -11466,7 +11466,7 @@ yyreduce:
         {
             (yyval.sampler_dim) = HLSL_SAMPLER_DIM_2D;
         }
-#line 11470 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 11470 "hlsl.tab.c"
     break;
 
   case 119: /* rov_type: KW_RASTERIZERORDEREDTEXTURE2DARRAY  */
@@ -11474,7 +11474,7 @@ yyreduce:
         {
             (yyval.sampler_dim) = HLSL_SAMPLER_DIM_2DARRAY;
         }
-#line 11478 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 11478 "hlsl.tab.c"
     break;
 
   case 120: /* rov_type: KW_RASTERIZERORDEREDTEXTURE3D  */
@@ -11482,7 +11482,7 @@ yyreduce:
         {
             (yyval.sampler_dim) = HLSL_SAMPLER_DIM_3D;
         }
-#line 11486 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 11486 "hlsl.tab.c"
     break;
 
   case 121: /* so_type: KW_POINTSTREAM  */
@@ -11490,7 +11490,7 @@ yyreduce:
         {
             (yyval.so_type) = HLSL_STREAM_OUTPUT_POINT_STREAM;
         }
-#line 11494 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 11494 "hlsl.tab.c"
     break;
 
   case 122: /* so_type: KW_LINESTREAM  */
@@ -11498,7 +11498,7 @@ yyreduce:
         {
             (yyval.so_type) = HLSL_STREAM_OUTPUT_LINE_STREAM;
         }
-#line 11502 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 11502 "hlsl.tab.c"
     break;
 
   case 123: /* so_type: KW_TRIANGLESTREAM  */
@@ -11506,7 +11506,7 @@ yyreduce:
         {
             (yyval.so_type) = HLSL_STREAM_OUTPUT_TRIANGLE_STREAM;
         }
-#line 11510 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 11510 "hlsl.tab.c"
     break;
 
   case 124: /* resource_format: var_modifiers type  */
@@ -11517,7 +11517,7 @@ yyreduce:
             if (!((yyval.type) = apply_type_modifiers(ctx, (yyvsp[0].type), &modifiers, true, &(yylsp[-1]))))
                 YYABORT;
         }
-#line 11521 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 11521 "hlsl.tab.c"
     break;
 
   case 125: /* patch_type: KW_INPUTPATCH  */
@@ -11525,7 +11525,7 @@ yyreduce:
         {
             (yyval.patch_type) = HLSL_ARRAY_PATCH_INPUT;
         }
-#line 11529 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 11529 "hlsl.tab.c"
     break;
 
   case 126: /* patch_type: KW_OUTPUTPATCH  */
@@ -11533,7 +11533,7 @@ yyreduce:
         {
             (yyval.patch_type) = HLSL_ARRAY_PATCH_OUTPUT;
         }
-#line 11537 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 11537 "hlsl.tab.c"
     break;
 
   case 127: /* type_no_void: KW_VECTOR '<' type ',' C_INTEGER '>'  */
@@ -11560,7 +11560,7 @@ yyreduce:
             (yyval.type) = hlsl_type_clone(ctx, hlsl_get_vector_type(ctx, (yyvsp[-3].type)->e.numeric.type, (yyvsp[-1].intval)), 0, 0);
             (yyval.type)->is_minimum_precision = (yyvsp[-3].type)->is_minimum_precision;
         }
-#line 11564 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 11564 "hlsl.tab.c"
     break;
 
   case 128: /* type_no_void: KW_VECTOR  */
@@ -11568,7 +11568,7 @@ yyreduce:
         {
             (yyval.type) = hlsl_get_vector_type(ctx, HLSL_TYPE_FLOAT, 4);
         }
-#line 11572 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 11572 "hlsl.tab.c"
     break;
 
   case 129: /* type_no_void: KW_MATRIX '<' type ',' C_INTEGER ',' C_INTEGER '>'  */
@@ -11601,7 +11601,7 @@ yyreduce:
             (yyval.type) = hlsl_type_clone(ctx, hlsl_get_matrix_type(ctx, (yyvsp[-5].type)->e.numeric.type, (yyvsp[-1].intval), (yyvsp[-3].intval)), 0, 0);
             (yyval.type)->is_minimum_precision = (yyvsp[-5].type)->is_minimum_precision;
         }
-#line 11605 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 11605 "hlsl.tab.c"
     break;
 
   case 130: /* type_no_void: KW_MATRIX  */
@@ -11609,7 +11609,7 @@ yyreduce:
         {
             (yyval.type) = hlsl_get_matrix_type(ctx, HLSL_TYPE_FLOAT, 4, 4);
         }
-#line 11613 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 11613 "hlsl.tab.c"
     break;
 
   case 131: /* type_no_void: KW_SAMPLER  */
@@ -11617,7 +11617,7 @@ yyreduce:
         {
             (yyval.type) = ctx->builtin_types.sampler[HLSL_SAMPLER_DIM_GENERIC];
         }
-#line 11621 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 11621 "hlsl.tab.c"
     break;
 
   case 132: /* type_no_void: KW_SAMPLERCOMPARISONSTATE  */
@@ -11625,7 +11625,7 @@ yyreduce:
         {
             (yyval.type) = ctx->builtin_types.sampler[HLSL_SAMPLER_DIM_COMPARISON];
         }
-#line 11629 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 11629 "hlsl.tab.c"
     break;
 
   case 133: /* type_no_void: KW_SAMPLER1D  */
@@ -11633,7 +11633,7 @@ yyreduce:
         {
             (yyval.type) = ctx->builtin_types.sampler[HLSL_SAMPLER_DIM_1D];
         }
-#line 11637 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 11637 "hlsl.tab.c"
     break;
 
   case 134: /* type_no_void: KW_SAMPLER2D  */
@@ -11641,7 +11641,7 @@ yyreduce:
         {
             (yyval.type) = ctx->builtin_types.sampler[HLSL_SAMPLER_DIM_2D];
         }
-#line 11645 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 11645 "hlsl.tab.c"
     break;
 
   case 135: /* type_no_void: KW_SAMPLER3D  */
@@ -11649,7 +11649,7 @@ yyreduce:
         {
             (yyval.type) = ctx->builtin_types.sampler[HLSL_SAMPLER_DIM_3D];
         }
-#line 11653 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 11653 "hlsl.tab.c"
     break;
 
   case 136: /* type_no_void: KW_SAMPLERCUBE  */
@@ -11657,7 +11657,7 @@ yyreduce:
         {
             (yyval.type) = ctx->builtin_types.sampler[HLSL_SAMPLER_DIM_CUBE];
         }
-#line 11661 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 11661 "hlsl.tab.c"
     break;
 
   case 137: /* type_no_void: KW_TEXTURE  */
@@ -11665,7 +11665,7 @@ yyreduce:
         {
             (yyval.type) = hlsl_new_texture_type(ctx, HLSL_SAMPLER_DIM_GENERIC, NULL, 0);
         }
-#line 11669 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 11669 "hlsl.tab.c"
     break;
 
   case 138: /* type_no_void: texture_type  */
@@ -11676,7 +11676,7 @@ yyreduce:
                         "Structured buffer type requires an explicit format.");
             (yyval.type) = hlsl_new_texture_type(ctx, (yyvsp[0].sampler_dim), hlsl_get_vector_type(ctx, HLSL_TYPE_FLOAT, 4), 0);
         }
-#line 11680 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 11680 "hlsl.tab.c"
     break;
 
   case 139: /* type_no_void: texture_type '<' resource_format '>'  */
@@ -11685,7 +11685,7 @@ yyreduce:
             validate_texture_format_type(ctx, (yyvsp[-3].sampler_dim), (yyvsp[-1].type), &(yylsp[-1]));
             (yyval.type) = hlsl_new_texture_type(ctx, (yyvsp[-3].sampler_dim), (yyvsp[-1].type), 0);
         }
-#line 11689 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 11689 "hlsl.tab.c"
     break;
 
   case 140: /* type_no_void: texture_ms_type '<' resource_format '>'  */
@@ -11695,7 +11695,7 @@ yyreduce:
 
             (yyval.type) = hlsl_new_texture_type(ctx, (yyvsp[-3].sampler_dim), (yyvsp[-1].type), 0);
         }
-#line 11699 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 11699 "hlsl.tab.c"
     break;
 
   case 141: /* type_no_void: texture_ms_type '<' resource_format ',' shift_expr '>'  */
@@ -11715,7 +11715,7 @@ yyreduce:
 
             (yyval.type) = hlsl_new_texture_type(ctx, (yyvsp[-5].sampler_dim), (yyvsp[-3].type), sample_count);
         }
-#line 11719 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 11719 "hlsl.tab.c"
     break;
 
   case 142: /* type_no_void: KW_BYTEADDRESSBUFFER  */
@@ -11723,7 +11723,7 @@ yyreduce:
         {
             (yyval.type) = hlsl_new_texture_type(ctx, HLSL_SAMPLER_DIM_RAW_BUFFER, hlsl_get_scalar_type(ctx, HLSL_TYPE_UINT), 0);
         }
-#line 11727 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 11727 "hlsl.tab.c"
     break;
 
   case 143: /* type_no_void: uav_type '<' resource_format '>'  */
@@ -11732,7 +11732,7 @@ yyreduce:
             validate_uav_type(ctx, (yyvsp[-3].sampler_dim), (yyvsp[-1].type), &(yylsp[-1]));
             (yyval.type) = hlsl_new_uav_type(ctx, (yyvsp[-3].sampler_dim), (yyvsp[-1].type), false);
         }
-#line 11736 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 11736 "hlsl.tab.c"
     break;
 
   case 144: /* type_no_void: rov_type '<' resource_format '>'  */
@@ -11741,7 +11741,7 @@ yyreduce:
             validate_uav_type(ctx, (yyvsp[-3].sampler_dim), (yyvsp[-1].type), &(yylsp[0]));
             (yyval.type) = hlsl_new_uav_type(ctx, (yyvsp[-3].sampler_dim), (yyvsp[-1].type), true);
         }
-#line 11745 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 11745 "hlsl.tab.c"
     break;
 
   case 145: /* type_no_void: so_type '<' type '>'  */
@@ -11749,7 +11749,7 @@ yyreduce:
         {
             (yyval.type) = hlsl_new_stream_output_type(ctx, (yyvsp[-3].so_type), (yyvsp[-1].type));
         }
-#line 11753 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 11753 "hlsl.tab.c"
     break;
 
   case 146: /* type_no_void: patch_type '<' type ',' C_INTEGER '>'  */
@@ -11767,7 +11767,7 @@ yyreduce:
             type = hlsl_new_array_type(ctx, (yyvsp[-3].type), (yyvsp[-1].intval), (yyvsp[-5].patch_type));
             (yyval.type) = hlsl_type_clone(ctx, type, 0, HLSL_MODIFIER_CONST);
         }
-#line 11771 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 11771 "hlsl.tab.c"
     break;
 
   case 147: /* type_no_void: KW_RWBYTEADDRESSBUFFER  */
@@ -11775,7 +11775,7 @@ yyreduce:
         {
             (yyval.type) = hlsl_new_uav_type(ctx, HLSL_SAMPLER_DIM_RAW_BUFFER, hlsl_get_scalar_type(ctx, HLSL_TYPE_UINT), false);
         }
-#line 11779 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 11779 "hlsl.tab.c"
     break;
 
   case 148: /* type_no_void: KW_STRING  */
@@ -11783,7 +11783,7 @@ yyreduce:
         {
             (yyval.type) = ctx->builtin_types.string;
         }
-#line 11787 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 11787 "hlsl.tab.c"
     break;
 
   case 149: /* type_no_void: TYPE_IDENTIFIER  */
@@ -11804,7 +11804,7 @@ yyreduce:
             }
             vkd3d_free((yyvsp[0].name));
         }
-#line 11808 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 11808 "hlsl.tab.c"
     break;
 
   case 150: /* type_no_void: KW_UNSIGNED TYPE_IDENTIFIER  */
@@ -11830,7 +11830,7 @@ yyreduce:
 
             (yyval.type) = type;
         }
-#line 11834 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 11834 "hlsl.tab.c"
     break;
 
   case 151: /* type_no_void: KW_STRUCT TYPE_IDENTIFIER  */
@@ -11841,7 +11841,7 @@ yyreduce:
                 hlsl_error(ctx, &(yylsp[-1]), VKD3D_SHADER_ERROR_HLSL_REDEFINED, "\"%s\" is not a structure.", (yyvsp[0].name));
             vkd3d_free((yyvsp[0].name));
         }
-#line 11845 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 11845 "hlsl.tab.c"
     break;
 
   case 152: /* type_no_void: KW_RENDERTARGETVIEW  */
@@ -11849,7 +11849,7 @@ yyreduce:
         {
             (yyval.type) = hlsl_get_type(ctx->cur_scope, "RenderTargetView", true, true);
         }
-#line 11853 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 11853 "hlsl.tab.c"
     break;
 
   case 153: /* type_no_void: KW_DEPTHSTENCILSTATE  */
@@ -11857,7 +11857,7 @@ yyreduce:
         {
             (yyval.type) = hlsl_get_type(ctx->cur_scope, "DepthStencilState", true, true);
         }
-#line 11861 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 11861 "hlsl.tab.c"
     break;
 
   case 154: /* type_no_void: KW_DEPTHSTENCILVIEW  */
@@ -11865,7 +11865,7 @@ yyreduce:
         {
             (yyval.type) = hlsl_get_type(ctx->cur_scope, "DepthStencilView", true, true);
         }
-#line 11869 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 11869 "hlsl.tab.c"
     break;
 
   case 155: /* type_no_void: KW_VERTEXSHADER  */
@@ -11873,7 +11873,7 @@ yyreduce:
         {
             (yyval.type) = hlsl_get_type(ctx->cur_scope, "VertexShader", true, true);
         }
-#line 11877 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 11877 "hlsl.tab.c"
     break;
 
   case 156: /* type_no_void: KW_PIXELSHADER  */
@@ -11881,7 +11881,7 @@ yyreduce:
         {
             (yyval.type) = hlsl_get_type(ctx->cur_scope, "PixelShader", true, true);
         }
-#line 11885 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 11885 "hlsl.tab.c"
     break;
 
   case 157: /* type_no_void: KW_COMPUTESHADER  */
@@ -11889,7 +11889,7 @@ yyreduce:
         {
             (yyval.type) = hlsl_get_type(ctx->cur_scope, "ComputeShader", true, true);
         }
-#line 11893 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 11893 "hlsl.tab.c"
     break;
 
   case 158: /* type_no_void: KW_DOMAINSHADER  */
@@ -11897,7 +11897,7 @@ yyreduce:
         {
             (yyval.type) = hlsl_get_type(ctx->cur_scope, "DomainShader", true, true);
         }
-#line 11901 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 11901 "hlsl.tab.c"
     break;
 
   case 159: /* type_no_void: KW_HULLSHADER  */
@@ -11905,7 +11905,7 @@ yyreduce:
         {
             (yyval.type) = hlsl_get_type(ctx->cur_scope, "HullShader", true, true);
         }
-#line 11909 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 11909 "hlsl.tab.c"
     break;
 
   case 160: /* type_no_void: KW_GEOMETRYSHADER  */
@@ -11913,7 +11913,7 @@ yyreduce:
         {
             (yyval.type) = hlsl_get_type(ctx->cur_scope, "GeometryShader", true, true);
         }
-#line 11917 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 11917 "hlsl.tab.c"
     break;
 
   case 161: /* type_no_void: KW_CONSTANTBUFFER '<' type '>'  */
@@ -11924,7 +11924,7 @@ yyreduce:
                         "ConstantBuffer<...> requires user-defined structure type.");
             (yyval.type) = hlsl_new_cb_type(ctx, (yyvsp[-1].type));
         }
-#line 11928 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 11928 "hlsl.tab.c"
     break;
 
   case 162: /* type_no_void: KW_RASTERIZERSTATE  */
@@ -11932,7 +11932,7 @@ yyreduce:
         {
             (yyval.type) = hlsl_get_type(ctx->cur_scope, "RasterizerState", true, true);
         }
-#line 11936 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 11936 "hlsl.tab.c"
     break;
 
   case 163: /* type_no_void: KW_BLENDSTATE  */
@@ -11940,7 +11940,7 @@ yyreduce:
         {
             (yyval.type) = hlsl_get_type(ctx->cur_scope, "BlendState", true, true);
         }
-#line 11944 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 11944 "hlsl.tab.c"
     break;
 
   case 165: /* type: KW_VOID  */
@@ -11948,7 +11948,7 @@ yyreduce:
         {
             (yyval.type) = ctx->builtin_types.Void;
         }
-#line 11952 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 11952 "hlsl.tab.c"
     break;
 
   case 167: /* declaration_statement: struct_declaration_without_vars  */
@@ -11957,7 +11957,7 @@ yyreduce:
             if (!((yyval.block) = make_empty_block(ctx)))
                 YYABORT;
         }
-#line 11961 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 11961 "hlsl.tab.c"
     break;
 
   case 168: /* declaration_statement: typedef  */
@@ -11966,7 +11966,7 @@ yyreduce:
             if (!((yyval.block) = make_empty_block(ctx)))
                 YYABORT;
         }
-#line 11970 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 11970 "hlsl.tab.c"
     break;
 
   case 171: /* typedef: KW_TYPEDEF var_modifiers typedef_type type_specs ';'  */
@@ -11988,7 +11988,7 @@ yyreduce:
             if (!add_typedef(ctx, type, (yyvsp[-1].list)))
                 YYABORT;
         }
-#line 11992 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 11992 "hlsl.tab.c"
     break;
 
   case 172: /* type_specs: type_spec  */
@@ -11998,7 +11998,7 @@ yyreduce:
                 YYABORT;
             list_add_head((yyval.list), &(yyvsp[0].variable_def)->entry);
         }
-#line 12002 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 12002 "hlsl.tab.c"
     break;
 
   case 173: /* type_specs: type_specs ',' type_spec  */
@@ -12007,7 +12007,7 @@ yyreduce:
             (yyval.list) = (yyvsp[-2].list);
             list_add_tail((yyval.list), &(yyvsp[0].variable_def)->entry);
         }
-#line 12011 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 12011 "hlsl.tab.c"
     break;
 
   case 174: /* type_spec: any_identifier arrays  */
@@ -12018,7 +12018,7 @@ yyreduce:
             (yyval.variable_def)->name = (yyvsp[-1].name);
             (yyval.variable_def)->arrays = (yyvsp[0].arrays);
         }
-#line 12022 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 12022 "hlsl.tab.c"
     break;
 
   case 175: /* declaration: variables_def_typed ';'  */
@@ -12027,7 +12027,7 @@ yyreduce:
             if (!((yyval.block) = initialize_vars(ctx, (yyvsp[-1].list))))
                 YYABORT;
         }
-#line 12031 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 12031 "hlsl.tab.c"
     break;
 
   case 176: /* variables_def: variable_def  */
@@ -12037,7 +12037,7 @@ yyreduce:
                 YYABORT;
             list_add_head((yyval.list), &(yyvsp[0].variable_def)->entry);
         }
-#line 12041 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 12041 "hlsl.tab.c"
     break;
 
   case 177: /* variables_def: variables_def ',' variable_def  */
@@ -12046,7 +12046,7 @@ yyreduce:
             (yyval.list) = (yyvsp[-2].list);
             list_add_tail((yyval.list), &(yyvsp[0].variable_def)->entry);
         }
-#line 12050 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 12050 "hlsl.tab.c"
     break;
 
   case 178: /* variables_def_typed: variable_def_typed  */
@@ -12058,7 +12058,7 @@ yyreduce:
 
             declare_var(ctx, (yyvsp[0].variable_def));
         }
-#line 12062 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 12062 "hlsl.tab.c"
     break;
 
   case 179: /* variables_def_typed: variables_def_typed ',' variable_def  */
@@ -12079,7 +12079,7 @@ yyreduce:
             (yyval.list) = (yyvsp[-2].list);
             list_add_tail((yyval.list), &(yyvsp[0].variable_def)->entry);
         }
-#line 12083 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 12083 "hlsl.tab.c"
     break;
 
   case 180: /* variable_decl: any_identifier arrays colon_attributes annotations_opt  */
@@ -12093,7 +12093,7 @@ yyreduce:
             (yyval.variable_def)->reg_reservation = (yyvsp[-1].colon_attributes).reg_reservation;
             (yyval.variable_def)->annotations = (yyvsp[0].scope);
         }
-#line 12097 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 12097 "hlsl.tab.c"
     break;
 
   case 181: /* state_block_start: %empty  */
@@ -12101,7 +12101,7 @@ yyreduce:
         {
             ctx->in_state_block = 1;
         }
-#line 12105 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 12105 "hlsl.tab.c"
     break;
 
   case 182: /* stateblock_lhs_identifier: any_identifier  */
@@ -12109,7 +12109,7 @@ yyreduce:
         {
             (yyval.name) = (yyvsp[0].name);
         }
-#line 12113 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 12113 "hlsl.tab.c"
     break;
 
   case 183: /* stateblock_lhs_identifier: KW_PIXELSHADER  */
@@ -12118,7 +12118,7 @@ yyreduce:
             if (!((yyval.name) = hlsl_strdup(ctx, "pixelshader")))
                 YYABORT;
         }
-#line 12122 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 12122 "hlsl.tab.c"
     break;
 
   case 184: /* stateblock_lhs_identifier: KW_TEXTURE  */
@@ -12127,7 +12127,7 @@ yyreduce:
             if (!((yyval.name) = hlsl_strdup(ctx, "texture")))
                 YYABORT;
         }
-#line 12131 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 12131 "hlsl.tab.c"
     break;
 
   case 185: /* stateblock_lhs_identifier: KW_VERTEXSHADER  */
@@ -12136,7 +12136,7 @@ yyreduce:
             if (!((yyval.name) = hlsl_strdup(ctx, "vertexshader")))
                 YYABORT;
         }
-#line 12140 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 12140 "hlsl.tab.c"
     break;
 
   case 186: /* stateblock_lhs_identifier: KW_GEOMETRYSHADER  */
@@ -12145,7 +12145,7 @@ yyreduce:
             if (!((yyval.name) = hlsl_strdup(ctx, "geometryshader")))
                 YYABORT;
         }
-#line 12149 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 12149 "hlsl.tab.c"
     break;
 
   case 187: /* state_block_index_opt: %empty  */
@@ -12154,7 +12154,7 @@ yyreduce:
             (yyval.state_block_index).has_index = false;
             (yyval.state_block_index).index = 0;
         }
-#line 12158 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 12158 "hlsl.tab.c"
     break;
 
   case 188: /* state_block_index_opt: '[' C_INTEGER ']'  */
@@ -12169,7 +12169,7 @@ yyreduce:
             (yyval.state_block_index).has_index = true;
             (yyval.state_block_index).index = (yyvsp[-1].intval);
        }
-#line 12173 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 12173 "hlsl.tab.c"
     break;
 
   case 189: /* state_block: %empty  */
@@ -12178,7 +12178,7 @@ yyreduce:
             if (!((yyval.state_block) = hlsl_alloc(ctx, sizeof(*(yyval.state_block)))))
                 YYABORT;
         }
-#line 12182 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 12182 "hlsl.tab.c"
     break;
 
   case 190: /* state_block: state_block stateblock_lhs_identifier state_block_index_opt '=' complex_initializer ';'  */
@@ -12206,7 +12206,7 @@ yyreduce:
             (yyval.state_block) = (yyvsp[-5].state_block);
             hlsl_state_block_add_entry((yyval.state_block), entry);
         }
-#line 12210 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 12210 "hlsl.tab.c"
     break;
 
   case 191: /* state_block: state_block stateblock_lhs_identifier state_block_index_opt '=' '<' primary_expr '>' ';'  */
@@ -12230,7 +12230,7 @@ yyreduce:
             (yyval.state_block) = (yyvsp[-7].state_block);
             hlsl_state_block_add_entry((yyval.state_block), entry);
         }
-#line 12234 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 12234 "hlsl.tab.c"
     break;
 
   case 192: /* state_block: state_block any_identifier '(' func_arguments ')' ';'  */
@@ -12262,7 +12262,7 @@ yyreduce:
             (yyval.state_block) = (yyvsp[-5].state_block);
             hlsl_state_block_add_entry((yyval.state_block), entry);
         }
-#line 12266 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 12266 "hlsl.tab.c"
     break;
 
   case 193: /* state_block_list: '{' state_block '}'  */
@@ -12276,7 +12276,7 @@ yyreduce:
                 YYABORT;
             (yyval.variable_def)->state_blocks[(yyval.variable_def)->state_block_count++] = (yyvsp[-1].state_block);
         }
-#line 12280 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 12280 "hlsl.tab.c"
     break;
 
   case 194: /* state_block_list: state_block_list ',' '{' state_block '}'  */
@@ -12289,7 +12289,7 @@ yyreduce:
                 YYABORT;
             (yyval.variable_def)->state_blocks[(yyval.variable_def)->state_block_count++] = (yyvsp[-1].state_block);
         }
-#line 12293 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 12293 "hlsl.tab.c"
     break;
 
   case 196: /* variable_def: variable_decl '=' complex_initializer  */
@@ -12298,7 +12298,7 @@ yyreduce:
             (yyval.variable_def) = (yyvsp[-2].variable_def);
             (yyval.variable_def)->initializer = (yyvsp[0].initializer);
         }
-#line 12302 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 12302 "hlsl.tab.c"
     break;
 
   case 197: /* variable_def: variable_decl '{' state_block_start state_block '}'  */
@@ -12312,7 +12312,7 @@ yyreduce:
                 YYABORT;
             (yyval.variable_def)->state_blocks[(yyval.variable_def)->state_block_count++] = (yyvsp[-1].state_block);
         }
-#line 12316 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 12316 "hlsl.tab.c"
     break;
 
   case 198: /* variable_def: variable_decl '{' state_block_start state_block_list '}'  */
@@ -12329,7 +12329,7 @@ yyreduce:
             (yyvsp[-1].variable_def)->state_block_capacity = 0;
             free_parse_variable_def((yyvsp[-1].variable_def));
         }
-#line 12333 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 12333 "hlsl.tab.c"
     break;
 
   case 199: /* variable_def_typed: var_modifiers struct_spec variable_def  */
@@ -12348,7 +12348,7 @@ yyreduce:
             (yyval.variable_def)->modifiers = modifiers;
             (yyval.variable_def)->modifiers_loc = (yylsp[-2]);
         }
-#line 12352 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 12352 "hlsl.tab.c"
     break;
 
   case 200: /* variable_def_typed: var_modifiers type variable_def  */
@@ -12367,7 +12367,7 @@ yyreduce:
             (yyval.variable_def)->modifiers = modifiers;
             (yyval.variable_def)->modifiers_loc = (yylsp[-2]);
         }
-#line 12371 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 12371 "hlsl.tab.c"
     break;
 
   case 201: /* array: '[' ']'  */
@@ -12375,7 +12375,7 @@ yyreduce:
         {
             (yyval.intval) = HLSL_ARRAY_ELEMENTS_COUNT_IMPLICIT;
         }
-#line 12379 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 12379 "hlsl.tab.c"
     break;
 
   case 202: /* array: '[' expr ']'  */
@@ -12398,7 +12398,7 @@ yyreduce:
                 YYABORT;
             }
         }
-#line 12402 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 12402 "hlsl.tab.c"
     break;
 
   case 203: /* arrays: %empty  */
@@ -12407,7 +12407,7 @@ yyreduce:
             (yyval.arrays).sizes = NULL;
             (yyval.arrays).count = 0;
         }
-#line 12411 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 12411 "hlsl.tab.c"
     break;
 
   case 204: /* arrays: array arrays  */
@@ -12426,7 +12426,7 @@ yyreduce:
             (yyval.arrays).sizes = new_array;
             (yyval.arrays).sizes[(yyval.arrays).count++] = (yyvsp[-1].intval);
         }
-#line 12430 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 12430 "hlsl.tab.c"
     break;
 
   case 205: /* var_modifiers: %empty  */
@@ -12434,7 +12434,7 @@ yyreduce:
         {
             (yyval.modifiers) = 0;
         }
-#line 12438 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 12438 "hlsl.tab.c"
     break;
 
   case 206: /* var_modifiers: KW_EXTERN var_modifiers  */
@@ -12442,7 +12442,7 @@ yyreduce:
         {
             (yyval.modifiers) = add_modifiers(ctx, (yyvsp[0].modifiers), HLSL_STORAGE_EXTERN, &(yylsp[-1]));
         }
-#line 12446 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 12446 "hlsl.tab.c"
     break;
 
   case 207: /* var_modifiers: KW_NOINTERPOLATION var_modifiers  */
@@ -12450,7 +12450,7 @@ yyreduce:
         {
             (yyval.modifiers) = add_modifiers(ctx, (yyvsp[0].modifiers), HLSL_STORAGE_NOINTERPOLATION, &(yylsp[-1]));
         }
-#line 12454 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 12454 "hlsl.tab.c"
     break;
 
   case 208: /* var_modifiers: KW_CENTROID var_modifiers  */
@@ -12458,7 +12458,7 @@ yyreduce:
         {
             (yyval.modifiers) = add_modifiers(ctx, (yyvsp[0].modifiers), HLSL_STORAGE_CENTROID, &(yylsp[-1]));
         }
-#line 12462 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 12462 "hlsl.tab.c"
     break;
 
   case 209: /* var_modifiers: KW_LINEAR var_modifiers  */
@@ -12466,7 +12466,7 @@ yyreduce:
         {
             (yyval.modifiers) = add_modifiers(ctx, (yyvsp[0].modifiers), HLSL_STORAGE_LINEAR, &(yylsp[-1]));
         }
-#line 12470 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 12470 "hlsl.tab.c"
     break;
 
   case 210: /* var_modifiers: KW_NOPERSPECTIVE var_modifiers  */
@@ -12474,7 +12474,7 @@ yyreduce:
         {
             (yyval.modifiers) = add_modifiers(ctx, (yyvsp[0].modifiers), HLSL_STORAGE_NOPERSPECTIVE, &(yylsp[-1]));
         }
-#line 12478 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 12478 "hlsl.tab.c"
     break;
 
   case 211: /* var_modifiers: KW_SHARED var_modifiers  */
@@ -12482,7 +12482,7 @@ yyreduce:
         {
             (yyval.modifiers) = add_modifiers(ctx, (yyvsp[0].modifiers), HLSL_STORAGE_SHARED, &(yylsp[-1]));
         }
-#line 12486 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 12486 "hlsl.tab.c"
     break;
 
   case 212: /* var_modifiers: KW_GROUPSHARED var_modifiers  */
@@ -12490,7 +12490,7 @@ yyreduce:
         {
             (yyval.modifiers) = add_modifiers(ctx, (yyvsp[0].modifiers), HLSL_STORAGE_GROUPSHARED, &(yylsp[-1]));
         }
-#line 12494 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 12494 "hlsl.tab.c"
     break;
 
   case 213: /* var_modifiers: KW_STATIC var_modifiers  */
@@ -12498,7 +12498,7 @@ yyreduce:
         {
             (yyval.modifiers) = add_modifiers(ctx, (yyvsp[0].modifiers), HLSL_STORAGE_STATIC, &(yylsp[-1]));
         }
-#line 12502 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 12502 "hlsl.tab.c"
     break;
 
   case 214: /* var_modifiers: KW_UNIFORM var_modifiers  */
@@ -12506,7 +12506,7 @@ yyreduce:
         {
             (yyval.modifiers) = add_modifiers(ctx, (yyvsp[0].modifiers), HLSL_STORAGE_UNIFORM, &(yylsp[-1]));
         }
-#line 12510 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 12510 "hlsl.tab.c"
     break;
 
   case 215: /* var_modifiers: KW_VOLATILE var_modifiers  */
@@ -12514,7 +12514,7 @@ yyreduce:
         {
             (yyval.modifiers) = add_modifiers(ctx, (yyvsp[0].modifiers), HLSL_MODIFIER_VOLATILE, &(yylsp[-1]));
         }
-#line 12518 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 12518 "hlsl.tab.c"
     break;
 
   case 216: /* var_modifiers: KW_CONST var_modifiers  */
@@ -12522,7 +12522,7 @@ yyreduce:
         {
             (yyval.modifiers) = add_modifiers(ctx, (yyvsp[0].modifiers), HLSL_MODIFIER_CONST, &(yylsp[-1]));
         }
-#line 12526 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 12526 "hlsl.tab.c"
     break;
 
   case 217: /* var_modifiers: KW_ROW_MAJOR var_modifiers  */
@@ -12530,7 +12530,7 @@ yyreduce:
         {
             (yyval.modifiers) = add_modifiers(ctx, (yyvsp[0].modifiers), HLSL_MODIFIER_ROW_MAJOR, &(yylsp[-1]));
         }
-#line 12534 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 12534 "hlsl.tab.c"
     break;
 
   case 218: /* var_modifiers: KW_COLUMN_MAJOR var_modifiers  */
@@ -12538,7 +12538,7 @@ yyreduce:
         {
             (yyval.modifiers) = add_modifiers(ctx, (yyvsp[0].modifiers), HLSL_MODIFIER_COLUMN_MAJOR, &(yylsp[-1]));
         }
-#line 12542 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 12542 "hlsl.tab.c"
     break;
 
   case 219: /* var_modifiers: KW_IN var_modifiers  */
@@ -12546,7 +12546,7 @@ yyreduce:
         {
             (yyval.modifiers) = add_modifiers(ctx, (yyvsp[0].modifiers), HLSL_STORAGE_IN, &(yylsp[-1]));
         }
-#line 12550 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 12550 "hlsl.tab.c"
     break;
 
   case 220: /* var_modifiers: KW_OUT var_modifiers  */
@@ -12554,7 +12554,7 @@ yyreduce:
         {
             (yyval.modifiers) = add_modifiers(ctx, (yyvsp[0].modifiers), HLSL_STORAGE_OUT, &(yylsp[-1]));
         }
-#line 12558 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 12558 "hlsl.tab.c"
     break;
 
   case 221: /* var_modifiers: KW_INOUT var_modifiers  */
@@ -12562,7 +12562,7 @@ yyreduce:
         {
             (yyval.modifiers) = add_modifiers(ctx, (yyvsp[0].modifiers), HLSL_STORAGE_IN | HLSL_STORAGE_OUT, &(yylsp[-1]));
         }
-#line 12566 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 12566 "hlsl.tab.c"
     break;
 
   case 222: /* var_modifiers: KW_INLINE var_modifiers  */
@@ -12570,7 +12570,7 @@ yyreduce:
         {
             (yyval.modifiers) = add_modifiers(ctx, (yyvsp[0].modifiers), HLSL_MODIFIER_INLINE, &(yylsp[-1]));
         }
-#line 12574 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 12574 "hlsl.tab.c"
     break;
 
   case 223: /* var_modifiers: KW_EXPORT var_modifiers  */
@@ -12578,7 +12578,7 @@ yyreduce:
         {
             (yyval.modifiers) = add_modifiers(ctx, (yyvsp[0].modifiers), HLSL_STORAGE_EXPORT, &(yylsp[-1]));
         }
-#line 12582 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 12582 "hlsl.tab.c"
     break;
 
   case 224: /* var_modifiers: KW_UNORM var_modifiers  */
@@ -12586,7 +12586,7 @@ yyreduce:
         {
             (yyval.modifiers) = add_modifiers(ctx, (yyvsp[0].modifiers), HLSL_MODIFIER_UNORM, &(yylsp[-1]));
         }
-#line 12590 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 12590 "hlsl.tab.c"
     break;
 
   case 225: /* var_modifiers: KW_SNORM var_modifiers  */
@@ -12594,7 +12594,7 @@ yyreduce:
         {
             (yyval.modifiers) = add_modifiers(ctx, (yyvsp[0].modifiers), HLSL_MODIFIER_SNORM, &(yylsp[-1]));
         }
-#line 12598 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 12598 "hlsl.tab.c"
     break;
 
   case 226: /* var_modifiers: KW_LINE var_modifiers  */
@@ -12602,7 +12602,7 @@ yyreduce:
         {
             (yyval.modifiers) = add_modifiers(ctx, (yyvsp[0].modifiers), HLSL_PRIMITIVE_LINE, &(yylsp[-1]));
         }
-#line 12606 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 12606 "hlsl.tab.c"
     break;
 
   case 227: /* var_modifiers: KW_LINEADJ var_modifiers  */
@@ -12610,7 +12610,7 @@ yyreduce:
         {
             (yyval.modifiers) = add_modifiers(ctx, (yyvsp[0].modifiers), HLSL_PRIMITIVE_LINEADJ, &(yylsp[-1]));
         }
-#line 12614 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 12614 "hlsl.tab.c"
     break;
 
   case 228: /* var_modifiers: KW_POINT var_modifiers  */
@@ -12618,7 +12618,7 @@ yyreduce:
         {
             (yyval.modifiers) = add_modifiers(ctx, (yyvsp[0].modifiers), HLSL_PRIMITIVE_POINT, &(yylsp[-1]));
         }
-#line 12622 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 12622 "hlsl.tab.c"
     break;
 
   case 229: /* var_modifiers: KW_TRIANGLE var_modifiers  */
@@ -12626,7 +12626,7 @@ yyreduce:
         {
             (yyval.modifiers) = add_modifiers(ctx, (yyvsp[0].modifiers), HLSL_PRIMITIVE_TRIANGLE, &(yylsp[-1]));
         }
-#line 12630 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 12630 "hlsl.tab.c"
     break;
 
   case 230: /* var_modifiers: KW_TRIANGLEADJ var_modifiers  */
@@ -12634,7 +12634,7 @@ yyreduce:
         {
             (yyval.modifiers) = add_modifiers(ctx, (yyvsp[0].modifiers), HLSL_PRIMITIVE_TRIANGLEADJ, &(yylsp[-1]));
         }
-#line 12638 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 12638 "hlsl.tab.c"
     break;
 
   case 231: /* var_modifiers: var_identifier var_modifiers  */
@@ -12651,7 +12651,7 @@ yyreduce:
                         "Unknown modifier %s.", debugstr_a((yyvsp[-1].name)));
             vkd3d_free((yyvsp[-1].name));
         }
-#line 12655 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 12655 "hlsl.tab.c"
     break;
 
   case 232: /* complex_initializer: initializer_expr  */
@@ -12668,7 +12668,7 @@ yyreduce:
             (yyval.initializer).braces = false;
             (yyval.initializer).loc = (yyloc);
         }
-#line 12672 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 12672 "hlsl.tab.c"
     break;
 
   case 233: /* complex_initializer: '{' complex_initializer_list '}'  */
@@ -12677,7 +12677,7 @@ yyreduce:
             (yyval.initializer) = (yyvsp[-1].initializer);
             (yyval.initializer).braces = true;
         }
-#line 12681 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 12681 "hlsl.tab.c"
     break;
 
   case 234: /* complex_initializer: '{' complex_initializer_list ',' '}'  */
@@ -12686,7 +12686,7 @@ yyreduce:
             (yyval.initializer) = (yyvsp[-2].initializer);
             (yyval.initializer).braces = true;
         }
-#line 12690 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 12690 "hlsl.tab.c"
     break;
 
   case 236: /* complex_initializer_list: complex_initializer_list ',' complex_initializer  */
@@ -12709,7 +12709,7 @@ yyreduce:
             cleanup_parse_initializer(&(yyvsp[0].initializer));
             (yyval.initializer).loc = (yyloc);
         }
-#line 12713 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 12713 "hlsl.tab.c"
     break;
 
   case 238: /* initializer_expr_list: initializer_expr  */
@@ -12726,7 +12726,7 @@ yyreduce:
             (yyval.initializer).braces = false;
             (yyval.initializer).loc = (yyloc);
         }
-#line 12730 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 12730 "hlsl.tab.c"
     break;
 
   case 239: /* initializer_expr_list: initializer_expr_list ',' initializer_expr  */
@@ -12746,7 +12746,7 @@ yyreduce:
             hlsl_block_add_block((yyval.initializer).instrs, (yyvsp[0].block));
             destroy_block((yyvsp[0].block));
         }
-#line 12750 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 12750 "hlsl.tab.c"
     break;
 
   case 240: /* boolean: KW_TRUE  */
@@ -12754,7 +12754,7 @@ yyreduce:
         {
             (yyval.boolval) = true;
         }
-#line 12758 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 12758 "hlsl.tab.c"
     break;
 
   case 241: /* boolean: KW_FALSE  */
@@ -12762,7 +12762,7 @@ yyreduce:
         {
             (yyval.boolval) = false;
         }
-#line 12766 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 12766 "hlsl.tab.c"
     break;
 
   case 243: /* statement_list: statement_list statement  */
@@ -12772,7 +12772,7 @@ yyreduce:
             hlsl_block_add_block((yyval.block), (yyvsp[0].block));
             destroy_block((yyvsp[0].block));
         }
-#line 12776 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 12776 "hlsl.tab.c"
     break;
 
   case 246: /* statement: scope_start compound_statement  */
@@ -12781,7 +12781,7 @@ yyreduce:
             hlsl_pop_scope(ctx);
             (yyval.block) = (yyvsp[0].block);
         }
-#line 12785 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 12785 "hlsl.tab.c"
     break;
 
   case 251: /* jump_statement: KW_BREAK ';'  */
@@ -12797,7 +12797,7 @@ yyreduce:
                 YYABORT;
             hlsl_block_add_jump(ctx, (yyval.block), HLSL_IR_JUMP_BREAK, NULL, &(yylsp[-1]));
         }
-#line 12801 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 12801 "hlsl.tab.c"
     break;
 
   case 252: /* jump_statement: KW_CONTINUE ';'  */
@@ -12809,7 +12809,7 @@ yyreduce:
                 YYABORT;
             hlsl_block_add_jump(ctx, (yyval.block), HLSL_IR_JUMP_UNRESOLVED_CONTINUE, NULL, &(yylsp[-1]));
         }
-#line 12813 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 12813 "hlsl.tab.c"
     break;
 
   case 253: /* jump_statement: KW_RETURN expr ';'  */
@@ -12819,7 +12819,7 @@ yyreduce:
             if (!add_return(ctx, (yyval.block), node_from_block((yyval.block)), &(yylsp[-2])))
                 YYABORT;
         }
-#line 12823 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 12823 "hlsl.tab.c"
     break;
 
   case 254: /* jump_statement: KW_RETURN ';'  */
@@ -12833,7 +12833,7 @@ yyreduce:
                 YYABORT;
             }
         }
-#line 12837 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 12837 "hlsl.tab.c"
     break;
 
   case 255: /* jump_statement: KW_DISCARD ';'  */
@@ -12846,7 +12846,7 @@ yyreduce:
             c = hlsl_block_add_uint_constant(ctx, (yyval.block), ~0u, &(yylsp[-1]));
             hlsl_block_add_jump(ctx, (yyval.block), HLSL_IR_JUMP_DISCARD_NZ, c, &(yylsp[-1]));
         }
-#line 12850 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 12850 "hlsl.tab.c"
     break;
 
   case 256: /* selection_statement: attribute_list_optional KW_IF '(' expr ')' if_body  */
@@ -12900,7 +12900,7 @@ yyreduce:
 
             (yyval.block) = (yyvsp[-2].block);
         }
-#line 12904 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 12904 "hlsl.tab.c"
     break;
 
   case 257: /* if_body: statement  */
@@ -12909,7 +12909,7 @@ yyreduce:
             (yyval.if_body).then_block = (yyvsp[0].block);
             (yyval.if_body).else_block = NULL;
         }
-#line 12913 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 12913 "hlsl.tab.c"
     break;
 
   case 258: /* if_body: statement KW_ELSE statement  */
@@ -12918,7 +12918,7 @@ yyreduce:
             (yyval.if_body).then_block = (yyvsp[-2].block);
             (yyval.if_body).else_block = (yyvsp[0].block);
         }
-#line 12922 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 12922 "hlsl.tab.c"
     break;
 
   case 259: /* loop_statement: attribute_list_optional loop_scope_start KW_WHILE '(' expr ')' statement  */
@@ -12928,7 +12928,7 @@ yyreduce:
             hlsl_pop_scope(ctx);
             cleanup_parse_attribute_list(&(yyvsp[-6].attr_list));
         }
-#line 12932 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 12932 "hlsl.tab.c"
     break;
 
   case 260: /* loop_statement: attribute_list_optional loop_scope_start KW_DO statement KW_WHILE '(' expr ')' ';'  */
@@ -12938,7 +12938,7 @@ yyreduce:
             hlsl_pop_scope(ctx);
             cleanup_parse_attribute_list(&(yyvsp[-8].attr_list));
         }
-#line 12942 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 12942 "hlsl.tab.c"
     break;
 
   case 261: /* loop_statement: attribute_list_optional loop_scope_start KW_FOR '(' expr_statement expr_statement expr_optional ')' statement  */
@@ -12948,7 +12948,7 @@ yyreduce:
             hlsl_pop_scope(ctx);
             cleanup_parse_attribute_list(&(yyvsp[-8].attr_list));
         }
-#line 12952 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 12952 "hlsl.tab.c"
     break;
 
   case 262: /* loop_statement: attribute_list_optional loop_scope_start KW_FOR '(' declaration expr_statement expr_optional ')' statement  */
@@ -12958,7 +12958,7 @@ yyreduce:
             hlsl_pop_scope(ctx);
             cleanup_parse_attribute_list(&(yyvsp[-8].attr_list));
         }
-#line 12962 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 12962 "hlsl.tab.c"
     break;
 
   case 263: /* switch_statement: attribute_list_optional switch_scope_start KW_SWITCH '(' expr ')' '{' switch_cases '}'  */
@@ -12969,7 +12969,7 @@ yyreduce:
                 YYABORT;
             hlsl_pop_scope(ctx);
         }
-#line 12973 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 12973 "hlsl.tab.c"
     break;
 
   case 264: /* switch_case: KW_CASE expr ':' statement_list  */
@@ -12989,7 +12989,7 @@ yyreduce:
                 YYABORT;
             (yyval.switch_case) = c;
         }
-#line 12993 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 12993 "hlsl.tab.c"
     break;
 
   case 265: /* switch_case: KW_CASE expr ':'  */
@@ -13008,7 +13008,7 @@ yyreduce:
                 YYABORT;
             (yyval.switch_case) = c;
         }
-#line 13012 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 13012 "hlsl.tab.c"
     break;
 
   case 266: /* switch_case: KW_DEFAULT ':' statement_list  */
@@ -13024,7 +13024,7 @@ yyreduce:
                 YYABORT;
             (yyval.switch_case) = c;
         }
-#line 13028 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 13028 "hlsl.tab.c"
     break;
 
   case 267: /* switch_case: KW_DEFAULT ':'  */
@@ -13036,7 +13036,7 @@ yyreduce:
                 YYABORT;
             (yyval.switch_case) = c;
         }
-#line 13040 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 13040 "hlsl.tab.c"
     break;
 
   case 268: /* switch_cases: switch_case  */
@@ -13050,7 +13050,7 @@ yyreduce:
             }
             list_add_head((yyval.list), &(yyvsp[0].switch_case)->entry);
         }
-#line 13054 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 13054 "hlsl.tab.c"
     break;
 
   case 269: /* switch_cases: switch_cases switch_case  */
@@ -13060,7 +13060,7 @@ yyreduce:
             check_duplicated_switch_cases(ctx, (yyvsp[0].switch_case), (yyval.list));
             list_add_tail((yyval.list), &(yyvsp[0].switch_case)->entry);
         }
-#line 13064 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 13064 "hlsl.tab.c"
     break;
 
   case 270: /* expr_optional: %empty  */
@@ -13069,7 +13069,7 @@ yyreduce:
             if (!((yyval.block) = make_empty_block(ctx)))
                 YYABORT;
         }
-#line 13073 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 13073 "hlsl.tab.c"
     break;
 
   case 272: /* expr_statement: expr_optional ';'  */
@@ -13077,7 +13077,7 @@ yyreduce:
         {
             (yyval.block) = (yyvsp[-1].block);
         }
-#line 13081 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 13081 "hlsl.tab.c"
     break;
 
   case 273: /* func_arguments: %empty  */
@@ -13090,7 +13090,7 @@ yyreduce:
             (yyval.initializer).braces = false;
             (yyval.initializer).loc = (yyloc);
         }
-#line 13094 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 13094 "hlsl.tab.c"
     break;
 
   case 275: /* primary_expr: C_FLOAT  */
@@ -13100,7 +13100,7 @@ yyreduce:
                 YYABORT;
             hlsl_block_add_float_constant(ctx, (yyval.block), (yyvsp[0].floatval), &(yylsp[0]));
         }
-#line 13104 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 13104 "hlsl.tab.c"
     break;
 
   case 276: /* primary_expr: C_INTEGER  */
@@ -13110,7 +13110,7 @@ yyreduce:
                 YYABORT;
             hlsl_block_add_int_constant(ctx, (yyval.block), (yyvsp[0].intval), &(yylsp[0]));
         }
-#line 13114 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 13114 "hlsl.tab.c"
     break;
 
   case 277: /* primary_expr: C_UNSIGNED  */
@@ -13120,7 +13120,7 @@ yyreduce:
                 YYABORT;
             hlsl_block_add_uint_constant(ctx, (yyval.block), (yyvsp[0].intval), &(yylsp[0]));
         }
-#line 13124 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 13124 "hlsl.tab.c"
     break;
 
   case 278: /* primary_expr: boolean  */
@@ -13130,7 +13130,7 @@ yyreduce:
                 YYABORT;
             hlsl_block_add_bool_constant(ctx, (yyval.block), (yyvsp[0].boolval), &(yylsp[0]));
         }
-#line 13134 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 13134 "hlsl.tab.c"
     break;
 
   case 279: /* primary_expr: STRING  */
@@ -13151,7 +13151,7 @@ yyreduce:
                 YYABORT;
             }
         }
-#line 13155 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 13155 "hlsl.tab.c"
     break;
 
   case 280: /* primary_expr: KW_NULL  */
@@ -13167,7 +13167,7 @@ yyreduce:
                 YYABORT;
             }
         }
-#line 13171 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 13171 "hlsl.tab.c"
     break;
 
   case 281: /* primary_expr: VAR_IDENTIFIER  */
@@ -13193,7 +13193,7 @@ yyreduce:
                 (yyval.block)->value = ctx->error_instr;
             }
         }
-#line 13197 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 13197 "hlsl.tab.c"
     break;
 
   case 282: /* primary_expr: '(' expr ')'  */
@@ -13201,7 +13201,7 @@ yyreduce:
         {
             (yyval.block) = (yyvsp[-1].block);
         }
-#line 13205 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 13205 "hlsl.tab.c"
     break;
 
   case 283: /* primary_expr: KW_COMPILE any_identifier var_identifier '(' func_arguments ')'  */
@@ -13216,7 +13216,7 @@ yyreduce:
             vkd3d_free((yyvsp[-4].name));
             vkd3d_free((yyvsp[-3].name));
         }
-#line 13220 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 13220 "hlsl.tab.c"
     break;
 
   case 284: /* primary_expr: KW_COMPILESHADER '(' any_identifier ',' var_identifier '(' func_arguments ')' ')'  */
@@ -13231,7 +13231,7 @@ yyreduce:
             vkd3d_free((yyvsp[-6].name));
             vkd3d_free((yyvsp[-4].name));
         }
-#line 13235 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 13235 "hlsl.tab.c"
     break;
 
   case 285: /* primary_expr: var_identifier '(' func_arguments ')'  */
@@ -13240,7 +13240,7 @@ yyreduce:
             (yyval.block) = add_call(ctx, (yyvsp[-3].name), &(yyvsp[-1].initializer), &(yylsp[-3]));
             vkd3d_free((yyvsp[-3].name));
         }
-#line 13244 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 13244 "hlsl.tab.c"
     break;
 
   case 286: /* primary_expr: KW_SAMPLER_STATE '{' state_block_start state_block '}'  */
@@ -13263,7 +13263,7 @@ yyreduce:
             if (!((yyval.block) = make_block(ctx, sampler_state)))
                 YYABORT;
         }
-#line 13267 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 13267 "hlsl.tab.c"
     break;
 
   case 287: /* primary_expr: NEW_IDENTIFIER  */
@@ -13290,7 +13290,7 @@ yyreduce:
                 (yyval.block)->value = ctx->error_instr;
             }
         }
-#line 13294 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 13294 "hlsl.tab.c"
     break;
 
   case 289: /* postfix_expr: postfix_expr OP_INC  */
@@ -13303,7 +13303,7 @@ yyreduce:
             }
             (yyval.block) = (yyvsp[-1].block);
         }
-#line 13307 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 13307 "hlsl.tab.c"
     break;
 
   case 290: /* postfix_expr: postfix_expr OP_DEC  */
@@ -13316,7 +13316,7 @@ yyreduce:
             }
             (yyval.block) = (yyvsp[-1].block);
         }
-#line 13320 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 13320 "hlsl.tab.c"
     break;
 
   case 291: /* postfix_expr: postfix_expr '.' any_identifier  */
@@ -13353,7 +13353,7 @@ yyreduce:
             vkd3d_free((yyvsp[0].name));
             (yyval.block) = (yyvsp[-2].block);
         }
-#line 13357 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 13357 "hlsl.tab.c"
     break;
 
   case 292: /* postfix_expr: postfix_expr '[' expr ']'  */
@@ -13371,7 +13371,7 @@ yyreduce:
             }
             (yyval.block) = (yyvsp[-1].block);
         }
-#line 13375 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 13375 "hlsl.tab.c"
     break;
 
   case 293: /* postfix_expr: var_modifiers type '(' initializer_expr_list ')'  */
@@ -13387,7 +13387,7 @@ yyreduce:
                 YYABORT;
             }
         }
-#line 13391 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 13391 "hlsl.tab.c"
     break;
 
   case 294: /* postfix_expr: postfix_expr '.' any_identifier '(' func_arguments ')'  */
@@ -13409,7 +13409,7 @@ yyreduce:
             vkd3d_free((yyvsp[-1].initializer).args);
             (yyval.block) = (yyvsp[-5].block);
         }
-#line 13413 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 13413 "hlsl.tab.c"
     break;
 
   case 296: /* unary_expr: OP_INC unary_expr  */
@@ -13422,7 +13422,7 @@ yyreduce:
             }
             (yyval.block) = (yyvsp[0].block);
         }
-#line 13426 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 13426 "hlsl.tab.c"
     break;
 
   case 297: /* unary_expr: OP_DEC unary_expr  */
@@ -13435,7 +13435,7 @@ yyreduce:
             }
             (yyval.block) = (yyvsp[0].block);
         }
-#line 13439 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 13439 "hlsl.tab.c"
     break;
 
   case 298: /* unary_expr: '+' unary_expr  */
@@ -13443,7 +13443,7 @@ yyreduce:
         {
             (yyval.block) = (yyvsp[0].block);
         }
-#line 13447 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 13447 "hlsl.tab.c"
     break;
 
   case 299: /* unary_expr: '-' unary_expr  */
@@ -13452,7 +13452,7 @@ yyreduce:
             add_unary_arithmetic_expr(ctx, (yyvsp[0].block), HLSL_OP1_NEG, node_from_block((yyvsp[0].block)), &(yylsp[-1]));
             (yyval.block) = (yyvsp[0].block);
         }
-#line 13456 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 13456 "hlsl.tab.c"
     break;
 
   case 300: /* unary_expr: '~' unary_expr  */
@@ -13461,7 +13461,7 @@ yyreduce:
             add_unary_bitwise_expr(ctx, (yyvsp[0].block), HLSL_OP1_BIT_NOT, node_from_block((yyvsp[0].block)), &(yylsp[-1]));
             (yyval.block) = (yyvsp[0].block);
         }
-#line 13465 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 13465 "hlsl.tab.c"
     break;
 
   case 301: /* unary_expr: '!' unary_expr  */
@@ -13470,7 +13470,7 @@ yyreduce:
             add_unary_logical_expr(ctx, (yyvsp[0].block), HLSL_OP1_LOGIC_NOT, node_from_block((yyvsp[0].block)), &(yylsp[-1]));
             (yyval.block) = (yyvsp[0].block);
         }
-#line 13474 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 13474 "hlsl.tab.c"
     break;
 
   case 302: /* unary_expr: '(' var_modifiers type arrays ')' unary_expr  */
@@ -13484,7 +13484,7 @@ yyreduce:
             vkd3d_free((yyvsp[-2].arrays).sizes);
             (yyval.block) = (yyvsp[0].block);
         }
-#line 13488 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 13488 "hlsl.tab.c"
     break;
 
   case 304: /* mul_expr: mul_expr '*' unary_expr  */
@@ -13492,7 +13492,7 @@ yyreduce:
         {
             (yyval.block) = add_binary_expr_merge(ctx, (yyvsp[-2].block), (yyvsp[0].block), HLSL_OP2_MUL, &(yylsp[-1]));
         }
-#line 13496 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 13496 "hlsl.tab.c"
     break;
 
   case 305: /* mul_expr: mul_expr '/' unary_expr  */
@@ -13500,7 +13500,7 @@ yyreduce:
         {
             (yyval.block) = add_binary_expr_merge(ctx, (yyvsp[-2].block), (yyvsp[0].block), HLSL_OP2_DIV, &(yylsp[-1]));
         }
-#line 13504 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 13504 "hlsl.tab.c"
     break;
 
   case 306: /* mul_expr: mul_expr '%' unary_expr  */
@@ -13508,7 +13508,7 @@ yyreduce:
         {
             (yyval.block) = add_binary_expr_merge(ctx, (yyvsp[-2].block), (yyvsp[0].block), HLSL_OP2_MOD, &(yylsp[-1]));
         }
-#line 13512 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 13512 "hlsl.tab.c"
     break;
 
   case 308: /* add_expr: add_expr '+' mul_expr  */
@@ -13516,7 +13516,7 @@ yyreduce:
         {
             (yyval.block) = add_binary_expr_merge(ctx, (yyvsp[-2].block), (yyvsp[0].block), HLSL_OP2_ADD, &(yylsp[-1]));
         }
-#line 13520 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 13520 "hlsl.tab.c"
     break;
 
   case 309: /* add_expr: add_expr '-' mul_expr  */
@@ -13528,7 +13528,7 @@ yyreduce:
                 YYABORT;
             (yyval.block) = add_binary_expr_merge(ctx, (yyvsp[-2].block), (yyvsp[0].block), HLSL_OP2_ADD, &(yylsp[-1]));
         }
-#line 13532 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 13532 "hlsl.tab.c"
     break;
 
   case 311: /* shift_expr: shift_expr OP_LEFTSHIFT add_expr  */
@@ -13536,7 +13536,7 @@ yyreduce:
         {
             (yyval.block) = add_binary_expr_merge(ctx, (yyvsp[-2].block), (yyvsp[0].block), HLSL_OP2_LSHIFT, &(yylsp[-1]));
         }
-#line 13540 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 13540 "hlsl.tab.c"
     break;
 
   case 312: /* shift_expr: shift_expr OP_RIGHTSHIFT add_expr  */
@@ -13544,7 +13544,7 @@ yyreduce:
         {
             (yyval.block) = add_binary_expr_merge(ctx, (yyvsp[-2].block), (yyvsp[0].block), HLSL_OP2_RSHIFT, &(yylsp[-1]));
         }
-#line 13548 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 13548 "hlsl.tab.c"
     break;
 
   case 314: /* relational_expr: relational_expr '<' shift_expr  */
@@ -13552,7 +13552,7 @@ yyreduce:
         {
             (yyval.block) = add_binary_expr_merge(ctx, (yyvsp[-2].block), (yyvsp[0].block), HLSL_OP2_LESS, &(yylsp[-1]));
         }
-#line 13556 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 13556 "hlsl.tab.c"
     break;
 
   case 315: /* relational_expr: relational_expr '>' shift_expr  */
@@ -13560,7 +13560,7 @@ yyreduce:
         {
             (yyval.block) = add_binary_expr_merge(ctx, (yyvsp[0].block), (yyvsp[-2].block), HLSL_OP2_LESS, &(yylsp[-1]));
         }
-#line 13564 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 13564 "hlsl.tab.c"
     break;
 
   case 316: /* relational_expr: relational_expr OP_LE shift_expr  */
@@ -13568,7 +13568,7 @@ yyreduce:
         {
             (yyval.block) = add_binary_expr_merge(ctx, (yyvsp[0].block), (yyvsp[-2].block), HLSL_OP2_GEQUAL, &(yylsp[-1]));
         }
-#line 13572 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 13572 "hlsl.tab.c"
     break;
 
   case 317: /* relational_expr: relational_expr OP_GE shift_expr  */
@@ -13576,7 +13576,7 @@ yyreduce:
         {
             (yyval.block) = add_binary_expr_merge(ctx, (yyvsp[-2].block), (yyvsp[0].block), HLSL_OP2_GEQUAL, &(yylsp[-1]));
         }
-#line 13580 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 13580 "hlsl.tab.c"
     break;
 
   case 319: /* equality_expr: equality_expr OP_EQ relational_expr  */
@@ -13584,7 +13584,7 @@ yyreduce:
         {
             (yyval.block) = add_binary_expr_merge(ctx, (yyvsp[-2].block), (yyvsp[0].block), HLSL_OP2_EQUAL, &(yylsp[-1]));
         }
-#line 13588 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 13588 "hlsl.tab.c"
     break;
 
   case 320: /* equality_expr: equality_expr OP_NE relational_expr  */
@@ -13592,7 +13592,7 @@ yyreduce:
         {
             (yyval.block) = add_binary_expr_merge(ctx, (yyvsp[-2].block), (yyvsp[0].block), HLSL_OP2_NEQUAL, &(yylsp[-1]));
         }
-#line 13596 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 13596 "hlsl.tab.c"
     break;
 
   case 322: /* bitand_expr: bitand_expr '&' equality_expr  */
@@ -13600,7 +13600,7 @@ yyreduce:
         {
             (yyval.block) = add_binary_expr_merge(ctx, (yyvsp[-2].block), (yyvsp[0].block), HLSL_OP2_BIT_AND, &(yylsp[-1]));
         }
-#line 13604 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 13604 "hlsl.tab.c"
     break;
 
   case 324: /* bitxor_expr: bitxor_expr '^' bitand_expr  */
@@ -13608,7 +13608,7 @@ yyreduce:
         {
             (yyval.block) = add_binary_expr_merge(ctx, (yyvsp[-2].block), (yyvsp[0].block), HLSL_OP2_BIT_XOR, &(yylsp[-1]));
         }
-#line 13612 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 13612 "hlsl.tab.c"
     break;
 
   case 326: /* bitor_expr: bitor_expr '|' bitxor_expr  */
@@ -13616,7 +13616,7 @@ yyreduce:
         {
             (yyval.block) = add_binary_expr_merge(ctx, (yyvsp[-2].block), (yyvsp[0].block), HLSL_OP2_BIT_OR, &(yylsp[-1]));
         }
-#line 13620 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 13620 "hlsl.tab.c"
     break;
 
   case 328: /* logicand_expr: logicand_expr OP_AND bitor_expr  */
@@ -13624,7 +13624,7 @@ yyreduce:
         {
             (yyval.block) = add_binary_expr_merge(ctx, (yyvsp[-2].block), (yyvsp[0].block), HLSL_OP2_LOGIC_AND, &(yylsp[-1]));
         }
-#line 13628 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 13628 "hlsl.tab.c"
     break;
 
   case 330: /* logicor_expr: logicor_expr OP_OR logicand_expr  */
@@ -13632,7 +13632,7 @@ yyreduce:
         {
             (yyval.block) = add_binary_expr_merge(ctx, (yyvsp[-2].block), (yyvsp[0].block), HLSL_OP2_LOGIC_OR, &(yylsp[-1]));
         }
-#line 13636 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 13636 "hlsl.tab.c"
     break;
 
   case 332: /* conditional_expr: logicor_expr '?' expr ':' assignment_expr  */
@@ -13654,7 +13654,7 @@ yyreduce:
             }
             (yyval.block) = (yyvsp[-4].block);
         }
-#line 13658 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 13658 "hlsl.tab.c"
     break;
 
   case 334: /* assignment_expr: unary_expr assign_op assignment_expr  */
@@ -13673,7 +13673,7 @@ yyreduce:
             }
             (yyval.block) = (yyvsp[0].block);
         }
-#line 13677 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 13677 "hlsl.tab.c"
     break;
 
   case 335: /* assign_op: '='  */
@@ -13681,7 +13681,7 @@ yyreduce:
         {
             (yyval.assign_op) = ASSIGN_OP_ASSIGN;
         }
-#line 13685 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 13685 "hlsl.tab.c"
     break;
 
   case 336: /* assign_op: OP_ADDASSIGN  */
@@ -13689,7 +13689,7 @@ yyreduce:
         {
             (yyval.assign_op) = ASSIGN_OP_ADD;
         }
-#line 13693 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 13693 "hlsl.tab.c"
     break;
 
   case 337: /* assign_op: OP_SUBASSIGN  */
@@ -13697,7 +13697,7 @@ yyreduce:
         {
             (yyval.assign_op) = ASSIGN_OP_SUB;
         }
-#line 13701 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 13701 "hlsl.tab.c"
     break;
 
   case 338: /* assign_op: OP_MULASSIGN  */
@@ -13705,7 +13705,7 @@ yyreduce:
         {
             (yyval.assign_op) = ASSIGN_OP_MUL;
         }
-#line 13709 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 13709 "hlsl.tab.c"
     break;
 
   case 339: /* assign_op: OP_DIVASSIGN  */
@@ -13713,7 +13713,7 @@ yyreduce:
         {
             (yyval.assign_op) = ASSIGN_OP_DIV;
         }
-#line 13717 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 13717 "hlsl.tab.c"
     break;
 
   case 340: /* assign_op: OP_MODASSIGN  */
@@ -13721,7 +13721,7 @@ yyreduce:
         {
             (yyval.assign_op) = ASSIGN_OP_MOD;
         }
-#line 13725 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 13725 "hlsl.tab.c"
     break;
 
   case 341: /* assign_op: OP_LEFTSHIFTASSIGN  */
@@ -13729,7 +13729,7 @@ yyreduce:
         {
             (yyval.assign_op) = ASSIGN_OP_LSHIFT;
         }
-#line 13733 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 13733 "hlsl.tab.c"
     break;
 
   case 342: /* assign_op: OP_RIGHTSHIFTASSIGN  */
@@ -13737,7 +13737,7 @@ yyreduce:
         {
             (yyval.assign_op) = ASSIGN_OP_RSHIFT;
         }
-#line 13741 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 13741 "hlsl.tab.c"
     break;
 
   case 343: /* assign_op: OP_ANDASSIGN  */
@@ -13745,7 +13745,7 @@ yyreduce:
         {
             (yyval.assign_op) = ASSIGN_OP_AND;
         }
-#line 13749 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 13749 "hlsl.tab.c"
     break;
 
   case 344: /* assign_op: OP_ORASSIGN  */
@@ -13753,7 +13753,7 @@ yyreduce:
         {
             (yyval.assign_op) = ASSIGN_OP_OR;
         }
-#line 13757 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 13757 "hlsl.tab.c"
     break;
 
   case 345: /* assign_op: OP_XORASSIGN  */
@@ -13761,7 +13761,7 @@ yyreduce:
         {
             (yyval.assign_op) = ASSIGN_OP_XOR;
         }
-#line 13765 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 13765 "hlsl.tab.c"
     break;
 
   case 347: /* expr: expr ',' assignment_expr  */
@@ -13771,11 +13771,11 @@ yyreduce:
             hlsl_block_add_block((yyval.block), (yyvsp[0].block));
             destroy_block((yyvsp[0].block));
         }
-#line 13775 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 13775 "hlsl.tab.c"
     break;
 
 
-#line 13779 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.tab.c"
+#line 13779 "hlsl.tab.c"
 
       default: break;
     }

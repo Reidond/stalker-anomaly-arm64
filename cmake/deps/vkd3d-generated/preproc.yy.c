@@ -1,7 +1,7 @@
-#line 1 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/preproc.yy.c"
+#line 1 "preproc.yy.c"
 #include "config.h"
 
-#line 4 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/preproc.yy.c"
+#line 4 "preproc.yy.c"
 
 #define  YY_INT_ALIGNED short int
 
@@ -864,7 +864,7 @@ static void update_location(struct preproc_ctx *ctx);
 
 #define YY_USER_ACTION update_location(yyget_extra(yyscanner));
 
-#line 867 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/preproc.yy.c"
+#line 867 "preproc.yy.c"
 #define YY_NO_INPUT 1
 #line 64 "libs/vkd3d-shader/preproc.l"
     /* Because these can both be terminated by EOF, we need states for them. */
@@ -873,7 +873,7 @@ static void update_location(struct preproc_ctx *ctx);
 
 
 
-#line 876 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/preproc.yy.c"
+#line 876 "preproc.yy.c"
 
 #define INITIAL 0
 #define C_COMMENT 1
@@ -1165,7 +1165,7 @@ YY_DECL
 #line 77 "libs/vkd3d-shader/preproc.l"
 
 
-#line 1168 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/preproc.yy.c"
+#line 1168 "preproc.yy.c"
 
 	while ( /*CONSTCOND*/1 )		/* loops until end-of-file is reached */
 		{
@@ -1536,7 +1536,7 @@ YY_RULE_SETUP
 #line 217 "libs/vkd3d-shader/preproc.l"
 YY_FATAL_ERROR( "flex scanner jammed" );
 	YY_BREAK
-#line 1539 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/preproc.yy.c"
+#line 1539 "preproc.yy.c"
 
 	case YY_END_OF_BUFFER:
 		{

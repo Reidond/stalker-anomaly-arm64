@@ -39,6 +39,7 @@ struct WindowState
 };
 
 WindowState g_state;
+bool g_background = false; // xr_window::SetBackground: never raise, grab or warp the user's mouse
 
 #if defined(XR_PLATFORM_IOS)
 constexpr bool kFixedFullScreen = true; // an iPad app owns the whole screen
@@ -117,6 +118,8 @@ BOOL SetCursorPos(int x, int y)
 {
 	if (!g_state.window)
 		return FALSE;
+	if (g_background) // the real cursor is the user's
+		return TRUE;
 	const float d = density_of(g_state.window);
 	SDL_WarpMouseInWindow(g_state.window, float(x) / d, float(y) / d);
 	return TRUE;
@@ -145,7 +148,8 @@ BOOL SetForegroundWindow(HWND window)
 	SDL_Window* w = (SDL_Window*)window;
 	if (!w)
 		return FALSE;
-	SDL_RaiseWindow(w);
+	if (!g_background)
+		SDL_RaiseWindow(w);
 	return TRUE;
 }
 
@@ -198,6 +202,12 @@ BOOL GetMonitorInfoA(HMONITOR monitor, MONITORINFO* info)
 // ---------------------------------------------------------------------------------------------------------------------
 namespace xr_window
 {
+void SetBackground(bool background) { g_background = background; }
+bool IsBackground() { return g_background; }
+static bool g_offscreen = false;
+void SetOffscreen(bool offscreen) { g_offscreen = offscreen; }
+bool IsOffscreen() { return g_offscreen; }
+
 bool Create(const char* title, int width, int height)
 {
 	if (g_state.window)
@@ -256,6 +266,16 @@ void SetMode(Mode mode, unsigned render_width, unsigned render_height, unsigned 
 	if (!w)
 		return;
 
+	if (g_offscreen)
+	{
+		// only the size matters (render size = drawable size); the window stays hidden and unfocused
+		const float d = display_density(resolve_display(display_id));
+		SDL_SetWindowSize(w, render_width ? int(std::lround(render_width / d)) : 1280,
+		                  render_height ? int(std::lround(render_height / d)) : 720);
+		g_state.mode = Windowed;
+		return;
+	}
+
 	if (kFixedFullScreen)
 	{
 		g_state.mode = Borderless;
@@ -292,7 +312,8 @@ void SetMode(Mode mode, unsigned render_width, unsigned render_height, unsigned 
 	}
 	g_state.mode = mode;
 	SDL_ShowWindow(w);
-	SDL_RaiseWindow(w);
+	if (!g_background)
+		SDL_RaiseWindow(w);
 	SDL_SyncWindow(w);
 }
 
@@ -300,7 +321,7 @@ Mode CurrentMode() { return g_state.mode; }
 
 void* MetalLayer()
 {
-	if (!g_state.window)
+	if (!g_state.window || g_offscreen)
 		return nullptr;
 	if (!g_state.layer)
 	{
@@ -390,7 +411,7 @@ void SetCursorVisible(bool visible)
 
 void ConfineCursor(const RECT* client_rect)
 {
-	if (!g_state.window)
+	if (!g_state.window || g_background)
 		return;
 	if (!client_rect)
 	{
