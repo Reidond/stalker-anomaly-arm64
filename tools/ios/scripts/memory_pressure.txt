@@ -1,0 +1,13 @@
+# Loads ipad_test, then fills memory in steps until the shell's budget watchdog and the OS warn, and frees it again.
+# Expect: `memory pressure: level 1/2` lines in the engine log with the MB available before/after trimming, the game still running.
+8 console start server(ipad_test/single/alife/load) client(localhost)
+45 key Space
+60 log MEM baseline
+70 ballast 1500
+85 ballast 1000
+100 ballast 800
+115 ballast 400
+130 ballast 300
+145 unballast
+170 log MEM done
+175 quit

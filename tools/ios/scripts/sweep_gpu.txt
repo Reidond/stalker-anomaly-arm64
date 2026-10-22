@@ -1,0 +1,27 @@
+# Loads ipad_test, then changes one graphics setting every 20 s and logs a marker; read the 10 s fps lines (they carry gpu ms)
+# next to the SWEEP markers in the shell log.
+8 console start server(ipad_test/single/alife/load) client(localhost)
+60 key Space
+80 log SWEEP baseline
+100 log SWEEP vid_mode 1024x768
+100 console vid_mode 1024x768
+120 log SWEEP back to 1366x1024, r2_ssao off
+120 console vid_mode 1366x1024
+120 console r2_ssao st_opt_off
+140 log SWEEP ssao low again, r2_sun off
+140 console r2_ssao st_opt_low
+140 console r2_sun off
+160 log SWEEP sun on, grass off (r__detail_density 0.04)
+160 console r2_sun on
+160 console r__detail_density 0.04
+180 log SWEEP grass back, r2_soft_particles off
+180 console r__detail_density 0.4
+180 console r2_soft_particles off
+200 log SWEEP soft particles back, r3_dynamic_wet_surfaces off
+200 console r2_soft_particles on
+200 console r3_dynamic_wet_surfaces off
+220 log SWEEP wet back, r2_soft_water off
+220 console r3_dynamic_wet_surfaces on
+220 console r2_soft_water off
+240 log SWEEP end
+260 quit

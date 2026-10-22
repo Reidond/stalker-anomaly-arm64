@@ -1,0 +1,19 @@
+-- Test helpers for the iPad port (docs/ios-port/IPAD.md). With -dbg on the command line the console has `run_string`:
+--   run_string ipad_debug.dump_smarts()        logs the actor's position and every smart terrain's position (lines ACTORPOS / SMART)
+--   run_string ipad_debug.tp(x, y, z)          teleports the actor
+-- Nothing in the game calls this file.
+
+function dump_smarts()
+	local p = db.actor:position()
+	printf("%s", string.format("ACTORPOS %.1f %.1f %.1f %s", p.x, p.y, p.z, level.name()))
+	alife():iterate_objects(function(se)
+		if se and se:clsid() == clsid.smart_terrain and string.find(se:name(), "^esc_") then
+			local q = se.position
+			printf("%s", string.format("SMART %s %.1f %.1f %.1f", se:name(), q.x, q.y, q.z))
+		end
+	end)
+end
+
+function tp(x, y, z)
+	db.actor:set_actor_position(vector():set(x, y, z))
+end

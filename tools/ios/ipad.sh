@@ -47,6 +47,8 @@ for dev in d["result"]["devices"]:
 fi
 
 dc() { xcrun devicectl "$@"; }
+# ANOMALY_LAUNCH_ENV='{"MTL_HUD_ENABLED":"1"}' passes environment variables to the launched app (the Metal HUD shows GPU time)
+launch_env=(); [[ -n ${ANOMALY_LAUNCH_ENV:-} ]] && launch_env=(--environment-variables "$ANOMALY_LAUNCH_ENV")
 app_for() { echo "$build_dir/src/Platform/App/$1-iphoneos/anomaly.app"; }
 
 case $cmd in
@@ -61,16 +63,16 @@ case $cmd in
         dc device install app --device "$device" "$app"
         ;;
     run)
-        dc device process launch --device "$device" --terminate-existing --console "$bundle" "$@"
+        dc device process launch --device "$device" --terminate-existing --console "${launch_env[@]}" "$bundle" "$@"
         ;;
     start)
-        dc device process launch --device "$device" --terminate-existing "$bundle" "$@"
+        dc device process launch --device "$device" --terminate-existing "${launch_env[@]}" "$bundle" "$@"
         ;;
     script)
         file=${1:?script file}; shift
         dc device copy to --device "$device" --domain-type appDataContainer --domain-identifier "$bundle" \
             --source "$file" --destination "Documents/${file:t}"
-        dc device process launch --device "$device" --terminate-existing --console "$bundle" \
+        dc device process launch --device "$device" --terminate-existing --console "${launch_env[@]}" "$bundle" \
             --script "${file:t}" "$@"
         ;;
     logs)

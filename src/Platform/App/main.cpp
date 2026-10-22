@@ -16,6 +16,8 @@
 //   <t> move <x> <y>                mouse pointer, window points
 //   <t> relmove <dx> <dy>           relative mouse motion
 //   <t> click <x> <y> [button]      move, press and release (1 left, 2 middle, 3 right)
+//   <t> ballast <MB>                allocate and touch that much memory (to provoke the memory warnings), in 64 MB chunks
+//   <t> unballast                   free it again
 //   <t> log <text...>               a line in the shell log
 //   <t> quit                        leave the app
 
@@ -28,6 +30,8 @@
 
 #include "xrEngine/xr_engine_app.h"
 
+#include <sys/stat.h>
+
 #include <algorithm>
 #include <cstdio>
 #include <cstdlib>
@@ -37,6 +41,13 @@
 #include <sstream>
 #include <string>
 #include <vector>
+
+// Process-wide GPU time and frame counts of the Metal D3D11 shim (src/Platform/MetalD3D11/include/mtl_d3d11/mtl_d3d11.h)
+namespace mtl_d3d11
+{
+uint64_t GpuTimeNsTotal();
+uint64_t PresentCountTotal();
+} // namespace mtl_d3d11
 
 namespace
 {
@@ -66,6 +77,8 @@ struct App
     Uint64 frame_cpu_ns = 0;     // time spent inside xr_engine::Frame() in the current window
     Uint64 frame_cpu_max_ns = 0;
     Uint64 footprint_peak = 0;   // largest process footprint sampled in the current window
+    Uint64 gpu_ns_mark = 0;      // mtl_d3d11::GpuTimeNsTotal() / PresentCountTotal() at the start of the window
+    Uint64 present_mark = 0;
     Uint64 footprint_sample_ns = 0;
     Uint64 quit_requested_ns = 0; // set when the app asked the engine to quit; it disconnects and unloads the level first
 
@@ -74,7 +87,14 @@ struct App
     std::vector<ScriptStep> script;
     size_t script_next = 0;
     std::vector<ScriptStep> pending_releases;
+    std::vector<void*> ballast; // script `ballast`: memory held on purpose
+
+    AppleShell::ListenerId lifecycle_listener = 0;
+    bool saving = false;            // a background save is under way (its frames must not start another)
+    Uint64 last_background_save_ns = 0;
 };
+
+App* g_app = nullptr; // the lifecycle listener has no user pointer
 
 bool LoadScript(App& app, const char* path)
 {
@@ -223,6 +243,27 @@ bool RunScript(App& app)
             PushButton(button, true, x, y);
             PushButton(button, false, x, y);
         }
+        else if (step.command == "ballast")
+        {
+            const long chunks = atol(step.args.c_str()) / 64;
+            for (long i = 0; i < chunks; ++i)
+            {
+                void* block = malloc(64u << 20);
+                if (!block)
+                    break;
+                memset(block, 0x5a, 64u << 20);
+                app.ballast.push_back(block);
+            }
+            AppleShell::Log("anomaly: script: ballast %zu MB held, footprint %.0f MB, available %.0f MB", app.ballast.size() * 64,
+                double(AppleShell::ProcessFootprint()) / 1048576.0, double(AppleShell::AvailableMemory()) / 1048576.0);
+        }
+        else if (step.command == "unballast")
+        {
+            for (void* block : app.ballast)
+                free(block);
+            app.ballast.clear();
+            AppleShell::Log("anomaly: script: ballast freed, available %.0f MB", double(AppleShell::AvailableMemory()) / 1048576.0);
+        }
         else if (step.command == "log")
             AppleShell::Log("anomaly: script: %s", step.args.c_str());
         else if (step.command == "quit")
@@ -248,8 +289,55 @@ bool RequestQuit(App& app)
     return double(SDL_GetTicksNS() - app.quit_requested_ns) * 1e-9 > 30.0;
 }
 
+Uint64 FileTimeNs(const std::string& path)
+{
+    struct stat st;
+    if (stat(path.c_str(), &st) != 0)
+        return 0;
+    return Uint64(st.st_mtimespec.tv_sec) * 1000000000ull + Uint64(st.st_mtimespec.tv_nsec);
+}
+
+// The game is about to lose the screen (WillEnterBackground: also Control Center, alerts, the app switcher): save it, so that a
+// jetsam kill or a force quit while it sits in the background loses nothing. The engine is still active at this point (this
+// listener runs before the engine's own pause), so it runs frames here until the save file is written; GPU work is still allowed
+// until DidEnterBackground. A save is skipped while loading, in the main menu, within 30 s of the previous one, and when the
+// frames this needs would be re-entered.
+void SaveForBackground(App& app)
+{
+    if (app.saving || !app.engine_up || !xr_engine::InGame())
+        return;
+    const Uint64 start_ns = SDL_GetTicksNS();
+    if (app.last_background_save_ns && double(start_ns - app.last_background_save_ns) * 1e-9 < 30.0)
+        return;
+    app.saving = true;
+    app.last_background_save_ns = start_ns;
+    const std::string file = AppleShell::GetPaths().saves + "/ipad_autosave.scop";
+    const Uint64 before = FileTimeNs(file);
+    xr_engine::ExecuteConsole("save ipad_autosave");
+    bool written = false;
+    for (int frame = 0; frame < 200 && double(SDL_GetTicksNS() - start_ns) * 1e-9 < 3.0; ++frame)
+    {
+        if (!xr_engine::Frame())
+            break;
+        if (FileTimeNs(file) != before)
+        {
+            written = true;
+            break;
+        }
+    }
+    AppleShell::Log("anomaly: background save %s in %.2f s", written ? "written" : "NOT written", double(SDL_GetTicksNS() - start_ns) * 1e-9);
+    app.saving = false;
+}
+
 bool StartEngine(App& app)
 {
+    // before the engine registers its own listener: the listeners run in the order they were added
+    if (!app.lifecycle_listener)
+    {
+        AppleShell::Listener l;
+        l.on_pause = [] { if (g_app) SaveForBackground(*g_app); };
+        app.lifecycle_listener = AppleShell::AddListener(std::move(l));
+    }
     xr_engine::InitParams params;
     params.argc = app.argc;
     params.argv = app.argv;
@@ -310,6 +398,7 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char** argv)
 {
     SDL_SetAppMetadata("Anomaly", "0.1", "com.andriishafar.anomaly");
     auto* app = new App;
+    g_app = app;
     *appstate = app;
     app->argc = argc;
     app->argv = argv;
@@ -382,10 +471,14 @@ SDL_AppResult SDL_AppIterate(void* appstate)
         else if (now_ns - app->fps_window_ns >= 10000000000ull)
         {
             const double mb = 1.0 / (1024.0 * 1024.0);
-            AppleShell::Log("anomaly: %.1f fps (%u frames in %.1f s), frame cpu %.1f ms avg %.1f max, footprint %.0f MB (peak %.0f), available %.0f MB",
+            const Uint64 gpu_ns = mtl_d3d11::GpuTimeNsTotal(), presents = mtl_d3d11::PresentCountTotal();
+            const double gpu_ms = presents > app->present_mark ? double(gpu_ns - app->gpu_ns_mark) * 1e-6 / double(presents - app->present_mark) : 0.0;
+            app->gpu_ns_mark = gpu_ns;
+            app->present_mark = presents;
+            AppleShell::Log("anomaly: %.1f fps (%u frames in %.1f s), frame cpu %.1f ms avg %.1f max, gpu %.1f ms, footprint %.0f MB (peak %.0f), available %.0f MB",
                 app->fps_frames * 1e9 / double(now_ns - app->fps_window_ns), app->fps_frames,
                 double(now_ns - app->fps_window_ns) * 1e-9, double(app->frame_cpu_ns) * 1e-6 / app->fps_frames,
-                double(app->frame_cpu_max_ns) * 1e-6, double(AppleShell::ProcessFootprint()) * mb, double(app->footprint_peak) * mb,
+                double(app->frame_cpu_max_ns) * 1e-6, gpu_ms, double(AppleShell::ProcessFootprint()) * mb, double(app->footprint_peak) * mb,
                 double(AppleShell::AvailableMemory()) * mb);
             app->fps_window_ns = now_ns;
             app->fps_frames = 0;
@@ -419,6 +512,18 @@ SDL_AppResult SDL_AppEvent(void* appstate, SDL_Event* event)
     auto* app = static_cast<App*>(appstate);
     if (app->engine_up)
     {
+        if (event->type == SDL_EVENT_TERMINATING)
+        {
+            // the system is ending the app (rare: a suspended app is killed without being told): leave the level through the engine's
+            // own disconnect, for as long as the system allows
+            AppleShell::Log("anomaly: terminating, disconnecting");
+            const Uint64 t0 = SDL_GetTicksNS();
+            RequestQuit(*app);
+            while (double(SDL_GetTicksNS() - t0) * 1e-9 < 4.0 && xr_engine::Frame())
+                ;
+            AppleShell::Log("anomaly: disconnect %s", double(SDL_GetTicksNS() - t0) * 1e-9 < 4.0 ? "finished" : "timed out");
+            return SDL_APP_SUCCESS;
+        }
         // SDL3's callback loop has already taken the event out of the queue the engine would pump
         xr_engine::HandleEvent(*event);
         return SDL_APP_CONTINUE;

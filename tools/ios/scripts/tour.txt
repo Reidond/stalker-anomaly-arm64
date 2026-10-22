@@ -1,0 +1,14 @@
+# Loads ipad_test (needs -dbg for run_string) and stands for 40 s at four places of the Cordon; read the 10 s fps lines (fps, cpu,
+# gpu ms, footprint) next to the markers. Positions are smart terrains of l01_escape (ipad_debug.dump_smarts()).
+8 console start server(ipad_test/single/alife/load) client(localhost)
+45 key Space
+50 log TOUR field 6_8
+50 console run_string ipad_debug.tp(54.9, 3.5, 157.1)
+90 log TOUR field 5_7 (north)
+90 console run_string ipad_debug.tp(-14.5, 2.5, 274.7)
+130 log TOUR 4_9 (west)
+130 console run_string ipad_debug.tp(-81.3, 1.5, 113.2)
+170 log TOUR 1_11 (village)
+170 console run_string ipad_debug.tp(-215.0, -7.5, -40.6)
+210 log TOUR end
+215 quit
