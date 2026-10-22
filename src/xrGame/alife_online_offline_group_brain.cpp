@@ -80,7 +80,8 @@ void CALifeOnlineOfflineGroupBrain::update()
 	CALifeSmartTerrainTask* const task = object().get_current_task();
 	THROW2(task, "CALifeOnlineOfflineGroupBrain returned nil task, while npc is registered in it");
 	movement().path_type(MovementManager::ePathTypeGamePath);
-	movement().detail().target(*task);
+	if (task)
+		movement().detail().target(*task);
 	movement().update();
 }
 
