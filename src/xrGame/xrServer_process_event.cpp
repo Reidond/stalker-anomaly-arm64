@@ -374,7 +374,9 @@ void xrServer::Process_event(NET_Packet& P, ClientID sender)
 		{
 			CSE_Abstract* e_dest = receiver;
 			CSE_ALifeTraderAbstract* pTa = smart_cast<CSE_ALifeTraderAbstract*>(e_dest);
-			pTa->m_dwMoney = P.r_u32();
+			// the receiver is gone when the event is processed while the level is being stopped
+			if (pTa)
+				pTa->m_dwMoney = P.r_u32();
 		}
 		break;
 	case GE_TRADER_FLAGS:
