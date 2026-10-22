@@ -38,6 +38,15 @@ add_subdirectory(src/Platform/GameInput)
 add_subdirectory(src/Platform/ShaderXlat)
 add_subdirectory(src/Platform/MetalD3D11)
 
+# xrEngine smoke test (macOS). After the module files, because it links xrGame and the renderer when they are built and
+# takes stubs for the modules that are not.
+if(NOT ANOMALY_IOS AND TARGET xrEngine)
+    add_subdirectory(tools/xrengine_smoke)
+endif()
+
+# The game: every module linked statically into one app (needs ANOMALY_BUILD_ALL_MODULES).
+add_subdirectory(src/Platform/App)
+
 # Host-side smoke tests of the engine libraries; the iOS build only checks that the libraries compile.
 if(NOT ANOMALY_IOS)
     add_subdirectory(tools/ode_smoke)

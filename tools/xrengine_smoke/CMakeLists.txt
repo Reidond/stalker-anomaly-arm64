@@ -31,3 +31,6 @@ endif()
 add_executable(xrengine_smoke ${smoke_sources})
 target_include_directories(xrengine_smoke PRIVATE "${PROJECT_SOURCE_DIR}/src")
 target_link_libraries(xrengine_smoke PRIVATE xrEngine anomaly_apple_shell xrengine_smoke_layer)
+# xrEngine itself needs xrGame's UI cursor (the ImGui input glue) and the renderer's factory: with those modules built, link
+# them for real (the stubs above only stand in for modules that are not built, and this is what --full needs anyway).
+target_link_libraries(xrengine_smoke PRIVATE $<TARGET_NAME_IF_EXISTS:xrGame> $<TARGET_NAME_IF_EXISTS:xrRender_R4>)

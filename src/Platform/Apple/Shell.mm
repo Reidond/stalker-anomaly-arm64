@@ -129,6 +129,24 @@ std::string ResolveDataRoot(const InitParams& params, const std::string& documen
     return root;
 }
 
+// Where the Monolith gamedata overlay comes from: --overlay <dir>, ANOMALY_OVERLAY, or the bundle's Resources/overlay.
+std::string ResolveOverlaySource(const InitParams& params)
+{
+    std::string dir;
+    if (NSString* resources = NSBundle.mainBundle.resourcePath; resources.length)
+    {
+        const std::string bundled = ToStd(resources) + "/overlay";
+        if (FileExists(bundled))
+            dir = bundled;
+    }
+    if (const char* env = getenv("ANOMALY_OVERLAY"); env && *env)
+        dir = Normalize(env);
+    for (int i = 1; params.argv && i + 1 < params.argc; ++i)
+        if (strcmp(params.argv[i], "--overlay") == 0)
+            dir = Normalize(params.argv[i + 1]);
+    return dir;
+}
+
 std::string BuildFsGameLtx(const Paths& p)
 {
     std::ostringstream out;
@@ -151,7 +169,12 @@ $arch_dir_meshes$       = false	| false	| $arch_dir$	 | meshes\
 $arch_dir_sounds$		= false	| false	| $arch_dir$	 | sounds\
 $arch_dir_textures$		= false	| false	| $arch_dir$	 | textures\
 $arch_dir_resource$     = false	| false	| $arch_dir$	 | mods\
-$arch_dir_patches$		= false	| true 	| $arch_dir$	 | patches\
+)LTX";
+    // The Monolith overlay sits after the game's own archives (it overrides them, as the loose files do on Windows) and
+    // before db\patches, db\addons and the loose gamedata folder, which override it.
+    if (!p.overlay_archive_dir.empty() && FileExists(p.overlay_archive_dir + "/monolith_overlay.db0"))
+        out << "$monolith_overlay$      = false | false\t| " << p.overlay_archive_dir << "\n";
+    out << R"LTX($arch_dir_patches$		= false	| true 	| $arch_dir$	 | patches\
 $arch_dir_addons$		= false	| true 	| $arch_dir$	 | addons\
 $game_data$             = true 	| true 	| $fs_root$		 | gamedata\
 $game_ai$               = true 	| false	| $game_data$	 | ai\
@@ -241,6 +264,8 @@ bool Init(const InitParams& params)
         p.crash_log = p.shell_dir + "/anomaly-crash.log";
         p.crash_log_previous = p.shell_dir + "/anomaly-crash.prev.log";
         p.fsgame_ltx = p.app_support + "/fsgame.ltx";
+        p.overlay_source = ResolveOverlaySource(params);
+        p.overlay_archive_dir = p.caches + "/overlay";
 
         bool ok = true;
         for (const std::string& dir : {p.app_support, p.appdata, p.logs, p.saves, p.caches, p.shader_cache, p.shell_dir})
@@ -286,6 +311,13 @@ bool Init(const InitParams& params)
             device.has_memory_budget ? FormatBytes(device.available_memory).c_str() : "n/a",
             FormatBytes(device.storage_free_raw).c_str(), FormatBytes(device.storage_total).c_str());
 
+        if (!p.overlay_source.empty())
+        {
+            if (!Internal::BuildOverlayArchive(p.overlay_source, p.overlay_archive_dir))
+                Log("overlay: nothing packed from %s", p.overlay_source.c_str());
+        }
+        else
+            Log("overlay: none (no Resources/overlay in the bundle, no --overlay): the Monolith scripts and shaders are missing");
         WriteFsGameLtx();
         Internal::StartObservers();
         Internal::RecordEvent("shell", std::string("started, data ") + (FileExists(p.data_root + "/db") ? "folder present" : "folder missing"));

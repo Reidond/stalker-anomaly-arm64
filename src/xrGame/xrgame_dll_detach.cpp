@@ -71,10 +71,18 @@ extern void destroy_lua_wpn_params();
 void clean_game_globals()
 {
 	destroy_lua_wpn_params();
+#if defined(XR_PLATFORM_APPLE)
+	// The factory holds luabind::object references to script classes, released by their destructors: they have to run
+	// while the Lua state (owned by the ai space) is still alive. On Windows the factory's items were deleted through a
+	// base class without a virtual destructor, so those references were never released.
+	xr_delete(g_object_factory);
+	xr_delete(g_ai_space);
+#else
 	// destroy ai space
 	xr_delete(g_ai_space);
 	// destroy object factory
 	xr_delete(g_object_factory);
+#endif
 	// destroy monster squad global var
 	xr_delete(g_monster_squad);
 

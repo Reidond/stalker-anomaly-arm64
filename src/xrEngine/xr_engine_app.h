@@ -22,6 +22,8 @@
 
 #include <string>
 
+union SDL_Event;
+
 #ifndef ENGINE_API
 # define ENGINE_API
 #endif
@@ -59,6 +61,14 @@ ENGINE_API bool Frame();
 ENGINE_API void Shutdown();
 
 ENGINE_API bool IsRunning();
+
+// An event the app received in SDL_AppEvent. SDL3's callback loop takes every event out of the queue before the engine's
+// frame (Frame() pumps only what is left, which is nothing outside the long loads), so the app has to hand them over.
+ENGINE_API void HandleEvent(const SDL_Event& event);
+
+// Runs a console command as if typed into the console (`start server(all/single/alife/new) client(localhost)`, `screenshot`,
+// `quit`, ...). Main thread, after Init() returned Ok.
+ENGINE_API void ExecuteConsole(const char* command);
 
 // The engine window (an SDL_Window*, also Device.m_hWnd) and its CAMetalLayer, for tools that draw before the renderer
 // exists. MetalLayer() registers the layer with the D3D11 shim under the window handle, as the renderer expects.

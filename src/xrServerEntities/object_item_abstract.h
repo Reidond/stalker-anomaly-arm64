@@ -21,6 +21,11 @@ protected:
 
 public:
 	IC CObjectItemAbstract(const CLASS_ID& clsid, LPCSTR script_clsid);
+#if defined(XR_PLATFORM_APPLE)
+	// CObjectFactory deletes these through the base class (xr_delete): clang compiles the destructor call of an abstract
+	// class without a virtual destructor to a trap. The derived classes add no members to destroy.
+	virtual ~CObjectItemAbstract() {}
+#endif
 	IC const CLASS_ID& clsid() const;
 	IC shared_str script_clsid() const;
 #ifndef NO_XR_GAME

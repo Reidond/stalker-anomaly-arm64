@@ -220,8 +220,8 @@ private:
 	CMatrix*						matrices	[8	];	// matrices are supported only for FFP
 #endif
 
-	void Invalidate();
 public:
+	void Invalidate(); // forget every cached binding (dxImGuiRender calls it on Apple, after a draw that leaves the state changed)
 	struct _stats
 	{
 		u32 polys;

@@ -233,9 +233,9 @@ HRESULT D3DX11CreateTextureFromMemory(ID3D11Device* pDevice, LPCVOID pSrcData, S
         li = *pLoad;
     auto def = [](UINT v, UINT fallback) { return v == D3DX11_DEFAULT ? fallback : v; };
 
-    const UINT first = def(li.FirstMipLevel, 0);
-    if (first >= d.info.MipLevels)
-        return finish(E_INVALIDARG);
+    // D3DX clamps FirstMipLevel to the smallest level the file has: the engine asks to skip levels (texture LOD) of
+    // textures that carry a single one.
+    const UINT first = std::min(def(li.FirstMipLevel, 0), d.info.MipLevels - 1);
     const UINT srcW = std::max<UINT>(d.info.Width >> first, 1);
     const UINT srcH = std::max<UINT>(d.info.Height >> first, 1);
     const UINT srcD = std::max<UINT>(d.info.Depth >> first, 1);
@@ -308,6 +308,9 @@ HRESULT D3DX11CreateTextureFromMemory(ID3D11Device* pDevice, LPCVOID pSrcData, S
         hr = pDevice->CreateTexture2D(&td, init.data(), &t);
         *ppTexture = t;
     }
+    if (FAILED(hr))
+        Log("D3DX11CreateTextureFromMemory: texture creation failed 0x%08x (%ux%u, %u mip(s), format %u)", unsigned(hr), w, h,
+            mips, unsigned(fmt));
     return finish(hr);
 }
 

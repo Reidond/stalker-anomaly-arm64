@@ -78,10 +78,10 @@ namespace xr_imgui
 
         string_path fName;
         FS.update_path(fName, "$app_data_root$", io.IniFilename);
-        io.IniFilename = xr_strdup(fName);
+        io.IniFilename = xr_strdup(xr_native_path(fName)); // opened with fopen: needs the native path
 
         FS.update_path(fName, "$logs$", io.LogFilename);
-        io.LogFilename = xr_strdup(fName);
+        io.LogFilename = xr_strdup(xr_native_path(fName));
 
         string_path configPath;
         FS.update_path(configPath, "$game_textures$", "fonts\\$default.ltx");

@@ -18,6 +18,11 @@ namespace PAPI
 		Flags32 m_Flags;
 		PActionEnum type; // Type field
 		ParticleAction() { m_Flags.zero(); }
+#if defined(XR_PLATFORM_APPLE)
+		// ParticleActions::clear() deletes through the base class; clang traps on the destructor call of an abstract
+		// class without a virtual destructor (see xr_special_free).
+		virtual ~ParticleAction() {}
+#endif
 
 		virtual void Execute(ParticleEffect* pe, const float dt, float& m_max) = 0;
 		virtual void Transform(const Fmatrix& m) = 0;

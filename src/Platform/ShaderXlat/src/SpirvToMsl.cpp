@@ -209,6 +209,9 @@ bool crossCompile(const std::vector<uint32_t>& spirv, const Options& opt, Result
         mo.texture_buffer_native = true;
         mo.pad_fragment_output_components = true;
         mo.check_discarded_frag_stores = true; // HLSL `discard` ends the invocation; Metal's does not
+        // D3D11 vertex shaders may still write PSIZE; Metal only accepts [[point_size]] when the pipeline draws points
+        // (pipeline creation fails for triangle topology), and D3D11 has no point sprites without a geometry shader.
+        mo.enable_point_size_builtin = false;
         msl.set_msl_options(mo);
 
         result.msl = msl.compile();

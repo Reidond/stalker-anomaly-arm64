@@ -45,7 +45,13 @@
 
 // DirectX
 #include <stdio.h>
+#if defined(__APPLE__)
+#include "Common/Platform.h" // the Windows base types <d3d11.h> of the Metal shim expects
+#endif
 #include <d3d11.h>
+#if defined(__APPLE__)
+typedef ID3D10Blob ID3DBlob;
+#endif
 #include <d3dcompiler.h>
 #ifdef _MSC_VER
 #pragma comment(lib, "d3dcompiler") // Automatically link with d3dcompiler.lib as we are using D3DCompile() below.
@@ -207,6 +213,7 @@ void ImGui_ImplDX11_RenderDrawData(ImDrawData* draw_data)
     device->Unmap(bd->pVB, 0);
     device->Unmap(bd->pIB, 0);
 
+#if !defined(__APPLE__) // the Metal shim has no Get* state queries; dxImGuiRender::Render invalidates the renderer's state cache instead
     // Backup DX state that will be modified to restore it afterwards (unfortunately this is very ugly looking and verbose. Close your eyes!)
     struct BACKUP_DX11_STATE
     {
@@ -251,6 +258,8 @@ void ImGui_ImplDX11_RenderDrawData(ImDrawData* draw_data)
     device->IAGetIndexBuffer(&old.IndexBuffer, &old.IndexBufferFormat, &old.IndexBufferOffset);
     device->IAGetVertexBuffers(0, 1, &old.VertexBuffer, &old.VertexBufferStride, &old.VertexBufferOffset);
     device->IAGetInputLayout(&old.InputLayout);
+
+#endif
 
     // Setup desired DX state
     ImGui_ImplDX11_SetupRenderState(draw_data, device);
@@ -307,6 +316,7 @@ void ImGui_ImplDX11_RenderDrawData(ImDrawData* draw_data)
     }
     platform_io.Renderer_RenderState = nullptr;
 
+#if !defined(__APPLE__)
     // Restore modified DX state
     device->RSSetScissorRects(old.ScissorRectsCount, old.ScissorRects);
     device->RSSetViewports(old.ViewportsCount, old.Viewports);
@@ -325,6 +335,7 @@ void ImGui_ImplDX11_RenderDrawData(ImDrawData* draw_data)
     device->IASetIndexBuffer(old.IndexBuffer, old.IndexBufferFormat, old.IndexBufferOffset); if (old.IndexBuffer) old.IndexBuffer->Release();
     device->IASetVertexBuffers(0, 1, &old.VertexBuffer, &old.VertexBufferStride, &old.VertexBufferOffset); if (old.VertexBuffer) old.VertexBuffer->Release();
     device->IASetInputLayout(old.InputLayout); if (old.InputLayout) old.InputLayout->Release();
+#endif
 }
 
 static void ImGui_ImplDX11_CreateFontsTexture()
@@ -587,6 +598,12 @@ bool    ImGui_ImplDX11_Init(ID3D11Device* device, ID3D11DeviceContext* device_co
     io.BackendFlags |= ImGuiBackendFlags_RendererHasVtxOffset;  // We can honor the ImDrawCmd::VtxOffset field, allowing for large meshes.
     io.BackendFlags |= ImGuiBackendFlags_RendererHasViewports;  // We can create multi-viewports on the Renderer side (optional)
 
+#if defined(__APPLE__)
+    // No OS-window viewports on Apple, so the DXGI factory is not needed.
+    bd->pd3dDevice = device;
+    bd->pd3dDeviceContext = device_context;
+    bd->pFactory = nullptr;
+#else
     // Get factory from device
     IDXGIDevice* pDXGIDevice = nullptr;
     IDXGIAdapter* pDXGIAdapter = nullptr;
@@ -602,6 +619,7 @@ bool    ImGui_ImplDX11_Init(ID3D11Device* device, ID3D11DeviceContext* device_co
             }
     if (pDXGIDevice) pDXGIDevice->Release();
     if (pDXGIAdapter) pDXGIAdapter->Release();
+#endif
     bd->pd3dDevice->AddRef();
     bd->pd3dDeviceContext->AddRef();
 
@@ -642,6 +660,7 @@ void ImGui_ImplDX11_NewFrame()
 // If you are new to dear imgui or creating a new binding for dear imgui, it is recommended that you completely ignore this section first..
 //--------------------------------------------------------------------------------------------------------
 
+#if !defined(__APPLE__)
 // Helper structure we store in the void* RendererUserData field of each ImGuiViewport to easily retrieve our backend data.
 struct ImGui_ImplDX11_ViewportData
 {
@@ -758,6 +777,10 @@ static void ImGui_ImplDX11_ShutdownMultiViewportSupport()
 {
     ImGui::DestroyPlatformWindows();
 }
+#else
+static void ImGui_ImplDX11_InitMultiViewportSupport() {}
+static void ImGui_ImplDX11_ShutdownMultiViewportSupport() {}
+#endif
 
 //-----------------------------------------------------------------------------
 

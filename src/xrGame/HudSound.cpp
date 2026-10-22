@@ -250,14 +250,8 @@ sndShot is played, it will play all the sound items with the same alias.
 //----------------------------------------------------------
 HUD_SOUND_COLLECTION_LAYERED::~HUD_SOUND_COLLECTION_LAYERED()
 {
-	xr_vector<HUD_SOUND_COLLECTION>::iterator it = m_sound_items.begin();
-	xr_vector<HUD_SOUND_COLLECTION>::iterator it_e = m_sound_items.end();
-
-	for (; it != it_e; ++it)
-	{
-		it->~HUD_SOUND_COLLECTION();
-	}
-
+	// clear() destroys every element. The loop that called ~HUD_SOUND_COLLECTION() on each of them first destroyed them
+	// twice: MSVC's vector destructor nulls its pointers, libc++'s leaves them dangling and the second one frees them again.
 	m_sound_items.clear();
 }
 

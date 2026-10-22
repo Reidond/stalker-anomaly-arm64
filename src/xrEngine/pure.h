@@ -6,7 +6,8 @@
 #define REG_PRIORITY_NORMAL 0x22222222ul
 #define REG_PRIORITY_HIGH 0x33333333ul
 #define REG_PRIORITY_CAPTURE 0x7ffffffful
-#define REG_PRIORITY_INVALID 0xfffffffful
+// compared with an `int Prio`: `ul` is 64 bits wide on LP64, where -1 would then never equal it and removed entries kept running
+#define REG_PRIORITY_INVALID 0xffffffffu
 
 typedef void __fastcall RP_FUNC(void* obj);
 #define DECLARE_MESSAGE_CL(name,calling) extern ENGINE_API RP_FUNC rp_##name; class ENGINE_API pure##name { public: virtual void calling On##name(void)=0; }

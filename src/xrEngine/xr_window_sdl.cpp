@@ -360,17 +360,20 @@ void RemoveEventHandler(EventHandler handler, void* user)
 	g_state.handlers.erase(it, g_state.handlers.end());
 }
 
+void DispatchEvent(const SDL_Event& event)
+{
+	// a handler may add or remove handlers; walk a copy
+	const std::vector<HandlerEntry> handlers = g_state.handlers;
+	for (const HandlerEntry& e : handlers)
+		e.handler(event, e.user);
+	Device.on_sdl_event(event);
+}
+
 void PumpEvents()
 {
 	SDL_Event event;
 	while (SDL_PollEvent(&event))
-	{
-		// a handler may add or remove handlers; walk a copy
-		const std::vector<HandlerEntry> handlers = g_state.handlers;
-		for (const HandlerEntry& e : handlers)
-			e.handler(event, e.user);
-		Device.on_sdl_event(event);
-	}
+		DispatchEvent(event);
 }
 
 bool QuitRequested() { return g_state.quit; }
