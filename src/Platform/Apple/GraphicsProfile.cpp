@@ -16,9 +16,10 @@ namespace
 {
 // ---- tables ---------------------------------------------------------------------------------------------------------------------
 
-// When an entry applies. The MetalFX session adds `r__render_scale` (the 3D scene renders at a fraction of the output size, the
-// UI at native) and `r__upscaler`. Until the renderer has them the render size is the back buffer size (`vid_mode`), as on the
-// first iPad preset; once it has them the back buffer is the display's native size and the scale does the saving.
+// When an entry applies. The MetalFX session adds `r__render_scale` (float 0.5 to 1.0: the 3D scene renders at a fraction of the output
+// size, the UI at native) and `r__upscaler` (`metalfx` or `bilinear`). Until the renderer has them the render size is the back buffer
+// size (`vid_mode`), as on the first iPad preset; once it has them the back buffer is the display's native size and the scale does the
+// saving. The scale cannot go under 0.5, so a render size under half the panel needs the cheaper settings of Performance mode instead.
 enum class When : uint8_t
 {
     Always,
@@ -140,24 +141,24 @@ const std::vector<ProfileDef> kProfiles = {
         // which was 49 to 55 fps at 1366x1024 (GPU 15.2 to 16.2 ms, about 10 ms per Mpixel), has 15 % of a frame to spare
         {{"r2_sun_quality", "st_opt_low"}, {"r2_ls_squality", "0.5"}, {"r2_ssao", "st_opt_low"}, {"r__detail_density", "0.4"},
          {"r__detail_radius", "35"}, {"rs_vis_distance", "0.8"}, {"vid_mode", "1280x960", When::WithoutUpscaler},
-         {"r__render_scale", "0.47", When::WithUpscaler}, {"r__upscaler", "metalfx", When::WithUpscaler}},
+         {"r__render_scale", "0.5", When::WithUpscaler}, {"r__upscaler", "metalfx", When::WithUpscaler}},
         // Performance: a smaller render size (1152x864, 1.0 Mpixel) and no AO, for a frame that never drops under 60 when the iPad is warm
         {{"r2_sun_quality", "st_opt_low"}, {"r2_ls_squality", "0.5"}, {"r2_ssao", "st_opt_off"}, {"r__detail_density", "0.4"},
          {"r__detail_radius", "30"}, {"rs_vis_distance", "0.75"}, {"r2_sun_far", "80"}, {"r__wallmark_ttl", "20"}, {"ai_use_torch_dynamic_lights", "off"},
-         {"vid_mode", "1152x864", When::WithoutUpscaler}, {"r__render_scale", "0.42", When::WithUpscaler}, {"r__upscaler", "metalfx", When::WithUpscaler}},
+         {"vid_mode", "1152x864", When::WithoutUpscaler}, {"r__render_scale", "0.5", When::WithUpscaler}, {"r__upscaler", "metalfx", When::WithUpscaler}},
         60, 60},
     {"ipad-16gb", "iPad, 12 and 16 GB (extrapolated)", "ipad-8gb", false,
         "Not measured. The 8 GB profile with the memory headroom spent on textures, and a GPU a third faster (M4 Pro iPads) spent on render size.", "-smap2048",
         {{"texture_lod", "0"}},
-        {{"vid_mode", "1366x1024", When::WithoutUpscaler}, {"r__render_scale", "0.5", When::WithUpscaler}},
-        {{"vid_mode", "1280x960", When::WithoutUpscaler}, {"r__render_scale", "0.47", When::WithUpscaler}},
+        {{"vid_mode", "1366x1024", When::WithoutUpscaler}, {"r__render_scale", "0.55", When::WithUpscaler}},
+        {{"vid_mode", "1280x960", When::WithoutUpscaler}, {"r__render_scale", "0.5", When::WithUpscaler}},
         60, 60},
     {"ipad-6gb", "iPad, 6 GB or less, or an A-series chip (extrapolated)", "ipad-8gb", false,
         "Not measured. One step down from the 8 GB profile in textures, render size and distances.", "-smap1024",
         {{"texture_lod", "2"}},
-        {{"vid_mode", "1152x864", When::WithoutUpscaler}, {"r__render_scale", "0.42", When::WithUpscaler}, {"r__detail_radius", "25"},
+        {{"vid_mode", "1152x864", When::WithoutUpscaler}, {"r__render_scale", "0.5", When::WithUpscaler}, {"r__detail_radius", "25"},
          {"rs_vis_distance", "0.7"}},
-        {{"vid_mode", "1024x768", When::WithoutUpscaler}, {"r__render_scale", "0.375", When::WithUpscaler}, {"r2_ssao", "st_opt_off"},
+        {{"vid_mode", "1024x768", When::WithoutUpscaler}, {"r__render_scale", "0.5", When::WithUpscaler}, {"r2_ssao", "st_opt_off"},
          {"r__detail_radius", "20"}, {"rs_vis_distance", "0.65"}},
         60, 60},
 
@@ -177,7 +178,7 @@ const std::vector<ProfileDef> kProfiles = {
         {{"r2_sun_quality", "st_opt_low"}, {"r2_ls_squality", "0.7"}, {"r3_dynamic_wet_surfaces", "off"}, {"r2_ssao", "st_opt_low"},
          {"r__detail_radius", "75"}, {"rs_vis_distance", "0.9"}, {"r__render_scale", "0.6", When::WithUpscaler}},
         {{"r2_sun_quality", "st_opt_low"}, {"r2_ls_squality", "0.5"}, {"r3_dynamic_wet_surfaces", "off"}, {"r2_ssao", "st_opt_off"},
-         {"r__detail_radius", "50"}, {"rs_vis_distance", "0.8"}, {"r__render_scale", "0.45", When::WithUpscaler}},
+         {"r__detail_radius", "50"}, {"rs_vis_distance", "0.8"}, {"r__render_scale", "0.5", When::WithUpscaler}},
         60, 60},
     {"mac-base-8gb", "Mac, base class with 8 GB (extrapolated)", "mac-base", false,
         "Not measured. As the base class with one texture level less.", "-smap1536", {{"texture_lod", "2"}}, {}, {}, 60, 60},

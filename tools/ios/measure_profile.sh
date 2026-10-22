@@ -35,8 +35,15 @@ for d in json.load(sys.stdin)["result"]["devices"]:
 bundle=com.andriishafar.anomaly
 copy_to() { xcrun devicectl device copy to --device "$dev" --domain-type appDataContainer --domain-identifier $bundle --source "$1" --destination "$2" > /dev/null; }
 copy_from() { xcrun devicectl device copy from --device "$dev" --domain-type appDataContainer --domain-identifier $bundle --source "$1" --destination "$2" > /dev/null 2>&1 || true; }
+running() { xcrun devicectl device info processes --device "$dev" 2>/dev/null | grep -c "anomaly.app" || true; }
 run() { # name script [args]: a launch, its console output and its engine log
     local name=$1 script=$2; shift 2
+    # a launch kills a running app (--terminate-existing): never start while one runs that this script did not start
+    local waited=0
+    while [[ $(running) != 0 ]]; do
+        (( waited >= 300 )) && { echo "an anomaly run that this script did not start is on the iPad: stopping" >&2; exit 4; }
+        sleep 10; waited=$((waited + 10))
+    done
     echo "== $name"
     $ipad script "$script" "$@" > "$out/$name.out" 2>&1 || true
     mkdir -p "$out/$name.logs"; copy_from "$appdata/logs" "$out/$name.logs"

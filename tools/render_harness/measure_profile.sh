@@ -42,6 +42,7 @@ for size in $sizes; do
         sampler_out=$out/$name.contention
         : > "$sampler_out"
         (
+            set +e +o pipefail # pgrep exits 1 when nothing matches (before the launch, after the exit): that is a count of 0, not an error
             start=$(date +%s)
             while true; do
                 mine=$(pgrep -f "$script" | wc -l | tr -d ' ')
@@ -57,6 +58,7 @@ for size in $sizes; do
         HARNESS_ARGS="${args[*]:-}" "$root/tools/render_harness/run_scene.sh" -t "$tag" -s "$size" -l 1500 "$script" | tail -2
         kill $sampler 2> /dev/null || true
         wait $sampler 2> /dev/null || true
+        [ -s "$sampler_out" ] || { echo "   the contention sampler recorded nothing: not counting this run as clean"; exit 1; }
         shell_log=$out/$name/shell.log
         python3 -I "$root/tools/profile_measure.py" summarize --contention "$sampler_out" "$shell_log" > "$out/$name.md"
         # the run must have reached its last scene (the engine sometimes crashes after a teleport: the physics commander, see SETTINGS.md)
