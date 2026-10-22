@@ -483,13 +483,13 @@ SDL_AppResult SDL_AppIterate(void* appstate)
                 if (frames > 0)
                     AppleShell::Log(
                         "anomaly: metal: gpu %.2f ms/frame, cpu %.2f ms/frame (blocked %.2f), %.0f draws, %.1f passes/frame; "
-                        "textures %.0f MB, buffers %.0f MB, allocated %.0f MB",
+                        "textures %.0f MB (render targets %.0f MB), buffers %.0f MB, allocated %.0f MB",
                         (st.gpuSeconds - app->last_stats.gpuSeconds) * 1e3 / frames,
                         (wall - (st.blockedSeconds - app->last_stats.blockedSeconds)) * 1e3 / frames,
                         (st.blockedSeconds - app->last_stats.blockedSeconds) * 1e3 / frames,
                         double(st.draws - app->last_stats.draws) / frames,
                         double(st.renderPasses - app->last_stats.renderPasses) / frames, st.textureBytes / 1048576.0,
-                        st.bufferBytes / 1048576.0, st.deviceAllocatedBytes / 1048576.0);
+                        st.renderTargetBytes / 1048576.0, st.bufferBytes / 1048576.0, st.deviceAllocatedBytes / 1048576.0);
                 app->last_stats = st;
             }
             app->fps_window_ns = now_ns;
