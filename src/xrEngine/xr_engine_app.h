@@ -60,6 +60,10 @@ ENGINE_API void Shutdown();
 
 ENGINE_API bool IsRunning();
 
+// Runs a console command as if typed into the console (`start server(all/single/alife/new) client(localhost)`, `screenshot`,
+// `quit`, ...). Main thread, after Init() returned Ok.
+ENGINE_API void ExecuteConsole(const char* command);
+
 // The engine window (an SDL_Window*, also Device.m_hWnd) and its CAMetalLayer, for tools that draw before the renderer
 // exists. MetalLayer() registers the layer with the D3D11 shim under the window handle, as the renderer expects.
 ENGINE_API void* WindowHandle();
