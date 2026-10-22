@@ -468,6 +468,11 @@ void CActor::IR_OnMouseMove(int dx, int dy)
 
 	CCameraBase* C = cameras[cam_active];
     float scale = (C->f_fov / g_fov) * (psMouseSens * sens_multiple) * psMouseSensScale / 50.f / LookFactor;
+#ifdef XR_PLATFORM_APPLE
+	// The controller layer converts its look (degrees per second) to counts with the live figure, FOV and aim factor included.
+	if (pInput)
+		pInput->SetLookRadiansPerCount(scale);
+#endif
 	if (dx)
 	{
 		float d = float(dx) * scale;

@@ -892,6 +892,9 @@ void CWeaponMagazined::PlaySoundShot()
 
 void CWeaponMagazined::OnShot()
 {
+#ifdef XR_PLATFORM_APPLE
+	xr_pad_on_shot(this);
+#endif
 	// Shot Sound
 	PlaySoundShot();
 
@@ -929,6 +932,9 @@ void CWeaponMagazined::OnShot()
 
 void CWeaponMagazined::OnEmptyClick()
 {
+#ifdef XR_PLATFORM_APPLE
+	xr_pad_on_dry_fire(this);
+#endif
 	if (ParentIsActor())
 	{
 		if (bMisfire)

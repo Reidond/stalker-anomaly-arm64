@@ -1,5 +1,6 @@
 #include "pch_script.h"
 #include "gamepersistent.h"
+#include "xr_level_controller.h"
 #include "../xrEngine/fmesh.h"
 #include "../xrEngine/xr_ioconsole.h"
 #include "../xrEngine/gamemtllib.h"
@@ -54,6 +55,9 @@
 
 CGamePersistent::CGamePersistent(void)
 {
+#ifdef XR_PLATFORM_APPLE
+	xr_pad_install_hooks();
+#endif
 	m_bPickableDOF = false;
 	m_game_params.m_e_game_type = eGameIDNoGame;
 	ambient_effect_next_time = 0;
