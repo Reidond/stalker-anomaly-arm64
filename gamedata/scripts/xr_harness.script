@@ -86,6 +86,26 @@ function ray()
 	log("ray target_dist=%.2f", level.get_target_dist())
 end
 
+-- static-geometry ray queries around the player, like the rain drops do: from above straight down and tilted, and from the
+-- player straight up. A drop whose query misses the roof falls through it.
+function rays()
+	local p = db.actor:position()
+	local function pick(from, dir, range)
+		local r = ray_pick(from, dir, range, rq_target.rqtStatic, nil)
+		if r:query() then return r:get_distance() end
+		return -1
+	end
+	local down = vector():set(0, -1, 0)
+	local tilt = vector():set(0.17, -0.985, 0.0)
+	local tilt2 = vector():set(-0.12, -0.985, 0.12)
+	local up = vector():set(0, 1, 0)
+	log("rays player y=%.2f up=%.2f", p.y, pick(vector():set(p.x, p.y + 1.5, p.z), up, 60))
+	for _, h in ipairs({6, 20, 40}) do
+		local from = vector():set(p.x, p.y + h, p.z)
+		log("rays from +%d: down=%.2f tilt=%.2f tilt2=%.2f", h, pick(from, down, 80), pick(from, tilt, 80), pick(from, tilt2, 80))
+	end
+end
+
 -- sets the clock and the weather in one go: time first, then the weather (changing the time makes the weather manager pick a new
 -- weather), and keeps the manager from choosing another one while a scene is shot
 function env(hh, mm, name)
@@ -120,4 +140,24 @@ function safe()
 	end
 	keep_safe()
 	log("safe")
+end
+
+-- opens the PDA on a page ("eptMap", "eptTasks", "eptNPC", ...) without the item's raise animation (the key P plays that first)
+function pda(tab)
+	local m = ActorMenu.get_pda_menu()
+	m:ShowDialog(true)
+	m:SetActiveSubdialog(tab or "eptTasks")
+	log("pda %s", tab or "eptTasks")
+end
+
+-- the player's flashlight on (the torch key is handled by Lua scripts that need engine exports this port lacks)
+function torch(on)
+	local t = db.actor:object("device_torch")
+	if not t then
+		alife_create_item("device_torch", db.actor)
+		log("torch created, enable it with another call")
+		return
+	end
+	t:enable_torch(on ~= false)
+	log("torch %s", tostring(t:torch_enabled()))
 end

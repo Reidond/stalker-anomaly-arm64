@@ -1,0 +1,7 @@
+# 03b with the dynamic wet-surface layer switched off: tells the rain drops and the wet-surface layer apart.
+1 console r3_dynamic_wet_surfaces off
+2 console run_string xr_harness.env(9,0,"w_rain3")
+28 console run_string xr_harness.ray()
+29 console run_string xr_harness.status()
+30 console screenshot 03c_interior_rain_nowet
+32 quit

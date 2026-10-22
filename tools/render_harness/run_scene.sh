@@ -9,6 +9,8 @@
 # the user.ltx of the run (no user.ltx at all otherwise: engine defaults). Every run has its own state root
 # (ANOMALY_STATE_ROOT), so it neither reads nor changes the player's settings and saves. The app runs unattended
 # (offscreen, background); see docs/ios-port/INTEGRATION.md.
+#
+# Environment: HARNESS_COLD_SHADERS=1 (empty shader cache), HARNESS_ENV="VAR=value ..." (passed to the app).
 set -euo pipefail
 
 root=$(cd "$(dirname "$0")/../.." && pwd)
@@ -50,7 +52,9 @@ for scene in "${scenes[@]}"; do
     state=$run/state
     appdata=$state/Application\ Support/Anomaly/appdata
     mkdir -p "$appdata/savedgames" "$state/Caches/Anomaly" "$state/Logs/Anomaly"
-    ln -sfn "$HOME/Library/Caches/Anomaly/shaders" "$state/Caches/Anomaly/shaders"
+    # the shader cache is shared with the player's by default (translating the whole shader set takes minutes);
+    # HARNESS_COLD_SHADERS=1 runs with an empty one
+    [ "${HARNESS_COLD_SHADERS:-0}" = 1 ] || ln -sfn "$HOME/Library/Caches/Anomaly/shaders" "$state/Caches/Anomaly/shaders"
     if [ $scene != _newgame ]; then
         ls "$saves"/h_cordon.* >/dev/null 2>&1 || { echo "no base save: run $0 --newgame first" >&2; exit 1; }
         cp "$saves"/h_cordon.* "$appdata/savedgames/"
@@ -70,7 +74,9 @@ for scene in "${scenes[@]}"; do
     [ -n "$size" ] && args+=(--size "$size")
     echo "== $scene (tag $tag${preset:+, preset $preset})"
     start=$(date +%s)
-    open -g -j -n --env ANOMALY_STATE_ROOT="$state" --stdout "$run/stdout.txt" --stderr "$run/stderr.txt" "$app" --args "${args[@]}" || true
+    envargs=()
+    for kv in ${HARNESS_ENV:-}; do envargs+=(--env "$kv"); done # extra environment of the app, e.g. "MallocScribble=1"
+    open -g -j -n --env ANOMALY_STATE_ROOT="$state" ${envargs[@]+"${envargs[@]}"} --stdout "$run/stdout.txt" --stderr "$run/stderr.txt" "$app" --args "${args[@]}" || true
     # wait for the run to end; the engine sometimes hangs in its crash handler on the way out, so after the script asked to quit
     # it gets 40 s, and the run as a whole `limit` + 90 s, before it is killed
     shell_log=$state/Logs/Anomaly/anomaly-shell.log

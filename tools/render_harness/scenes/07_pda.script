@@ -1,6 +1,8 @@
-# The PDA (tasks page).
+# The PDA, tasks page. The 3D PDA (raise animation, screen drawn into the hand) is switched off: the plain dialog is the one to look at.
 1 console run_string xr_harness.env(12,0,"w_clear1")
+2 console g_3d_pda off
 26 key P
+28 console run_string xr_harness.pda("eptTasks")
 30 console screenshot 07_pda
 32 key Escape
 34 quit

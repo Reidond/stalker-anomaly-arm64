@@ -1,0 +1,4 @@
+# Static-geometry ray queries in the hut (no screenshot): do rain-drop style rays hit the roof?
+2 console run_string xr_harness.safe()
+4 console run_string xr_harness.rays()
+6 quit
