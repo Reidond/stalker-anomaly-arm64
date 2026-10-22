@@ -24,6 +24,9 @@ else()
     set(anomaly_resources_dir "$<TARGET_BUNDLE_CONTENT_DIR:anomaly>/Resources")
 endif()
 file(GLOB_RECURSE anomaly_overlay_files CONFIGURE_DEPENDS "${PROJECT_SOURCE_DIR}/gamedata/*")
+# editing a file in gamedata/ relinks the app (LINK_DEPENDS), which reruns the copy below; CONFIGURE_DEPENDS alone only notices
+# a changed list of files
+set_property(TARGET anomaly APPEND PROPERTY LINK_DEPENDS ${anomaly_overlay_files})
 add_custom_command(TARGET anomaly POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E rm -rf "${anomaly_resources_dir}/overlay"
     COMMAND ${CMAKE_COMMAND} -E copy_directory "${PROJECT_SOURCE_DIR}/gamedata" "${anomaly_resources_dir}/overlay"
