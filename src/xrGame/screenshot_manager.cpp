@@ -9,7 +9,9 @@
 	#define CXIMAGE_AS_SHARED_LIBRARY
 #endif
 
+#ifndef XR_PLATFORM_APPLE
 #include <ddraw.h>
+#endif
 #include "ximage.h"
 #include "xmemfile.h"
 #include "profiler.h"
@@ -213,6 +215,9 @@ void screenshot_manager::shedule_Update(u32 dt)
 					}
 				}
 		#endif //#ifdef DEBUG*/
+#ifdef XR_PLATFORM_APPLE
+		process_screenshot(false); // no process affinity masks on Apple silicon, never a single core
+#else
 		DWORD_PTR process_affinity_mask;
 		DWORD_PTR tmp_dword;
 		GetProcessAffinityMask(
@@ -222,6 +227,7 @@ void screenshot_manager::shedule_Update(u32 dt)
 		process_screenshot(
 			btwCount1(static_cast<u32>(process_affinity_mask)) == 1
 		);
+#endif
 	}
 	if (is_drawing_downloads())
 	{

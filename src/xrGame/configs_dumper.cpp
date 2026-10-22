@@ -215,6 +215,9 @@ namespace mp_anticheat
 			return;
 		}
 
+#ifdef XR_PLATFORM_APPLE
+		bool single_core = false; // Apple silicon: no process affinity masks, and never a single core
+#else
 		DWORD_PTR process_affinity_mask;
 		DWORD_PTR tmp_dword;
 		GetProcessAffinityMask(
@@ -222,6 +225,7 @@ namespace mp_anticheat
 			&process_affinity_mask,
 			&tmp_dword);
 		bool single_core = (btwCount1(static_cast<u32>(process_affinity_mask)) == 1);
+#endif
 		if (single_core)
 		{
 			m_yield_cb.bind(this, &configs_dumper::yield_cb);
