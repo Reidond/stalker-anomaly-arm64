@@ -140,7 +140,13 @@ void CControlAnimationBase::clear_override_animation()
 void CControlAnimationBase::set_override_animation(EMotionAnim anim, u32 index)
 {
 	if (m_override_animation == anim) return;
+#ifdef XR_PLATFORM_APPLE
+	// eAnimUndefined (u32(-1)) clears the override. MSVC's int enum made m_anim_storage[anim] read the word in front of
+	// the vector's buffer; with an unsigned enum the index is 4 billion elements and the read faults.
+	if (anim != eAnimUndefined && !m_anim_storage[anim]) return;
+#else
 	if (!m_anim_storage[anim]) return;
+#endif
 
 	m_override_animation = anim;
 	m_override_animation_index = index;
