@@ -214,8 +214,16 @@ person: left stick up walks 11 m in 4 s, Create opens the inventory, the touchpa
 magazine. `tools/ios/scripts/pad_test.txt` does it all, makes the `ipad_armed` save (AK-74 in hand with 30 rounds, 120 spare, PDA and outfit in their
 slots, medkits, bandages) and logs `STATE` lines; `ipad_debug.script` has `give`, `give_ammo`, `equip`, `state`, `slots`.
 
-Not done: the radial wheels (hold L1 or R1) have no on-screen drawing (nothing in the engine draws them), so they can only be used blind;
-the Controls screen has no Gamepad column. A game started by script leaves the PDA and the outfit in the backpack (`slots(true)` moves the PDA to its
+The radial wheels (hold L1 or R1) are drawn by the game, not the layer: `xr_pad_render_radial()` in `xr_level_controller.cpp`, called from
+`CUIGameCustom::Render()` before the dialogs, built from `CUIStatic` parts so it uses the engine's own UI scaling and scissor. Eight flat dark tiles on
+a ring over a dimmed world, each with a 1 px edge and a soft shadow; the picked tile is amber, a little larger and drawn last. Weapon, quick-use and
+detector slots show the item's inventory icon (cut from the same atlas as the inventory grid) with its slot number (1 to 6, F1 to F4); an empty slot is a
+dash and its kind; actions without an item (Quick save, Drop, Safe mode, ...) are plain labels. The hub in the middle names the picked tile
+(item name, then what it is) and shows the page dots. Open is a 120 ms ease-out (a fade and a settle from 94 %, never from nothing), the hot tile
+follows the stick with a frame-rate independent lerp, and it closes instantly because the wheel is used often. A label is always on screen, so nothing
+depends on the motion.
+
+Not done: the Controls screen has no Gamepad column. A game started by script leaves the PDA and the outfit in the backpack (`slots(true)` moves the PDA to its
 slot; a normal new game from the menu was not checked), and the 3D PDA only rises from its slot.
 
 ## The UI colour bug

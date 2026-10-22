@@ -66,7 +66,8 @@ slot (the look stick is captured while the wheel is open), D-pad left/right flip
 pages, and releasing the button fires the picked slot. A pick survives for 0.3 s after the stick
 springs back to centre, so "flick and let go" works as well as holding the direction; releasing with
 nothing picked cancels.
-Slots are clockwise from the top.
+Slots are clockwise from the top. On the iPad build the game draws the wheel (`xr_pad_render_radial`,
+IPAD.md): item icons and slot badges on the weapon and quick-use tiles, a hub with the picked name and the page dots.
 
 | Wheel | Page | Slots (clockwise from the top) |
 |---|---|---|

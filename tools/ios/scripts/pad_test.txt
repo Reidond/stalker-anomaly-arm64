@@ -5,9 +5,13 @@
 50 console run_string ipad_debug.tp(54.9, 3.5, 157.1)
 55 console run_string ipad_debug.give("wpn_ak74")
 56 console run_string ipad_debug.give_ammo("ammo_5.45x39_fmj", 120)
-56 console run_string ipad_debug.give("medkit", 2)
-56 console run_string ipad_debug.give("bandage", 3)
+57 console run_string ipad_debug.give("medkit")
+58 console run_string ipad_debug.give("medkit")
 60 console run_string ipad_debug.equip()
+62 console slot_0 medkit
+62 console slot_1 bandage
+62 console slot_2 bread
+62 console slot_3 flask
 63 console run_string ipad_debug.state("armed")
 65 console save ipad_armed
 70 padon
