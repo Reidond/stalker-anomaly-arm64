@@ -1,0 +1,9 @@
+# standalone
+# The loading screen while a save loads: one screenshot per load stage (load_shots), then the finished screen.
+1 console r_screenshot_mode png
+2 console load_shots loadbar
+3 console start server(h_cordon/single/alife/load) client(localhost)
+4 waitlevel 300 l01_escape
+7 console load_shots
+8 console screenshot loadbar_done
+12 quit

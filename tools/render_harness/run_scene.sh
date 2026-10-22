@@ -10,7 +10,8 @@
 # (ANOMALY_STATE_ROOT), so it neither reads nor changes the player's settings and saves. The app runs unattended
 # (offscreen, background); see docs/ios-port/INTEGRATION.md.
 #
-# Environment: HARNESS_COLD_SHADERS=1 (empty shader cache), HARNESS_ENV="VAR=value ..." (passed to the app).
+# Environment: HARNESS_COLD_SHADERS=1 (empty shader cache), HARNESS_ENV="VAR=value ..." (passed to the app),
+# HARNESS_FOOTPRINT=1 (writes footprint.txt: `footprint` of the app at about 40 s; tools/render_harness/perf_report.sh reads it).
 set -euo pipefail
 
 root=$(cd "$(dirname "$0")/../.." && pwd)
@@ -81,9 +82,15 @@ for scene in "${scenes[@]}"; do
     # it gets 40 s, and the run as a whole `limit` + 90 s, before it is killed
     shell_log=$state/Logs/Anomaly/anomaly-shell.log
     done_at=0
+    fp_done=0
     while pgrep -f "$script" > /dev/null; do
         sleep 1
         now=$(date +%s)
+        # HARNESS_FOOTPRINT=1: the process's physical footprint, once the level has run for a while
+        if [ "${HARNESS_FOOTPRINT:-0}" = 1 ] && [ $fp_done = 0 ] && [ $(( now - start )) -gt 40 ]; then
+            fp_done=1
+            footprint "$(pgrep -f "$script" | head -1)" > "$run/footprint.txt" 2>&1 || true
+        fi
         if [ $done_at = 0 ] && grep -aq "script asked to quit\|Anomaly shell shutting down\|--exit-after .* reached" "$shell_log" 2>/dev/null; then done_at=$now; fi
         if [ $done_at != 0 ] && [ $(( now - done_at )) -gt 40 ]; then echo "   ! process did not exit after shutdown, killing" ; pkill -9 -f "$script" || true; fi
         if [ $(( now - start )) -gt $(( limit + 90 )) ]; then echo "   ! run took too long, killing"; pkill -9 -f "$script" || true; fi
