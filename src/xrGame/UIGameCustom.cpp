@@ -19,6 +19,7 @@
 #include "xrEngine/x_ray.h"
 
 #include "ui\UICellItem.h" //Alundaio
+#include "xr_level_controller.h"
 //#include "script_game_object.h" //Alundaio
 
 EGameIDs ParseStringToGameType(const char* str);
@@ -106,6 +107,9 @@ void CUIGameCustom::Render()
 			UIMainIngameWnd->Draw();
 	}
 	m_pMessagesWnd->Draw();
+#ifdef XR_PLATFORM_APPLE
+	xr_pad_render_radial();
+#endif
 	DoRenderDialogs();
 }
 

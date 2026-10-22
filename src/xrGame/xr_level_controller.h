@@ -185,6 +185,7 @@ void xr_pad_update_actor(CActor* actor); // every frame for the controlled actor
 void xr_pad_on_hit(int hit_type, float power); // CActor::Hit for the controlled actor (ALife::EHitType, health lost)
 void xr_pad_on_shot(CWeapon* weapon);
 void xr_pad_on_dry_fire(CWeapon* weapon);
+void xr_pad_render_radial(); // every HUD frame: draws the open radial wheel (labels around the screen centre), nothing when none is open
 #endif
 
 struct _conCmd
