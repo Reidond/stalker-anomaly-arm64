@@ -146,6 +146,16 @@ std::vector<Interpolant> ParseInterpolants(const std::string& msl, const char* s
 // D3D reads zero for a pixel input the vertex shader never writes; Metal refuses such a pipeline. Returns the pixel
 // shader's source without the given inputs, which become zero-initialised locals.
 std::string PatchFragmentInputs(const std::string& msl, const std::vector<Interpolant>& remove);
+// A pixel input and the vertex output at the same location that differ in width (the pixel shader reads float2 TEXCOORD2, the
+// vertex shader packed FOG next to it into a float3): D3D links by semantic and component, Metal fails the pipeline.
+struct InterpolantPair
+{
+    Interpolant pixel; // as the pixel shader declares it
+    Interpolant vertex; // as the vertex shader writes it
+};
+// Returns the pixel shader's source with each given input declared with the vertex shader's type; the original name is a local
+// of the original type: narrowed by a swizzle, or widened with zeros. Pairs of a different base type are left alone.
+std::string AdaptFragmentInputs(const std::string& msl, const std::vector<InterpolantPair>& pairs);
 
 // Hook for D3DCompile(): called with the HLSL R4 wants compiled; must return a container.
 struct CompileRequest

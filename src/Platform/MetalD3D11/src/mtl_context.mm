@@ -886,34 +886,39 @@ id<MTLFunction> Context::fragmentFunctionFor(VertexShader* vs, PixelShader* ps)
         return it->second;
 
     std::vector<Interpolant> missing;
+    std::vector<InterpolantPair> mismatched;
     for (const Interpolant& in : ps->interpolants)
     {
-        bool written = false;
+        const Interpolant* written = nullptr;
         for (const Interpolant& out : vs->interpolants)
             if (out.location == in.location)
             {
-                written = true;
+                written = &out;
                 break;
             }
         if (!written)
             missing.push_back(in);
+        else if (written->type != in.type)
+            mismatched.push_back({in, *written});
     }
     id<MTLFunction> fn = ps->fn;
-    if (!missing.empty())
+    if (!missing.empty() || !mismatched.empty())
     {
         NSError* err = nil;
-        NSString* src = [NSString stringWithUTF8String:PatchFragmentInputs(ps->msl, missing).c_str()];
+        std::string text = AdaptFragmentInputs(ps->msl, mismatched);
+        text = PatchFragmentInputs(text, missing);
+        NSString* src = [NSString stringWithUTF8String:text.c_str()];
         id<MTLLibrary> lib = dev_->newLibraryFromMsl(src, &err);
         id<MTLFunction> patched = lib ? [lib newFunctionWithName:[NSString stringWithUTF8String:ps->refl.entryPoint.c_str()]] : nil;
         if (patched)
         {
             fn = patched;
-            Log("pixel shader %llu reads %zu interpolant(s) vertex shader %llu does not write (first: location %u); zero-filled",
-                (unsigned long long)ps->id, missing.size(), (unsigned long long)vs->id, missing[0].location);
+            Log("pixel shader %s: %zu interpolant(s) that vertex shader %s does not write are zero-filled, %zu of another width adapted",
+                ps->debugName.c_str(), missing.size(), vs->debugName.c_str(), mismatched.size());
         }
         else
-            Log("pixel shader %llu: patching %zu unwritten input(s) failed: %s", (unsigned long long)ps->id, missing.size(),
-                err ? err.localizedDescription.UTF8String : "?");
+            Log("pixel shader %s: patching %zu unwritten and %zu mismatched input(s) failed: %s", ps->debugName.c_str(), missing.size(),
+                mismatched.size(), err ? err.localizedDescription.UTF8String : "?");
     }
     fragmentVariants_.emplace(key, fn);
     return fn;
@@ -965,7 +970,8 @@ id<MTLRenderPipelineState> Context::pipeline(MTLPrimitiveTopologyClass cls)
     }
 
     MTLRenderPipelineDescriptor* d = [MTLRenderPipelineDescriptor new];
-    d.label = [NSString stringWithFormat:@"vs%llu ps%llu", (unsigned long long)k.vs, (unsigned long long)k.ps];
+    d.label = [NSString stringWithFormat:@"vs%llu %s, ps%llu %s", (unsigned long long)k.vs, vs_->debugName.c_str(),
+                                         (unsigned long long)k.ps, ps_ ? ps_->debugName.c_str() : "-"];
     d.vertexFunction = vs_->fn;
     d.fragmentFunction = ps_ ? fragmentFunctionFor(vs_.get(), ps_.get()) : nil;
     d.rasterSampleCount = pass_.samples;
@@ -1336,9 +1342,22 @@ void Context::traceDraw()
         snprintf(bl, sizeof bl, "%d src%d dst%d op%d wr%x", r.BlendEnable, int(r.SrcBlend), int(r.DestBlend), int(r.BlendOp),
                  r.RenderTargetWriteMask);
     }
-    Log("trace draw: vs=%s ps=%s |%s| zs=%s %s | blend %s | cull %d | vp %.0fx%.0f z %.2f-%.2f", vs_->debugName.c_str(),
+    std::string tex;
+    if (ps_)
+        for (const ResourceBinding& rb : ps_->refl.resources)
+            if (rb.type == D3D_SIT_TEXTURE && rb.d3dSlot < D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT)
+            {
+                ShaderResourceView* v = bind_[1].srv[rb.d3dSlot].get();
+                const char* n = !v ? "-" : (v->buffer ? "buffer" : (v->core ? (sameAsAttachment(v->core) ? "ATTACHED" : nameOf(static_cast<TextureCore*>(v->core))) : "?"));
+                tex += std::string(" t") + std::to_string(rb.d3dSlot) + "=" + n;
+            }
+    char sc[96] = "";
+    if (rs_ && rs_->desc.ScissorEnable)
+        snprintf(sc, sizeof sc, " scissor(%d,%d,%d,%d)%s", int(scissor_.left), int(scissor_.top), int(scissor_.right),
+                 int(scissor_.bottom), scissorSet_ ? "" : "[unset]");
+    Log("trace draw: vs=%s ps=%s |%s| zs=%s %s | blend %s | cull %d | vp %.0fx%.0f z %.2f-%.2f%s |%s", vs_->debugName.c_str(),
         ps_ ? ps_->debugName.c_str() : "-", rts.c_str(), z.c_str(), ds, bl, rs_ ? int(rs_->desc.CullMode) : 3, viewport_.Width,
-        viewport_.Height, viewport_.MinDepth, viewport_.MaxDepth);
+        viewport_.Height, viewport_.MinDepth, viewport_.MaxDepth, sc, tex.c_str());
 }
 
 void Context::Draw(UINT count, UINT start) { DrawInstanced(count, 1, start, 0); }

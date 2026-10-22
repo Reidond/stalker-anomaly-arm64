@@ -85,6 +85,7 @@ struct DebugReadOptions
     int channel = 0;
     bool stencil = false;
     float lo = 0, hi = 0;
+    uint32_t cropX = 0, cropY = 0, cropW = 0, cropH = 0; // cropW == 0: the whole texture
 };
 struct DebugImage
 {
