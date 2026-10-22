@@ -37,7 +37,13 @@ bool SwapChain::init()
     layer_.device = dev_->mtl;
     layer_.pixelFormat = pixelFormat_;
     layer_.framebufferOnly = !cfg_.allowReadback;
+#if TARGET_OS_IOS
+    // Always three: with two, the display link's callback (60 Hz) waits two vsyncs in nextDrawable every frame and the game runs at 30 fps
+    // however little the GPU has to do (measured on an iPad Air M3: the main menu, 2.6 ms of GPU, 32 ms in nextDrawable)
+    layer_.maximumDrawableCount = 3;
+#else
     layer_.maximumDrawableCount = cfg_.bufferCount >= 3 ? 3 : 2;
+#endif
 #if TARGET_OS_OSX
     layer_.displaySyncEnabled = cfg_.vsync;
 #endif
@@ -78,7 +84,9 @@ HRESULT SwapChain::GetDevice(MtlREFIID riid, void** pp) { return dev_->QueryInte
 id<MTLTexture> SwapChain::currentTexture()
 {
     if (!drawable_)
+    {
         drawable_ = [layer_ nextDrawable];
+    }
     return drawable_ ? drawable_.texture : nil;
 }
 
