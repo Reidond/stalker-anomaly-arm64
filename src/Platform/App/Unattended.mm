@@ -16,7 +16,9 @@ void BeginUnattendedActivity()
         return;
     NSActivityOptions options = NSActivityUserInitiatedAllowingIdleSystemSleep | NSActivityLatencyCritical;
     activity = [[NSProcessInfo processInfo] beginActivityWithOptions:options reason:@"Anomaly unattended run"];
-    [[NSProcessInfo processInfo] disableAutomaticTermination:@"Anomaly unattended run"];
+#if TARGET_OS_OSX
+    [[NSProcessInfo processInfo] disableAutomaticTermination:@"Anomaly unattended run"]; // macOS only; unattended mode is not used on iOS
+#endif
 }
 
 void SetBackgroundActivationPolicy()
