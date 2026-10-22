@@ -70,3 +70,9 @@ function list_inventory()
 	end, db.actor)
 	printf("%s", "INV count " .. n)
 end
+
+-- Checks the UI colour helpers (COLOR lines)
+function color_test()
+	local c = GetARGB(255, 216, 186, 140)
+	printf("%s", string.format("COLOR GetARGB(255,216,186,140) = %d (%08x) A=%d R=%d G=%d B=%d", c, c, ClrGetA(c), ClrGetR(c), ClrGetG(c), ClrGetB(c)))
+end
