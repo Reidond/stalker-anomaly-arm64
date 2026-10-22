@@ -380,6 +380,9 @@ public:
 	virtual u32 memory_usage() = 0;
 	virtual u32 active_phase() = 0; //Swartz: actor shadow
 	virtual void RenderToTarget(RRT target) = 0;
+	// The 3D scene of this frame is complete: from here on only the UI is drawn. A renderer with a render scale brings the scene
+	// to the output's size now (the UI is drawn at the output's resolution); the others have nothing to do.
+	virtual void FinishScene() {}
 	// Constructor/destructor
 	virtual ~IRender_interface();
 protected:

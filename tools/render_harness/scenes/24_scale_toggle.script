@@ -1,0 +1,21 @@
+# Render scale toggled 16 times (each is a device reset): the process footprint must not climb with the resets. Sample `footprint <pid>`
+# before and after (HARNESS_FOOTPRINT only takes one sample).
+1 console run_string xr_harness.env(12,0,"w_clear1")
+3 console run_string xr_harness.tp(-2.8,2.8,82.7,200)
+10 console r__render_scale 0.5
+14 console r__render_scale 0.67
+18 console r__render_scale 0.5
+22 console r__render_scale 0.67
+26 console r__render_scale 0.5
+30 console r__render_scale 0.67
+34 console r__render_scale 0.5
+38 console r__render_scale 0.67
+42 console r__render_scale 0.5
+46 console r__render_scale 0.67
+50 console r__render_scale 0.5
+54 console r__render_scale 0.67
+58 console r__render_scale 0.5
+62 console r__render_scale 0.67
+66 console r__render_scale 0.5
+70 console r__render_scale 0.67
+80 quit

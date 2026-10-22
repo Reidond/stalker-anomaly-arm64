@@ -1298,6 +1298,9 @@ void CLevel::OnRender()
 	Game().OnRender();
 	BulletManager().Render();
 
+	// the 3D scene is complete (bullet tracers are part of it): what follows is UI
+	Render->FinishScene();
+
 	if (Device.m_SecondViewport.IsSVPFrame())
 		Render->RenderToTarget(Render->rtSVP);
 

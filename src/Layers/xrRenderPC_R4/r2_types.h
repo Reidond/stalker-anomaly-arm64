@@ -71,6 +71,8 @@
 
 #define		r2_RT_dof			"$user$dof"
 #define		r2_RT_ui			"$user$ui"
+#define		r2_RT_scene_out		"$user$scene_out"		// render scale: the finished 3D scene, at the scene's size
+#define		r2_RT_upscaled		"$user$upscaled"		// render scale: the scene after MetalFX, at the output's size
 
 #define		r2_RT_scopert		"$user$scopeRT" //crookr
 #define		r2_RT_heat			"$user$heat" //--DSR-- HeatVision

@@ -1,0 +1,16 @@
+# Render scale: the UI at the output's resolution. HUD in the field, the inventory, the PDA (plain dialog), the pause menu.
+1 console run_string xr_harness.env(12,0,"w_clear1")
+3 console run_string xr_harness.tp(-2.8,2.8,82.7,200)
+10 console screenshot 22_a_hud
+12 key I
+16 console screenshot 22_b_inventory
+18 key Escape
+20 console g_3d_pda off
+22 key P
+24 console run_string xr_harness.pda("eptTasks")
+28 console screenshot 22_c_pda
+30 key Escape
+32 key Escape
+36 console screenshot 22_d_pause_menu
+38 key Escape
+40 quit

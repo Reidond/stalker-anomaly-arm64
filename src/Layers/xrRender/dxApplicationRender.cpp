@@ -67,7 +67,7 @@ void dxApplicationRender::load_draw_internal(CApplication& owner)
 	//	TODO: DX10: remove this???
 	RImplementation.rmNormal();
 	RCache.set_RT(HW.pBaseRT);
-	RCache.set_ZB(HW.pBaseZB);
+	RCache.set_ZB(HW_UIZB);
 #endif	//	USE_DX10
 
 #if defined(USE_DX10) || defined(USE_DX11)

@@ -102,6 +102,17 @@ xr_token qminmax_sm_token [ ] = {
 	{0, 0}
 };
 
+// Render scale: the 3D scene renders at this fraction of the output size and is brought up to the output size before the UI is drawn
+// (the upscaler is applied by the renderer's last scene pass; MetalD3D11 provides MetalFX spatial scaling, docs/ios-port/RENDERER.md)
+float ps_r__render_scale = 1.0f;
+u32 ps_r__upscaler = UPSCALER_METALFX;
+float ps_r__upscale_sharpness = 0.0f;
+xr_token upscaler_token [ ] = {
+	{ "bilinear", UPSCALER_BILINEAR },
+	{ "metalfx", UPSCALER_METALFX },
+	{ 0, 0 }
+};
+
 u32 ps_r_screenshot_token = 0;
 xr_token screenshot_mode_token [ ] = {
 	{ "jpg", 0 },
@@ -793,6 +804,21 @@ public:
 	}
 };
 
+// The scene's render targets are sized from the scale, so a change needs the same device reset as a change of vid_mode
+class CCC_RenderScale : public CCC_Float
+{
+public:
+	CCC_RenderScale(LPCSTR N, float* V, float _min, float _max) : CCC_Float(N, V, _min, _max) {}
+
+	virtual void Execute(LPCSTR args)
+	{
+		const float before = *value;
+		CCC_Float::Execute(args);
+		if (_abs(*value - before) > 0.0005f && Device.b_is_Ready)
+			Device.Reset();
+	}
+};
+
 class CCC_SSAO_Mode : public CCC_Token
 {
 public:
@@ -1377,6 +1403,10 @@ void xrRender_initconsole()
 	CMD4(CCC_Float, "r__wallmark_ttl", &ps_r__WallmarkTTL, 1.0f, 10.f*60.f);
 
 	CMD4(CCC_Integer, "r__supersample", &ps_r__Supersample, 1, 8);
+
+	CMD4(CCC_RenderScale, "r__render_scale", &ps_r__render_scale, 0.5f, 1.0f);
+	CMD3(CCC_Token, "r__upscaler", &ps_r__upscaler, upscaler_token);
+	CMD4(CCC_Float, "r__upscale_sharpness", &ps_r__upscale_sharpness, 0.0f, 1.0f);
 
 	Fvector tw_min, tw_max;
 

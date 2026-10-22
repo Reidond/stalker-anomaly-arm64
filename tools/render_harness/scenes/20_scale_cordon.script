@@ -1,0 +1,8 @@
+# Render scale: the Cordon field at noon, a screenshot after the frame rate has settled, and 60 s of standing there so the shell log
+# has several 10 s "metal:" lines (GPU/CPU ms per frame) for perf_report.sh. Set the scale with `-x "r__render_scale 0.67"`.
+1 console run_string xr_harness.env(12,0,"w_clear1")
+3 console run_string xr_harness.tp(-2.8,2.8,82.7,200)
+29 console run_string xr_harness.status()
+30 console screenshot 20_scale_cordon
+80 console screenshot 20_scale_cordon_b
+84 quit

@@ -246,8 +246,8 @@ void CRender::render_lights(light_Package& LP)
 				if (RImplementation.o.advancedpp && ps_r2_ls_flags.is(R2FLAG_VOLUMETRIC_LIGHTS))
 				{
 					// Current Resolution
-					float w = float(Device.dwWidth);
-					float h = float(Device.dwHeight);
+					float w = float(HW.SceneW());
+					float h = float(HW.SceneH());
 
 					// Adjust resolution
 					if (RImplementation.o.ssfx_volumetric)

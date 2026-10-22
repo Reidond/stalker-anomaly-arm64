@@ -8,8 +8,8 @@ void CRenderTarget::phase_dof()
 
 	float d_Z = EPS_S;
 	float d_W = 1.0f;
-	float w = float(Device.dwWidth);
-	float h = float(Device.dwHeight);
+	float w = float(HW.SceneW());
+	float h = float(HW.SceneH());
 
 	Fvector2 p0, p1;
 #if defined(USE_DX10) || defined(USE_DX11)	
@@ -22,7 +22,7 @@ void CRenderTarget::phase_dof()
 
 	//DoF vectors
 	Fvector2 vDofKernel;
-	vDofKernel.set(0.5f / Device.dwWidth, 0.5f / Device.dwHeight);
+	vDofKernel.set(0.5f / HW.SceneW(), 0.5f / HW.SceneH());
 	vDofKernel.mul(ps_r2_dof_kernel_size);
 	Fvector3 dof;
 	g_pGamePersistent->GetCurrentDof(dof);
@@ -81,6 +81,6 @@ void CRenderTarget::phase_dof()
 
 	//Resolve RT
 #if defined(USE_DX10) || defined(USE_DX11)
-	HW.pContext->CopyResource(rt_Generic_0->pTexture->surface_get(), dest_rt->pTexture->surface_get());
+	HW.pContext->CopyResource(rt_Generic_0->pSurface, dest_rt->pSurface);
 #endif
 };

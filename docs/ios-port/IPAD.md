@@ -115,7 +115,9 @@ real GPU time is lower.
 | 1920x1440 | 2.76 | 32 to 35 | 24 | 4.2 GB |
 | 2732x2048 (native) | 5.60 | 19 | 59 | 4.65 GB |
 
-GPU time grows with the pixel count (about 10 ms per Mpixel). The footprint is what the OS charges the app (`phys_footprint`, Metal and
+GPU time grows with the pixel count (about 10 ms per Mpixel). The render scale of RENDERER.md ("Render scale and upscaling") keeps the
+output at the panel's size and the UI crisp while the scene renders at a fraction of it; its iPad measurements (scale 0.5 to 1.0, MetalFX
+and bilinear, fps, GPU ms, footprint) are in that section. The footprint is what the OS charges the app (`phys_footprint`, Metal and
 compressed memory included) against 7.99 GB of budget with `increased-memory-limit`. At the native size one `texture_lod` step is about 1 GB
 (LOD 2 3.9 GB, LOD 1 4.65 GB, LOD 0 5.7 GB). The footprint is 0.3 to 0.5 GB in the main menu, 1.9 GB when a load starts, peaks about 4.3 GB
 during a load, and creeps up by about 10 MB per minute in the world.
