@@ -32,7 +32,8 @@ void FlushLog()
 {
 	PROF_EVENT();
 
-	if (!no_log)
+	// the freeze watchdog thread calls this too, also after the file system has been shut down
+	if (!no_log && xr_FS)
 	{
 		PROF_EVENT("Flushing");
 		logCS.Enter();
