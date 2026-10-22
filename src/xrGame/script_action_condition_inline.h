@@ -18,7 +18,8 @@ IC CScriptActionCondition::CScriptActionCondition()
 IC CScriptActionCondition::CScriptActionCondition(u32 dwFlags, double dTime)
 {
 	m_dwFlags = dwFlags;
-	m_tLifeTime = ALife::_TIME_ID(dTime);
+	// scripts pass -1 for "never expires": a negative double to u64 is 0xFF..F with MSVC's x64 conversion but 0 with arm64's
+	m_tLifeTime = dTime < 0 ? ALife::_TIME_ID(-1) : ALife::_TIME_ID(dTime);
 	m_tStartTime = ALife::_TIME_ID(-1);
 }
 
