@@ -137,8 +137,11 @@ HRESULT SwapChain::Present(UINT syncInterval, UINT flags)
             layer_.framebufferOnly = !cfg_.allowReadback;
         id<MTLTexture> src = offscreen_ ? offscreen_ : d.texture;
         const NSUInteger w = src.width, h = src.height;
-        id<MTLBuffer> buf = [dev_->mtl newBufferWithLength:w * h * 4 options:MTLResourceStorageModeShared];
+        // rows padded to 256 bytes, the alignment Metal asks for linear texture data
+        const NSUInteger pitch = (w * 4 + 255) & ~NSUInteger(255);
+        id<MTLBuffer> buf = [dev_->mtl newBufferWithLength:pitch * h options:MTLResourceStorageModeShared];
         const bool bgra = src.pixelFormat == MTLPixelFormatBGRA8Unorm || src.pixelFormat == MTLPixelFormatBGRA8Unorm_sRGB;
+        std::shared_ptr<CaptureState> state = capture_;
         pre = ^(id<MTLCommandBuffer> cb) {
             id<MTLBlitCommandEncoder> be = [cb blitCommandEncoder];
             [be copyFromTexture:src
@@ -148,28 +151,38 @@ HRESULT SwapChain::Present(UINT syncInterval, UINT flags)
                           sourceSize:MTLSizeMake(w, h, 1)
                             toBuffer:buf
                    destinationOffset:0
-              destinationBytesPerRow:w * 4
-            destinationBytesPerImage:w * h * 4];
+              destinationBytesPerRow:pitch
+            destinationBytesPerImage:pitch * h];
             [be endEncoding];
-            [cb addCompletedHandler:^(id<MTLCommandBuffer>) {
+            [cb addCompletedHandler:^(id<MTLCommandBuffer> done) {
+                if (done.status != MTLCommandBufferStatusCompleted)
+                {
+                    Log("! Metal: screenshot capture failed (%s)", done.error.localizedDescription.UTF8String);
+                    return; // never publish an unfilled buffer
+                }
                 CaptureResult r;
                 r.width = uint32_t(w);
                 r.height = uint32_t(h);
                 r.rgba.resize(w * h * 4);
-                const uint8_t* p = static_cast<const uint8_t*>(buf.contents);
-                for (size_t i = 0; i < w * h; ++i)
+                const uint8_t* base = static_cast<const uint8_t*>(buf.contents);
+                for (size_t y = 0; y < h; ++y)
                 {
-                    r.rgba[i * 4 + 0] = bgra ? p[i * 4 + 2] : p[i * 4 + 0];
-                    r.rgba[i * 4 + 1] = p[i * 4 + 1];
-                    r.rgba[i * 4 + 2] = bgra ? p[i * 4 + 0] : p[i * 4 + 2];
-                    r.rgba[i * 4 + 3] = 255;
+                    const uint8_t* p = base + y * pitch;
+                    uint8_t* o = r.rgba.data() + y * w * 4;
+                    for (size_t x = 0; x < w; ++x)
+                    {
+                        o[x * 4 + 0] = bgra ? p[x * 4 + 2] : p[x * 4 + 0];
+                        o[x * 4 + 1] = p[x * 4 + 1];
+                        o[x * 4 + 2] = bgra ? p[x * 4 + 0] : p[x * 4 + 2];
+                        o[x * 4 + 3] = 255;
+                    }
                 }
                 {
-                    std::lock_guard<std::mutex> lk(captureMutex_);
-                    capture_ = std::move(r);
-                    captureReady_ = true;
+                    std::lock_guard<std::mutex> lk(state->mutex);
+                    state->result = std::move(r);
+                    state->ready = true;
                 }
-                captureCv_.notify_all();
+                state->cv.notify_all();
             }];
         };
     }
@@ -186,21 +199,21 @@ void SwapChain::requestCapture()
 
 bool SwapChain::pollCapture(CaptureResult* out)
 {
-    std::lock_guard<std::mutex> lk(captureMutex_);
-    if (!captureReady_)
+    std::lock_guard<std::mutex> lk(capture_->mutex);
+    if (!capture_->ready)
         return false;
-    *out = std::move(capture_);
-    captureReady_ = false;
+    *out = std::move(capture_->result);
+    capture_->ready = false;
     return true;
 }
 
 bool SwapChain::waitCapture(CaptureResult* out)
 {
-    std::unique_lock<std::mutex> lk(captureMutex_);
-    if (!captureCv_.wait_for(lk, std::chrono::seconds(5), [&] { return captureReady_; }))
+    std::unique_lock<std::mutex> lk(capture_->mutex);
+    if (!capture_->cv.wait_for(lk, std::chrono::seconds(5), [&] { return capture_->ready; }))
         return false;
-    *out = std::move(capture_);
-    captureReady_ = false;
+    *out = std::move(capture_->result);
+    capture_->ready = false;
     return true;
 }
 
