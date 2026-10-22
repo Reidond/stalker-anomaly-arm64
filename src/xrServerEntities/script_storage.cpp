@@ -452,6 +452,11 @@ void CScriptStorage::reinit()
 	lua_ext_set_native_path_hook(xr_native_path); // lfs.*, io.open, ... take the engine's virtual paths
 #endif
 	disable_os_funcs(lua());
+#ifdef XR_PLATFORM_APPLE
+	// Lua 5.0 names the scripts still use. LuaJIT 2.0 (the Windows build) kept them, 2.1 dropped them; global.lua defines the
+	// same two lines but is only run with lua_debug on.
+	luaL_dostring(lua(), "math.mod = math.fmod string.gfind = string.gmatch");
+#endif
 
 	if (isDebugEnabled)
 	{
