@@ -131,6 +131,7 @@ InitResult Init(const InitParams& params, std::string& error)
 		return InitResult::GameDataInvalid;
 	}
 
+	xr_window::SetBackground(params.background);
 	g_app.command_line = build_command_line(params, paths);
 	AppleShell::Log("engine: command line '%s'", g_app.command_line.c_str());
 

@@ -39,6 +39,7 @@ struct WindowState
 };
 
 WindowState g_state;
+bool g_background = false; // xr_window::SetBackground: never raise, grab or warp the user's mouse
 
 #if defined(XR_PLATFORM_IOS)
 constexpr bool kFixedFullScreen = true; // an iPad app owns the whole screen
@@ -117,6 +118,8 @@ BOOL SetCursorPos(int x, int y)
 {
 	if (!g_state.window)
 		return FALSE;
+	if (g_background) // the real cursor is the user's
+		return TRUE;
 	const float d = density_of(g_state.window);
 	SDL_WarpMouseInWindow(g_state.window, float(x) / d, float(y) / d);
 	return TRUE;
@@ -145,7 +148,8 @@ BOOL SetForegroundWindow(HWND window)
 	SDL_Window* w = (SDL_Window*)window;
 	if (!w)
 		return FALSE;
-	SDL_RaiseWindow(w);
+	if (!g_background)
+		SDL_RaiseWindow(w);
 	return TRUE;
 }
 
@@ -198,6 +202,9 @@ BOOL GetMonitorInfoA(HMONITOR monitor, MONITORINFO* info)
 // ---------------------------------------------------------------------------------------------------------------------
 namespace xr_window
 {
+void SetBackground(bool background) { g_background = background; }
+bool IsBackground() { return g_background; }
+
 bool Create(const char* title, int width, int height)
 {
 	if (g_state.window)
@@ -292,7 +299,8 @@ void SetMode(Mode mode, unsigned render_width, unsigned render_height, unsigned 
 	}
 	g_state.mode = mode;
 	SDL_ShowWindow(w);
-	SDL_RaiseWindow(w);
+	if (!g_background)
+		SDL_RaiseWindow(w);
 	SDL_SyncWindow(w);
 }
 
@@ -390,7 +398,7 @@ void SetCursorVisible(bool visible)
 
 void ConfineCursor(const RECT* client_rect)
 {
-	if (!g_state.window)
+	if (!g_state.window || g_background)
 		return;
 	if (!client_rect)
 	{

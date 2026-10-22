@@ -101,6 +101,29 @@ The Mac comes first because it has the same Metal, GameController and CPU archit
 iPad, plus a debugger, fast iteration, and no 7-day signing or jetsam. That leaves only packaging
 and limits for M4.
 
+### M5: Lua performance on the iPad
+
+Lua scripts aren't compiled ahead of time to native code. LuaJIT has no AOT backend, and the
+only usable tool (LuaAOT) needs Lua 5.4. A move to 5.4 would break Anomaly's 5.1/LuaJIT scripts,
+luabind, lua-extensions and addons, and still only reach about LuaJIT-interpreter speed. Instead,
+in order:
+
+1. **Measure first.** Use the M4 numbers: fps and frame time in the Cordon with the LuaJIT
+   interpreter, plus a profile of time spent in Lua (scheduler updates, callbacks, per-frame
+   scripts). If the budget holds, stop here.
+2. **Precompile scripts to LuaJIT bytecode** (`luajit -b`).
+   - Do it at build time for the shipped scripts and the Monolith overlay; it can also be done
+     at first run for addons in `gamedata/`.
+   - Keep the `.script` source as the fallback, and re-check the source mtime/hash so edited
+     scripts and addons still load. This cuts startup and level-load time; runtime speed doesn't
+     change.
+3. **Move hot paths to C++.** Profile the interpreter on the iPad, port the few hottest script
+   functions to engine exports callable from Lua, and keep the Lua behaviour identical. Re-measure
+   after each move.
+
+The JIT stays available as the opt-in route for full speed: SideStore + StikDebug, or a debugger
+([IPAD-JIT.md](IPAD-JIT.md)).
+
 ## Risks
 
 1. **Memory on 8 GB.** This is the most likely blocker; the mitigations are above. Measure it

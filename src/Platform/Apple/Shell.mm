@@ -245,8 +245,21 @@ bool Init(const InitParams& params)
         Paths& p = s.paths;
 
         const std::string documents = SearchPath(NSDocumentDirectory);
-        const std::string app_support = SearchPath(NSApplicationSupportDirectory);
-        const std::string caches = SearchPath(NSCachesDirectory);
+        std::string app_support = SearchPath(NSApplicationSupportDirectory);
+        std::string caches = SearchPath(NSCachesDirectory);
+        std::string logs_root = SearchPath(NSLibraryDirectory) + "/Logs";
+#if !TARGET_OS_IOS
+        // ANOMALY_STATE_ROOT=<dir> keeps everything the app writes (appdata with saves, user.ltx, screenshots and the
+        // engine log; caches; shell log) under <dir>/{Application Support,Caches,Logs}, so scripted runs do not share
+        // user.ltx, saves and logs with other instances.
+        if (const char* root = getenv("ANOMALY_STATE_ROOT"); root && *root)
+        {
+            const std::string r = Normalize(root);
+            app_support = r + "/Application Support";
+            caches = r + "/Caches";
+            logs_root = r + "/Logs";
+        }
+#endif
         p.data_root = ResolveDataRoot(params, documents, p.data_root_source);
 
         p.app_support = app_support + "/Anomaly";
@@ -258,7 +271,7 @@ bool Init(const InitParams& params)
 #if TARGET_OS_IOS
         p.shell_dir = documents;
 #else
-        p.shell_dir = SearchPath(NSLibraryDirectory) + "/Logs/Anomaly";
+        p.shell_dir = logs_root + "/Anomaly";
 #endif
         p.shell_log = p.shell_dir + "/anomaly-shell.log";
         p.crash_log = p.shell_dir + "/anomaly-crash.log";

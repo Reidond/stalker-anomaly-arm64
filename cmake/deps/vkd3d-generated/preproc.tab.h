@@ -69,7 +69,7 @@ struct parse_arg_names
 };
 
 
-#line 73 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/preproc.tab.h"
+#line 73 "preproc.tab.h"
 
 /* Token kinds.  */
 #ifndef PREPROC_YYTOKENTYPE
@@ -123,7 +123,7 @@ union PREPROC_YYSTYPE
     struct vkd3d_string_buffer string_buffer;
     struct parse_arg_names arg_names;
 
-#line 127 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/preproc.tab.h"
+#line 127 "preproc.tab.h"
 
 };
 typedef union PREPROC_YYSTYPE PREPROC_YYSTYPE;
@@ -157,6 +157,6 @@ int preproc_yyparse (void *scanner, struct preproc_ctx *ctx);
 int preproc_yylex(PREPROC_YYSTYPE *yylval_param, PREPROC_YYLTYPE *yylloc_param, void *scanner);
 
 
-#line 161 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/preproc.tab.h"
+#line 161 "preproc.tab.h"
 
 #endif /* !YY_PREPROC_YY_PRIVATE_TMP_CLAUDE_502_USERS_ANDRIISHAFAR_SRC_STALKER_ANOMALY_IOS_CLAUDE_WORKTREES_SHADER_XLAT_E6B22E_214A57E4_FE19_4F3E_900C_8C2987B7797A_SCRATCHPAD_EVAL_VKD3D_GEN_LIBS_VKD3D_SHADER_PREPROC_TAB_H_INCLUDED  */

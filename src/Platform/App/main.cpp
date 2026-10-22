@@ -1,11 +1,19 @@
 // The Anomaly app: SDL3 callbacks around xr_engine::Init / Frame / Shutdown (src/xrEngine/xr_engine_app.h).
 //
-//   anomaly [--data-root <path>] [--exit-after <seconds>] [--script <file>] [--show-launcher] [engine flags...]
+//   anomaly [--data-root <path>] [--exit-after <seconds>] [--script <file>] [--show-launcher]
+//           [--unattended [--size <w>x<h>]] [--foreground] [engine flags...]
 //
 // Everything that is not one of the app's own flags goes to the engine as its command line (the same flags the Windows
 // build takes, e.g. -nointro, -ltx, -start, -nosound), after the contents of commandline.txt (xrEngine, XRENGINE.md).
 // The launcher (game-data status and how to copy the data) is shown when the data is missing or incomplete, or with
 // --show-launcher.
+//
+// --unattended (implied by --script and --exit-after, unless --foreground is given) is for runs nobody watches, on a Mac
+// somebody is working on: the app stays in the background (SDL's MAC_BACKGROUND_APP and ACTIVATE_WHEN_* hints, set before
+// SDL_Init: no dock icon, no focus, no new Space), the engine runs windowed at --size (default 1280x720 pixels) and does not
+// pause when unfocused, sound goes to OpenAL Soft's null device, and App Nap is off so frame pacing stays real. The engine
+// reads its settings from appdata/unattended.ltx (a copy of user.ltx plus those overrides, written at start) and saves them
+// there, so the player's user.ltx is left alone.
 //
 // --script <file> replays a timeline against the running engine, for runs without a person at the keyboard (one step per
 // line, `#` starts a comment, the time is seconds since the engine came up):
@@ -28,6 +36,7 @@
 #include <Platform/Apple/Launcher.h>
 #include <Platform/Apple/Shell.h>
 
+#include "Unattended.h"
 #include "xrEngine/xr_engine_app.h"
 
 #include <sys/stat.h>
@@ -92,9 +101,50 @@ struct App
     AppleShell::ListenerId lifecycle_listener = 0;
     bool saving = false;            // a background save is under way (its frames must not start another)
     Uint64 last_background_save_ns = 0;
+
+    bool unattended = false;
+    int unattended_width = 1280, unattended_height = 720; // pixels
+    std::vector<std::string> engine_args; // argv plus what unattended mode adds
+    std::vector<char*> engine_argv;
 };
 
 App* g_app = nullptr; // the lifecycle listener has no user pointer
+std::string ReadFile(const std::string& path)
+{
+    std::ifstream in(path, std::ios::binary);
+    std::ostringstream text;
+    text << in.rdbuf();
+    return text.str();
+}
+
+// Unattended mode's engine settings: user.ltx with windowed, size and keep-running-unfocused on top (later lines win),
+// handed to the engine as `-ltx unattended.ltx`, which it loads and saves instead of user.ltx.
+void PrepareUnattendedConfig(App& app, const AppleShell::Paths& paths)
+{
+    for (int i = 1; i < app.argc; ++i)
+        if (!strcmp(app.argv[i], "-ltx"))
+            return; // the caller chose its own
+    std::string ltx = ReadFile(paths.appdata + "/user.ltx");
+    if (!ltx.empty() && ltx.back() != '\n')
+        ltx += '\n';
+#if !defined(SDL_PLATFORM_IOS)
+    ltx += "rs_screenmode windowed\n";
+    ltx += "vid_mode " + std::to_string(app.unattended_width) + "x" + std::to_string(app.unattended_height) + "\n";
+#endif
+    ltx += "g_always_active on\n";
+    const std::string path = paths.appdata + "/unattended.ltx";
+    std::ofstream(path, std::ios::binary | std::ios::trunc) << ltx;
+    app.engine_args.assign(app.argv, app.argv + app.argc);
+    app.engine_args.push_back("-ltx");
+    app.engine_args.push_back("unattended.ltx");
+    for (std::string& arg : app.engine_args)
+        app.engine_argv.push_back(arg.data());
+    app.engine_argv.push_back(nullptr);
+    app.argc = int(app.engine_args.size());
+    app.argv = app.engine_argv.data();
+    AppleShell::Log("anomaly: unattended: %dx%d windowed, settings in %s", app.unattended_width, app.unattended_height,
+        path.c_str());
+}
 
 bool LoadScript(App& app, const char* path)
 {
@@ -343,6 +393,7 @@ bool StartEngine(App& app)
     xr_engine::InitParams params;
     params.argc = app.argc;
     params.argv = app.argv;
+    params.background = app.unattended;
     std::string error;
     const Uint64 t0 = SDL_GetTicksNS();
     const xr_engine::InitResult result = xr_engine::Init(params, error);
@@ -405,17 +456,40 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char** argv)
     app->argc = argc;
     app->argv = argv;
 
-    bool want_launcher = false;
+    bool want_launcher = false, unattended_flag = false, foreground = false;
     const char* script_path = nullptr;
     for (int i = 1; i < argc; ++i)
     {
         if (!strcmp(argv[i], "--show-launcher"))
             want_launcher = true;
+        else if (!strcmp(argv[i], "--unattended"))
+            unattended_flag = true;
+        else if (!strcmp(argv[i], "--foreground"))
+            foreground = true;
+        else if (!strcmp(argv[i], "--size") && i + 1 < argc)
+            sscanf(argv[++i], "%dx%d", &app->unattended_width, &app->unattended_height);
         else if (!strcmp(argv[i], "--exit-after") && i + 1 < argc)
             app->exit_after_s = atof(argv[++i]);
         else if (!strcmp(argv[i], "--script") && i + 1 < argc)
             script_path = argv[++i];
     }
+    app->unattended = !foreground && (unattended_flag || script_path || app->exit_after_s > 0);
+#if defined(SDL_PLATFORM_IOS)
+    // Unattended mode is for the Mac (no focus, no window, silent sound). On the iPad a scripted run stays an ordinary foreground run:
+    // the engine must pause when the app leaves the screen (GPU work in the background kills the app), so `g_always_active` is wrong there.
+    app->unattended = false;
+#endif
+    if (app->unattended)
+    {
+        // before SDL_Init: SDL reads the hints when it registers the application and creates windows
+        SDL_SetHint(SDL_HINT_MAC_BACKGROUND_APP, "1");
+        SDL_SetHint(SDL_HINT_WINDOW_ACTIVATE_WHEN_SHOWN, "0");
+        SDL_SetHint(SDL_HINT_WINDOW_ACTIVATE_WHEN_RAISED, "0");
+        setenv("ALSOFT_DRIVERS", "null", 0); // OpenAL Soft's silent device, read when the engine opens its first one
+        anomaly_app::BeginUnattendedActivity();
+        anomaly_app::SetBackgroundActivationPolicy(); // before SDL creates the NSApplication and its first window
+    }
+
     if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS | SDL_INIT_GAMEPAD))
     {
         fprintf(stderr, "anomaly: SDL_Init failed: %s\n", SDL_GetError());
@@ -442,6 +516,8 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char** argv)
     }
     AppleShell::Log("anomaly: data root %s", paths.data_root.c_str());
     AppleShell::Log("anomaly: appdata   %s", paths.appdata.c_str());
+    if (app->unattended)
+        PrepareUnattendedConfig(*app, paths);
 
     const bool data_ok = AppleShell::ValidateGameData(paths.data_root).state == AppleShell::DataState::Ok;
     if (data_ok && !want_launcher)

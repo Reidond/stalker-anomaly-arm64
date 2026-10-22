@@ -72,11 +72,42 @@ com.andriishafar.anomaly AnomalyDataRoot <path>`, the default `~/Documents/Anoma
 | `--overlay <dir>` | the Monolith gamedata overlay (`ANOMALY_OVERLAY`); default is the bundle's `Resources/overlay` |
 | `--exit-after <s>` | ask the engine to quit that many seconds after it is up |
 | `--script <file>` | scripted run: console commands, synthetic keys and mouse (below) |
+| `--unattended [--size <w>x<h>]` | background-safe run (below); implied by `--script` and `--exit-after` |
+| `--foreground` | with `--script` or `--exit-after`: a normal, visible, focused run |
 | `--show-launcher` | show the launcher (data status, how to copy data) even when the data is valid; it is shown by itself when the data is missing or incomplete |
 | anything else | the engine's command line, as on Windows (`-nosound`, `-nojit`, `-start ...`, ...), after `commandline.txt` (`~/Library/Application Support/Anomaly/commandline.txt`) |
 
 `-load <save>` on the command line does nothing (the console `load` needs a running ALife). To load, use what the main menu
 runs: `start server(<save>/single/alife/load) client(localhost)`.
+
+### Unattended runs
+
+Runs nobody watches must not disturb the Mac they run on. `--script` and `--exit-after` therefore imply `--unattended` (opt out
+with `--foreground`). Before `SDL_Init` the app sets SDL's `MAC_BACKGROUND_APP`, `WINDOW_ACTIVATE_WHEN_SHOWN` and
+`WINDOW_ACTIVATE_WHEN_RAISED` hints (no regular activation policy: no Dock icon, no focus, no new Space), points OpenAL Soft at its null
+device (`ALSOFT_DRIVERS=null`, unless the variable is already set) and opts out of App Nap and automatic termination with an
+`NSProcessInfo` activity, so frame pacing stays real while the window is in the background. The engine is started windowed at
+`--size` (default 1280x720 pixels) with `g_always_active on`, so losing focus does not pause it. These settings are written into
+`appdata/unattended.ltx` (a copy of `user.ltx` with the overrides appended) which the app passes as `-ltx unattended.ltx`; the
+engine loads and saves that file, so the player's `user.ltx` is not touched. A `-ltx` of your own on the command line wins.
+
+Unattended also means background: the app sets the Accessory activation policy before SDL exists, never raises the window, never
+turns on relative mouse mode or confines the cursor, and never warps it (`xr_window::SetBackground`); the scripted input events
+reach the engine all the same. Checked by sampling `lsappinfo front` every 0.25 s over a menu run and a Cordon run: the app was
+never frontmost, started directly or with `--show-window`.
+
+Recommended way to start one (LaunchServices starts it in the background, `-W` waits for it, output goes to files):
+
+```bash
+open -g -j -W -n --env ANOMALY_STATE_ROOT=<run-dir> --stdout <file> --stderr <file> \
+  build/macos-arm64-release/src/Platform/App/anomaly.app --args \
+  --data-root "$PWD/game/Anomaly" --script <file> --exit-after <hard-limit-seconds>
+```
+
+`ANOMALY_STATE_ROOT=<dir>` (macOS) moves everything the app writes to `<dir>/{Application Support,Caches,Logs}/Anomaly`: appdata
+(saves, `user.ltx`, screenshots, the engine log), the shader cache and the shell log. Scripted runs of different sessions then do
+not overwrite each other's logs and settings; copy a save and a `user.ltx` in first, and symlink `Caches/Anomaly/shaders` to the real
+one to skip the cold shader translation.
 
 ### The Monolith overlay
 

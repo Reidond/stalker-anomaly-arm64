@@ -1,7 +1,7 @@
-#line 1 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.yy.c"
+#line 1 "hlsl.yy.c"
 #include "config.h"
 
-#line 4 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.yy.c"
+#line 4 "hlsl.yy.c"
 
 #define  YY_INT_ALIGNED short int
 
@@ -1348,10 +1348,10 @@ static void apply_escape_sequences(char *str);
 
 #define YY_USER_ACTION update_location(yyget_extra(yyscanner), yyget_lloc(yyscanner));
 
-#line 1351 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.yy.c"
+#line 1351 "hlsl.yy.c"
 #define YY_NO_INPUT 1
 
-#line 1354 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.yy.c"
+#line 1354 "hlsl.yy.c"
 
 #define INITIAL 0
 #define pp 1
@@ -1640,7 +1640,7 @@ YY_DECL
 	{
 #line 67 "libs/vkd3d-shader/hlsl.l"
 
-#line 1643 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.yy.c"
+#line 1643 "hlsl.yy.c"
 
 	while ( /*CONSTCOND*/1 )		/* loops until end-of-file is reached */
 		{
@@ -2669,7 +2669,7 @@ YY_RULE_SETUP
 #line 358 "libs/vkd3d-shader/hlsl.l"
 YY_FATAL_ERROR( "flex scanner jammed" );
 	YY_BREAK
-#line 2672 "/private/tmp/claude-502/-Users-andriishafar-src-stalker-anomaly-ios--claude-worktrees-shader-xlat-e6b22e/214a57e4-fe19-4f3e-900c-8c2987b7797a/scratchpad/eval/vkd3d-gen/libs/vkd3d-shader/hlsl.yy.c"
+#line 2672 "hlsl.yy.c"
 case YY_STATE_EOF(INITIAL):
 case YY_STATE_EOF(pp):
 case YY_STATE_EOF(pp_line):
