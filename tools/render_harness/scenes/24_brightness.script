@@ -1,0 +1,10 @@
+# Outdoors at noon with the options menu's Brightness (r__exposure) at 0.7, 1.0 and 1.5: the picture must change.
+1 console run_string xr_harness.env(12,0,"w_clear1")
+3 console run_string xr_harness.tp(-2.8,2.8,82.7,200)
+8 console r__exposure 0.7
+10 console screenshot 24_exposure_0_7
+12 console r__exposure 1.0
+14 console screenshot 24_exposure_1_0
+16 console r__exposure 1.5
+18 console screenshot 24_exposure_1_5
+20 quit

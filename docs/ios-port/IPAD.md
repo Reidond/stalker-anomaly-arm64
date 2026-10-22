@@ -44,8 +44,7 @@ tools/ios/ipad.sh shot <file.png>          # screenshot of the iPad (devicectl d
 A free Personal Team's profile is valid for 7 days (this one: 2026-10-21 to 2026-10-28). After that the app no longer launches
 ("Unable to Verify App"). To refresh it, rebuild and install over the old one (`tools/ios/ipad.sh build && tools/ios/ipad.sh install`):
 Xcode re-signs with a new profile, and `Documents` (data, `commandline.txt`, logs) and `Library` (saves, settings, shader cache) stay.
-`xcodebuild -allowProvisioningUpdates` needs your Apple ID signed in to Xcode. A new build also runs the preset logic below, which merges
-only when the preset's version number was raised. The free account allows 3 apps installed at a time.
+`xcodebuild -allowProvisioningUpdates` needs your Apple ID signed in to Xcode. A new build applies the graphics profile at its first start like any other. The free account allows 3 apps installed at a time.
 
 ## Where things are on the iPad
 
@@ -80,26 +79,17 @@ Archive access needed no change: xrCore reads archives with `pread` and bounded 
 `extended-virtual-addressing` is not needed. Sound (OpenAL Soft on CoreAudio with an `AVAudioSession`, xrSound), Metal, the shader cache in
 `Library/Caches` and the overlay archive packing all worked on the first launch that got past the file system.
 
-## The iPad preset
+## The iPad profile
 
-`src/Platform/Apple/DevicePreset.cpp`. On iOS the shell merges these lines into `appdata/user.ltx` the first time, and again whenever the preset's
-version number is raised (the version applied is in `Library/Application Support/Anomaly/device-preset.version`). The player's other settings,
-bindings and later changes to settings the preset does not name are kept. `--device-preset reset` (on the command line or in
-`commandline.txt`) applies it again at once, `--device-preset none` skips it, `--device-preset ipad` applies it on a Mac too. The one engine flag
-the console cannot set, `-smap1536` (shadow map size), is added to the engine's command line.
+The first iPad preset (a table merged into `user.ltx` once) is replaced by the device graphics profiles of [SETTINGS.md](SETTINGS.md): the
+shell detects the device, the profile for its class is applied on every start after `user.ltx`, and what it sets is locked. The iPad Air
+13-inch (M3, 8 GB) gets `ipad-8gb`, in two modes (Quality, Performance); the options menu keeps the mode, the frame rate, field of view,
+brightness, motion blur and the HUD. `--graphics-profile none` (or `--unlocked-graphics`) runs without the locks, and the settings sweeps
+below use `--unlocked-graphics`. The old `--device-preset none|ipad` still works as `--graphics-profile none|ipad`; `reset` does nothing now
+(the profile is applied on every start). The one engine flag the console cannot set, the shadow map size (`-smap1536`), is added to the
+command line by the profile.
 
-| Setting | Value | Why |
-|---|---|---|
-| `vid_mode` | `1366x1024` | render size, 4:3 like the panel (2732x2048); the Metal layer scales it 2x. 1.4 Mpixel: 60 fps |
-| `texture_lod` | `1` | 1 GB less than LOD 0, 0.9 GB more than LOD 2 (numbers below); the render size does not show more |
-| `r__tf_aniso` | `4` | |
-| `r2_sun_quality` / `-smap1536` / `r2_ls_squality` | `st_opt_low` / 1536 / `0.5` | shadows: the one setting with a large GPU cost (medium is +3 ms at 1920x1440) |
-| `r3_dynamic_wet_surfaces` (+ `_sm_res 1024`) | `off` | 3.5 ms of GPU at 1920x1440 in the rain |
-| `r2_volumetric_lights`, `r4_enable_tessellation`, `r3_volumetric_smoke`, `r2_mblur_enabled` | `off` | not available on Metal or not worth their cost |
-| `r2_sunshafts_mode` / `r2_ssao` | `screen_space` / `st_opt_low` | |
-| `r__detail_density` / `r__detail_radius` / `rs_vis_distance` | `0.4` / `35` / `0.8` | grass and view distance |
-| `snd_cache_size` | `32` | MB of decoded sound kept |
-| `rs_screenmode`, `rs_v_sync`, `r__supersample` | `borderless`, `on`, `1` | |
+The measurements that led to the first preset are kept below: they are the base of the Quality numbers in SETTINGS.md.
 
 ### Render size, speed and memory
 
@@ -124,8 +114,8 @@ Cost of single settings at 1920x1440 (GPU ms, one setting changed at a time, noi
 medium +3, SSAO 0.7, grass, view distance, soft particles, soft water, sun shafts, anisotropy: not measurable. `tools/ios/scripts/sweep_gpu.txt` and
 `res_sweep.sh` repeat these runs.
 
-To change the preset by hand edit `appdata/user.ltx` (copy it out with `ipad.sh get`) or use the in-game options; the game saves `user.ltx`
-at exit, so whatever you set in a session is what the next one starts with (a scripted `vid_mode` included: run `--device-preset reset` after).
+The profile's settings cannot be changed by hand: `user.ltx` is read and then the profile is applied on top (SETTINGS.md); for experiments
+use `--unlocked-graphics`. The game saves `user.ltx` at exit (a scripted `vid_mode` included; the profile puts the right one back at the next start).
 
 ## Memory warnings and the watchdog
 
@@ -200,7 +190,7 @@ Both ended with exit code 0: no crash, no memory warning, no lifecycle event, th
 
 | Argument | Meaning |
 |---|---|
-| `--device-preset reset|none|ipad` | see above |
+| `--graphics-profile <id\|none>`, `--unlocked-graphics` | the device graphics profile ([SETTINGS.md](SETTINGS.md)); `--device-preset none\|ipad` is the old spelling |
 | `--script <file>` | scripted run (INTEGRATION.md). New in the app: relative paths are looked up in `Documents/`, a trailing ` # comment` is ignored, `ballast <MB>` / `unballast` |
 | `-dbg` | engine flag: enables the console's `run_string`, `run_script`, `jump_to_level`, `g_god`; `gamedata/scripts/ipad_debug.script` has `dump_smarts()` and `tp(x, y, z)` for test runs |
 | `--exit-after <s>`, `--show-launcher`, `--data-root` | as on the Mac |
