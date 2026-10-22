@@ -826,6 +826,10 @@ void xr_pad_install_hooks()
 		static bool paused_by_pad = false;
 		if (!connected)
 		{
+			// Another controller may still be connected (the registry has already promoted it): only the last one counts.
+			gameinput::GameInput* pad = pInput ? pInput->Pad() : nullptr;
+			if (pad && pad->devices().AnyConnected())
+				return;
 			Msg("! game controller disconnected, reconnect it to continue");
 			if (g_pGameLevel && !Device.Paused())
 			{
