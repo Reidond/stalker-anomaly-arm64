@@ -110,6 +110,9 @@ set(xrgame_compile_options
     -Wno-explicit-specialization-storage-class   # `template <> static T f<true>()` inside a class (CWG 727)
     -Wno-inline-new-delete -Wno-implicit-exception-spec-mismatch
     -Wno-macro-redefined -Wno-builtin-macro-redefined -Wno-pragma-once-outside-header
+    # `if (!this) return;` (operator_abstract_inline.h, script_game_object_use.cpp, GameObject.cpp) and `&ref == NULL`
+    # (ai_location(), script exports) worked on MSVC; clang folds them to "false" unless null is declared valid.
+    -fno-delete-null-pointer-checks
 )
 set(xrgame_link_targets luabind LuaJIT::luajit ode xrAPI xrCDB xrNetServer xrPhysics xrXMLParser)
 
