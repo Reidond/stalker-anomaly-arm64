@@ -132,6 +132,14 @@ public:
 	ref_rt rt_dof;
 	ref_rt rt_ui_pda;
 
+	// Render scale (HW.SceneScaled()): phase_pp() leaves the finished scene in rt_SceneOut (the scene's size) and phase_upscale()
+	// brings it to the back buffer (the output's size) before anything of the UI is drawn
+	ref_rt rt_SceneOut;
+	ref_rt rt_Upscaled; // MetalFX writes here, the output's size
+	ref_shader s_upscale; // draws rt_SceneOut into the back buffer through a filter
+	ref_shader s_upscale_mfx; // draws rt_Upscaled into the back buffer
+	bool m_bSceneOutPending;
+
 	ref_rt rt_blur_h_2;
 	ref_rt rt_blur_2;
 
@@ -500,6 +508,8 @@ public:
 	void phase_combine();
 	void phase_combine_volumetric();
 	void phase_pp();
+	void phase_upscale(); // render scale: the scene is finished, bring it to the output (CRender::FinishScene)
+	void rebind_output(); // the back buffer, with the viewport of its size
 
 	virtual void set_blur(float f) { param_blur = f; }
 	virtual void set_gray(float f) { param_gray = f; }

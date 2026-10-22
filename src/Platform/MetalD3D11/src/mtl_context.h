@@ -162,6 +162,9 @@ public:
     // starts the next frame (rings advance, the CPU is throttled to `framesInFlight`).
     void present(id<CAMetalDrawable> drawable, void (^preCommit)(id<MTLCommandBuffer>));
     id<MTLBlitCommandEncoder> blitEncoder();
+    // Work encoded outside the shim (MetalFX): lands pending clears of the textures it touches, ends the open encoder and returns
+    // the command buffer. The next draw opens a new render pass that loads what is there.
+    id<MTLCommandBuffer> externalCommandBuffer(ResourceCore* reads, ResourceCore* writes);
     void flushAllClearsFor(ResourceCore* core) { flushClears(core); }
     void waitIdle();
     Device* device() const { return dev_; }

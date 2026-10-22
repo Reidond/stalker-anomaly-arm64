@@ -15,8 +15,8 @@ void CRenderTarget::phase_blur()
 	u32 C = color_rgba(0, 0, 0, 255);
 
 	//Full resolution
-	float w = float(Device.dwWidth);
-	float h = float(Device.dwHeight);
+	float w = float(HW.SceneW());
+	float h = float(HW.SceneH());
 
 	Fvector2 p0, p1;
 #if defined(USE_DX10) || defined(USE_DX11)
@@ -30,8 +30,8 @@ void CRenderTarget::phase_blur()
 	///////////////////////////////////////////////////////////////////////////////////
 	////Horizontal blur
 	///////////////////////////////////////////////////////////////////////////////////
-	w = float(Device.dwWidth) * 0.5f;
-	h = float(Device.dwHeight) * 0.5f;
+	w = float(HW.SceneW()) * 0.5f;
+	h = float(HW.SceneH()) * 0.5f;
 
 #if defined(USE_DX10) || defined(USE_DX11)
 	u_setrt(rt_blur_h_2, 0, 0, 0);
@@ -81,8 +81,8 @@ void CRenderTarget::phase_blur()
 	///////////////////////////////////////////////////////////////////////////////////
 	////Horizontal blur / Half res
 	///////////////////////////////////////////////////////////////////////////////////
-	w = float(Device.dwWidth) * 0.25f;
-	h = float(Device.dwHeight) * 0.25f;
+	w = float(HW.SceneW()) * 0.25f;
+	h = float(HW.SceneH()) * 0.25f;
 
 #if defined(USE_DX10) || defined(USE_DX11)
 	u_setrt(rt_blur_h_4, 0, 0, 0);
@@ -132,8 +132,8 @@ void CRenderTarget::phase_blur()
 	///////////////////////////////////////////////////////////////////////////////////
 	////Horizontal blur
 	///////////////////////////////////////////////////////////////////////////////////
-	w = float(Device.dwWidth) * 0.125f;
-	h = float(Device.dwHeight) * 0.125f;
+	w = float(HW.SceneW()) * 0.125f;
+	h = float(HW.SceneH()) * 0.125f;
 
 #if defined(USE_DX10) || defined(USE_DX11)
 	u_setrt(rt_blur_h_8, 0, 0, 0);
@@ -193,8 +193,8 @@ void CRenderTarget::phase_ssfx_ssr()
 
 	float d_Z = EPS_S;
 	float d_W = 1.0f;
-	float w = float(Device.dwWidth);
-	float h = float(Device.dwHeight);
+	float w = float(HW.SceneW());
+	float h = float(HW.SceneH());
 
 	float ScaleFactor = std::min(std::max(ps_ssfx_ssr.x, 1.0f), 2.0f);
 
@@ -255,7 +255,7 @@ void CRenderTarget::phase_ssfx_ssr()
 	RCache.Render(D3DPT_TRIANGLELIST, Offset, 0, 4, 0, 2);
 
 	// COPY SSR RESULT ( ACC ) ////////////////////////////////////////////
-	HW.pContext->CopyResource(rt_ssfx_ssr->pTexture->surface_get(), rt_ssfx->pTexture->surface_get());
+	HW.pContext->CopyResource(rt_ssfx_ssr->pSurface, rt_ssfx->pSurface);
 
 	// Disable/Enable Blur if the value is <= 0
 	//if (ps_ssfx_ssr.y > 0 || ps_ssfx_ssr.x > 1.0)
@@ -354,8 +354,8 @@ void CRenderTarget::phase_ssfx_volumetric_blur()
 	u32 C = color_rgba(0, 0, 0, 255);
 
 	FVF::TL* pv;
-	float w = float(Device.dwWidth);
-	float h = float(Device.dwHeight);
+	float w = float(HW.SceneW());
+	float h = float(HW.SceneH());
 
 	Fvector2 p0, p1;
 	p0.set(0.0f, 0.0f);
@@ -411,7 +411,7 @@ void CRenderTarget::phase_ssfx_volumetric_blur()
 	RCache.set_Geometry(g_combine);
 	RCache.Render(D3DPT_TRIANGLELIST, Offset, 0, 4, 0, 2);
 
-	HW.pContext->CopyResource(rt_Generic_2->pTexture->surface_get(), rt_ssfx_accum->pTexture->surface_get());
+	HW.pContext->CopyResource(rt_Generic_2->pSurface, rt_ssfx_accum->pSurface);
 };
 
 void CRenderTarget::phase_ssfx_water_blur()
@@ -422,8 +422,8 @@ void CRenderTarget::phase_ssfx_water_blur()
 
 	float d_Z = EPS_S;
 	float d_W = 1.0f;
-	float w = float(Device.dwWidth);
-	float h = float(Device.dwHeight);
+	float w = float(HW.SceneW());
+	float h = float(HW.SceneH());
 
 	Fvector2 p0, p1;
 	p0.set(0.0f, 0.0f);
@@ -474,7 +474,7 @@ void CRenderTarget::phase_ssfx_water_blur()
 	}
 	else
 	{
-		HW.pContext->CopyResource(rt_ssfx_temp2->pTexture->surface_get(), rt_ssfx_temp->pTexture->surface_get());
+		HW.pContext->CopyResource(rt_ssfx_temp2->pSurface, rt_ssfx_temp->pSurface);
 
 		u_setrt(rt_ssfx_temp, 0, 0, NULL);
 		RCache.set_CullMode(CULL_NONE);
@@ -508,8 +508,8 @@ void CRenderTarget::phase_ssfx_water_waves()
 
 	float d_Z = EPS_S;
 	float d_W = 1.0f;
-	u32 w = Device.dwWidth;
-	u32 h = Device.dwHeight;
+	u32 w = HW.SceneW();
+	u32 h = HW.SceneH();
 
 
 	Fvector2 p0, p1;
@@ -547,8 +547,8 @@ void CRenderTarget::phase_ssfx_sss()
 
 	float d_Z = EPS_S;
 	float d_W = 1.0f;
-	float w = float(Device.dwWidth);
-	float h = float(Device.dwHeight);
+	float w = float(HW.SceneW());
+	float h = float(HW.SceneH());
 
 	Fvector2 p0, p1;
 	p0.set(0.0f, 0.0f);
@@ -624,7 +624,7 @@ void CRenderTarget::phase_ssfx_sss()
 	RCache.Render(D3DPT_TRIANGLELIST, Offset, 0, 4, 0, 2);
 
 
-	HW.pContext->CopyResource(rt_ssfx_sss->pTexture->surface_get(), rt_ssfx_temp2->pTexture->surface_get());
+	HW.pContext->CopyResource(rt_ssfx_sss->pSurface, rt_ssfx_temp2->pSurface);
 
 };
 
@@ -651,8 +651,8 @@ void CRenderTarget::phase_ssfx_sss_ext(light_Package& LP)
 
 	float d_Z = EPS_S;
 	float d_W = 1.0f;
-	float w = Device.dwWidth;
-	float h = Device.dwHeight;
+	float w = HW.SceneW();
+	float h = HW.SceneH();
 
 	Fvector2 p0, p1;
 	p0.set(0.0f, 0.0f);
@@ -841,7 +841,7 @@ void CRenderTarget::phase_ssfx_sss_ext(light_Package& LP)
 	RCache.set_Geometry(g_combine);
 	RCache.Render(D3DPT_TRIANGLELIST, Offset, 0, 4, 0, 2);
 
-	HW.pContext->CopyResource(rt_ssfx_sss_ext->pTexture->surface_get(), rt_ssfx_sss_tmp->pTexture->surface_get());
+	HW.pContext->CopyResource(rt_ssfx_sss_ext->pSurface, rt_ssfx_sss_tmp->pSurface);
 
 	// SSS Ext 2 -------------------------------------------------------
 
@@ -869,7 +869,7 @@ void CRenderTarget::phase_ssfx_sss_ext(light_Package& LP)
 	RCache.set_Geometry(g_combine);
 	RCache.Render(D3DPT_TRIANGLELIST, Offset, 0, 4, 0, 2);
 
-	HW.pContext->CopyResource(rt_ssfx_sss_ext2->pTexture->surface_get(), rt_ssfx_sss_tmp->pTexture->surface_get());
+	HW.pContext->CopyResource(rt_ssfx_sss_ext2->pSurface, rt_ssfx_sss_tmp->pSurface);
 
 	// Combine ---------------------------------------------------------
 
@@ -900,8 +900,8 @@ void CRenderTarget::phase_ssfx_fog_scattering()
 	Fvector2 p0, p1;
 
 	u32 C = color_rgba(255, 255, 255, 255);
-	float w = float(Device.dwWidth);
-	float h = float(Device.dwHeight);
+	float w = float(HW.SceneW());
+	float h = float(HW.SceneH());
 
 	p0.set(0.0f, 0.0f);
 	p1.set(1.0f, 1.0f);
@@ -959,7 +959,7 @@ void CRenderTarget::phase_ssfx_fog_scattering()
 
 	RCache.Render(D3DPT_TRIANGLELIST, Offset, 0, 4, 0, 2);
 
-	HW.pContext->CopyResource(rt_Generic_0->pTexture->surface_get(), dest_rt->pTexture->surface_get());
+	HW.pContext->CopyResource(rt_Generic_0->pSurface, dest_rt->pSurface);
 
 }
 
@@ -969,8 +969,8 @@ void CRenderTarget::phase_ssfx_motion_blur()
 	Fvector2 p0, p1;
 
 	u32 C = color_rgba(255, 255, 255, 255);
-	float w = float(Device.dwWidth);
-	float h = float(Device.dwHeight);
+	float w = float(HW.SceneW());
+	float h = float(HW.SceneH());
 
 	p0.set(0.0f, 0.0f);
 	p1.set(1.0f, 1.0f);
@@ -998,7 +998,7 @@ void CRenderTarget::phase_ssfx_motion_blur()
 	RCache.set_Geometry(g_combine);
 	RCache.Render(D3DPT_TRIANGLELIST, Offset, 0, 4, 0, 2);
 
-	HW.pContext->CopyResource(rt_Generic_0->pTexture->surface_get(), dest_rt->pTexture->surface_get());
+	HW.pContext->CopyResource(rt_Generic_0->pSurface, dest_rt->pSurface);
 }
 
 #endif

@@ -612,8 +612,16 @@ static class cl_screen_res : public R_constant_setup
 {
 	virtual void setup(R_constant* C)
 	{
-		RCache.set_c(C, (float)RDEVICE.dwWidth, (float)RDEVICE.dwHeight, 1.0f / (float)RDEVICE.dwWidth,
-		             1.0f / (float)RDEVICE.dwHeight);
+		// With a render scale what is drawn into the back buffer (the UI, the upscale pass) is at the output's size and everything
+		// else at the scene's
+#if defined(USE_DX11)
+		const bool scene = HW.SceneScaled() && RCache.get_RT() != HW.pBaseRT;
+#else
+		const bool scene = false;
+#endif
+		const float w = scene ? (float)HW.SceneW() : (float)RDEVICE.dwWidth;
+		const float h = scene ? (float)HW.SceneH() : (float)RDEVICE.dwHeight;
+		RCache.set_c(C, w, h, 1.0f / w, 1.0f / h);
 	}
 } binder_screen_res;
 
@@ -1173,8 +1181,8 @@ static class ssfx_jitter : public R_constant_setup
 				{  0.0f,  1.0f }
 			};
 
-			JitterX = TAA_Offset[ Device.dwFrame % 4 ].x / Device.dwWidth;
-			JitterY = TAA_Offset[ Device.dwFrame % 4 ].y / Device.dwHeight;
+			JitterX = TAA_Offset[ Device.dwFrame % 4 ].x / HW.SceneW();
+			JitterY = TAA_Offset[ Device.dwFrame % 4 ].y / HW.SceneH();
 		}
 #endif
 

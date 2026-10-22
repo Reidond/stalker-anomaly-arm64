@@ -1,12 +1,13 @@
 #!/bin/bash
 # Runs --script scenes unattended and collects screenshots and logs under build/render-harness/<tag>/<scene>/.
 #
-#   tools/render_harness/run_scene.sh [-t tag] [-p preset] [-s WxH] [-l seconds] scene [scene ...]
+#   tools/render_harness/run_scene.sh [-t tag] [-p preset] [-x "setting value"]... [-s WxH] [-l seconds] scene [scene ...]
 #   tools/render_harness/run_scene.sh --newgame      # once: starts a new game and saves it as h_cordon (the base of the scenes)
 #
 # A scene is tools/render_harness/scenes/<scene>.script; unless it starts with `# standalone` the runner puts
 # scenes/_load.script (load h_cordon, wait for the level) in front of it. `-p preset` copies presets/<preset>.ltx over
-# the user.ltx of the run (no user.ltx at all otherwise: engine defaults). Every run has its own state root
+# the user.ltx of the run (no user.ltx at all otherwise: engine defaults); each `-x "name value"` appends a line to it (e.g.
+# -x "r__render_scale 0.67"). Every run has its own state root
 # (ANOMALY_STATE_ROOT), so it neither reads nor changes the player's settings and saves. The app runs unattended
 # (offscreen, background); see docs/ios-port/INTEGRATION.md.
 #
@@ -24,6 +25,7 @@ fi
 [ -d "$data/db" ] || { echo "game data not found (set ANOMALY_DATA_ROOT)" >&2; exit 1; }
 tag=$(date +%Y%m%d-%H%M%S)
 preset=""
+extras=()
 size=""
 limit=420
 newgame=0
@@ -32,6 +34,7 @@ while [ $# -gt 0 ]; do
     case $1 in
         -t) tag=$2; shift 2;;
         -p) preset=$2; shift 2;;
+        -x) extras+=("$2"); shift 2;;
         -s) size=$2; shift 2;;
         -l) limit=$2; shift 2;;
         --newgame) newgame=1; shift;;
@@ -40,7 +43,7 @@ while [ $# -gt 0 ]; do
     esac
 done
 [ $newgame = 1 ] && { scenes=(_newgame); size=${size:-3024x1964}; }
-[ ${#scenes[@]} -gt 0 ] || { echo "usage: $0 [-t tag] [-p preset] [-s WxH] [-l seconds] scene... | --newgame" >&2; exit 2; }
+[ ${#scenes[@]} -gt 0 ] || { echo "usage: $0 [-t tag] [-p preset] [-x "setting value"]... [-s WxH] [-l seconds] scene... | --newgame" >&2; exit 2; }
 
 out=$root/build/render-harness
 saves=$out/saves
@@ -65,6 +68,10 @@ for scene in "${scenes[@]}"; do
         cp "$saves"/h_cordon.* "$appdata/savedgames/"
     fi
     [ -n "$preset" ] && cp "$root/tools/render_harness/presets/$preset.ltx" "$appdata/user.ltx"
+    if [ ${#extras[@]} -gt 0 ]; then
+        [ -n "$preset" ] || echo "_preset Default" > "$appdata/user.ltx"
+        printf '%s\n' "${extras[@]}" >> "$appdata/user.ltx"
+    fi
 
     script=$run/run.script
     if head -1 "$src" | grep -q '^# standalone' || [ $scene = _newgame ]; then
@@ -77,12 +84,12 @@ for scene in "${scenes[@]}"; do
 
     args=(--data-root "$data" --script "$script" --exit-after "$limit" -dbg)
     [ -n "$size" ] && args+=(--size "$size")
-    # the Mac's graphics profile (docs/ios-port/SETTINGS.md) overrides user.ltx: a `-p preset` run is about the preset's own values, so it
+    # the Mac's graphics profile (docs/ios-port/SETTINGS.md) overrides user.ltx: a `-p preset` or `-x` run is about its own values, so it
     # runs without a profile. HARNESS_ARGS adds anything else, e.g. "--graphics-profile ipad" or "--unlocked-graphics".
-    [ -n "$preset" ] && args+=(--graphics-profile none)
+    if [ -n "$preset" ] || [ ${#extras[@]} -gt 0 ]; then args+=(--graphics-profile none); fi
     # shellcheck disable=SC2206
     [ -n "${HARNESS_ARGS:-}" ] && args+=(${HARNESS_ARGS})
-    echo "== $scene (tag $tag${preset:+, preset $preset})"
+    echo "== $scene (tag $tag${preset:+, preset $preset}${extras[*]:+, ${extras[*]}})"
     start=$(date +%s)
     envargs=()
     for kv in ${HARNESS_ENV:-}; do envargs+=(--env "$kv"); done # extra environment of the app, e.g. "MallocScribble=1"

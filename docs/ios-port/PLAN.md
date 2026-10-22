@@ -43,7 +43,10 @@ Gamepad: `xr_input_xinput.*` is commented out, so the engine has no working game
     MSL. This happens at runtime with an on-disk cache, so addons that replace shaders keep working.
   - Textures: Anomaly's DDS files are BC1–BC7. M-series iPads sample these natively, so no
     transcoding is needed.
-  - Upscaling: MetalFX renders at a lower internal resolution and upscales.
+  - Upscaling: the 3D scene renders at a fraction of the output size (`r__render_scale`) and is brought to the output size before the UI
+    is drawn, with spatial MetalFX or a bilinear pass; the UI stays at native resolution. Done, see RENDERER.md ("Render scale and
+    upscaling"). Temporal MetalFX and frame interpolation need motion vectors, jitter and a reactive mask that R4 does not produce;
+    the same section lists what they would take.
   - Rejected alternative: DXVK-native → MoltenVK. It has three translation layers, no geometry
     shaders or transform feedback, and needs an HLSL→DXBC compiler anyway.
 - **Scripts:** LuaJIT 2.1 on arm64. JIT stays on for the Mac build. On the iPad the interpreter

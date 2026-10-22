@@ -8,8 +8,8 @@ void CRenderTarget::phase_nightvision()
 
 	float d_Z = EPS_S;
 	float d_W = 1.0f;
-	float w = float(Device.dwWidth);
-	float h = float(Device.dwHeight);
+	float w = float(HW.SceneW());
+	float h = float(HW.SceneH());
 
 	Fvector2 p0, p1;
 #if defined(USE_DX10) || defined(USE_DX11)	
@@ -48,7 +48,7 @@ void CRenderTarget::phase_nightvision()
 	RCache.Render(D3DPT_TRIANGLELIST, Offset, 0, 4, 0, 2);
 	
 #if defined(USE_DX10) || defined(USE_DX11)
-	HW.pContext->CopyResource(rt_Generic_0->pTexture->surface_get(), dest_rt->pTexture->surface_get());
+	HW.pContext->CopyResource(rt_Generic_0->pSurface, dest_rt->pSurface);
 #endif
 };
 
@@ -62,8 +62,8 @@ void CRenderTarget::phase_fakescope()
 
 	float d_Z = EPS_S;
 	float d_W = 1.0f;
-	float w = float(Device.dwWidth);
-	float h = float(Device.dwHeight);
+	float w = float(HW.SceneW());
+	float h = float(HW.SceneH());
 
 	Fvector2 p0, p1;
 #if defined(USE_DX10) || defined(USE_DX11)	
@@ -98,7 +98,7 @@ void CRenderTarget::phase_fakescope()
 	RCache.set_Geometry(g_combine);
 	RCache.Render(D3DPT_TRIANGLELIST, Offset, 0, 4, 0, 2);
 
-	HW.pContext->CopyResource(rt_Generic_0->pTexture->surface_get(), dest_rt->pTexture->surface_get());
+	HW.pContext->CopyResource(rt_Generic_0->pSurface, dest_rt->pSurface);
 #else
 	//Main pass (we avoid write-read from the same buffer)
 	u_setrt(rt_Generic_PingPong, nullptr, nullptr, nullptr);
@@ -153,8 +153,8 @@ void CRenderTarget::phase_heatvision()
 
 	float d_Z = EPS_S;
 	float d_W = 1.0f;
-	float w = float(Device.dwWidth);
-	float h = float(Device.dwHeight);
+	float w = float(HW.SceneW());
+	float h = float(HW.SceneH());
 
 	Fvector2 p0, p1;
 #if defined(USE_DX10) || defined(USE_DX11)	
@@ -193,7 +193,7 @@ void CRenderTarget::phase_heatvision()
 	RCache.Render(D3DPT_TRIANGLELIST, Offset, 0, 4, 0, 2);
 
 #if defined(USE_DX10) || defined(USE_DX11)
-	HW.pContext->CopyResource(rt_Generic_0->pTexture->surface_get(), dest_rt->pTexture->surface_get());
+	HW.pContext->CopyResource(rt_Generic_0->pSurface, dest_rt->pSurface);
 #endif
 };
 //--DSR-- HeatVision_start
@@ -201,9 +201,9 @@ void CRenderTarget::phase_heatvision()
 #if defined(USE_DX11)	//  Redotix99: for 3D Shader Based Scopes 		(sorry for using the nightvision phase file)
 void CRenderTarget::phase_3DSSReticle()
 {
-	HW.pContext->CopyResource(rt_Generic_2->pTexture->surface_get(), RImplementation.Target->rt_Position->pTexture->surface_get());
+	HW.pContext->CopyResource(rt_Generic_2->pSurface, RImplementation.Target->rt_Position->pSurface);
 
-	HW.pContext->CopyResource(rt_Generic_temp->pTexture->surface_get(), rt_Generic_0->pTexture->surface_get());
+	HW.pContext->CopyResource(rt_Generic_temp->pSurface, rt_Generic_0->pSurface);
 
 	u_setrt(RImplementation.Target->rt_Generic_0, RImplementation.Target->rt_Position, 0, HW.pBaseZB);
 

@@ -433,6 +433,7 @@ void CMainMenu::OnRender()
 		render_reshade_effects();
 
 	Render->Render();
+	Render->FinishScene();
 
 	if (!OnRenderPPUI_query())
 	{

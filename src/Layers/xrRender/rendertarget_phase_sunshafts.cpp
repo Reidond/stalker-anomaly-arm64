@@ -15,8 +15,8 @@ void CRenderTarget::phase_sunshafts()
 		Fvector2 uv0;
 	};
 
-	float _w = float(Device.dwWidth);
-	float _h = float(Device.dwHeight);
+	float _w = float(HW.SceneW());
+	float _h = float(HW.SceneH());
 	//float	ddw = 1.f / _w;
 	//float	ddh = 1.f / _h;
 	p0.set(.5f / _w, .5f / _h);
@@ -200,6 +200,6 @@ void CRenderTarget::phase_sunshafts()
 
 	RCache.set_Stencil(FALSE);
 #if defined(USE_DX10) || defined(USE_DX11)
-	HW.pContext->CopyResource(rt_Generic_0->pTexture->surface_get(), rt_Generic->pTexture->surface_get());
+	HW.pContext->CopyResource(rt_Generic_0->pSurface, rt_Generic->pSurface);
 #endif
 };

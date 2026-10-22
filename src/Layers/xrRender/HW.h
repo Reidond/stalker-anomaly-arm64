@@ -73,7 +73,8 @@ public:
 	ID3D11DeviceContext1*   pContext;	//	combine with DX9 pDevice via typedef
 	IDXGISwapChain1*        m_pSwapChain;
 	ID3D11RenderTargetView*	pBaseRT;	//	combine with DX9 pBaseRT via typedef
-	ID3D11DepthStencilView*	pBaseZB;
+	ID3D11DepthStencilView*	pBaseZB;	//	depth of the 3D scene: sized SceneW() x SceneH()
+	ID3D11DepthStencilView*	pUIZB;		//	depth for what draws into pBaseRT (UI, upscale pass): none (null) with a render scale, == pBaseZB without
 	ID3DUserDefinedAnnotation* pAnnotation;
 
 	CHWCaps					Caps;
@@ -85,6 +86,17 @@ public:
 	bool							m_bUsePerfhud;
 	D3D_FEATURE_LEVEL				FeatureLevel;
 	bool 							m_SupportsVRR; // whether we can use DXGI_PRESENT_ALLOW_TEARING etc.
+
+	// Render scale: the 3D scene (G-buffer, lighting, post-processing, pBaseZB) is rendered at SceneW() x SceneH(); the
+	// swap chain, the UI and everything that targets pBaseRT stay at the swap chain's size (Device.dwWidth/dwHeight).
+	// Without render scale the two are equal. Recomputed whenever the views are (UpdateViews).
+	u32 m_SceneWidth;
+	u32 m_SceneHeight;
+	bool m_SceneScaled;
+	IC u32 SceneW() const { return m_SceneWidth; }
+	IC u32 SceneH() const { return m_SceneHeight; }
+	IC bool SceneScaled() const { return m_SceneScaled; }
+	void UpdateSceneSize(u32 outWidth, u32 outHeight);
 #elif defined(USE_DX10)
 public:
 	IDXGIAdapter*			m_pAdapter;	//	pD3D equivalent
@@ -104,6 +116,11 @@ public:
 	HWND					m_hWnd;
 	bool					m_bUsePerfhud;
 	D3D_FEATURE_LEVEL		FeatureLevel;
+
+	// No render scale in this renderer: the scene is the swap chain's size (see the DX11 variant)
+	IC u32 SceneW() const { return m_ChainDesc.BufferDesc.Width; }
+	IC u32 SceneH() const { return m_ChainDesc.BufferDesc.Height; }
+	IC bool SceneScaled() const { return false; }
 #else
 private:
 	HINSTANCE hD3D;
@@ -121,6 +138,11 @@ public:
 	UINT DevAdapter;
 	D3DDEVTYPE DevT;
 	D3DPRESENT_PARAMETERS DevPP;
+
+	// No render scale in this renderer: the scene is the back buffer's size (see the DX11 variant)
+	IC u32 SceneW() const { return DevPP.BackBufferWidth; }
+	IC u32 SceneH() const { return DevPP.BackBufferHeight; }
+	IC bool SceneScaled() const { return false; }
 #endif	//	USE_DX10
 
 #ifndef _MAYA_EXPORT
@@ -145,5 +167,12 @@ private:
 };
 
 extern ECORE_API CHW HW;
+
+// The depth buffer that goes with pBaseRT (the swap chain): different from pBaseZB (the scene's) only with a render scale
+#if defined(USE_DX11)
+#define HW_UIZB HW.pUIZB
+#else
+#define HW_UIZB HW.pBaseZB
+#endif
 
 #endif // !defined(AFX_HW_H__0E25CF4A_FFEC_11D3_B4E3_4854E82A090D__INCLUDED_)

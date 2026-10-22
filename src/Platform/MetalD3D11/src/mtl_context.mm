@@ -273,6 +273,23 @@ id<MTLBlitCommandEncoder> Context::blit(bool)
 
 id<MTLBlitCommandEncoder> Context::blitEncoder() { return blit(true); }
 
+id<MTLCommandBuffer> Context::externalCommandBuffer(ResourceCore* reads, ResourceCore* writes)
+{
+    if (reads)
+        flushClears(reads);
+    if (writes)
+        flushClears(writes);
+    if (pass_.active)
+        ++stats.passBreaksByCopy;
+    endEncoder();
+    ensureCommandBuffer();
+    if (reads)
+        reads->lastUseSerial = serial_;
+    if (writes)
+        writes->lastUseSerial = writes->lastWriteSerial = serial_;
+    return cb_;
+}
+
 id<MTLComputeCommandEncoder> Context::computeEncoder()
 {
     if (enc_ == Enc::Compute)

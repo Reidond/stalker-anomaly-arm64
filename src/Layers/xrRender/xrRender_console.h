@@ -69,6 +69,17 @@ extern ECORE_API u32 ps_r3_minmax_sm; //	=	0;
 extern ECORE_API xr_token qminmax_sm_token[];
 
 extern ENGINE_API int ps_r__Supersample;
+
+// Render scale (r__render_scale, 0.5 to 1.0) and how the scene is brought to the output size (r__upscaler)
+enum
+{
+	UPSCALER_BILINEAR = 0,
+	UPSCALER_METALFX = 1,
+};
+extern ECORE_API float ps_r__render_scale;
+extern ECORE_API u32 ps_r__upscaler;
+extern ECORE_API float ps_r__upscale_sharpness; // contrast adaptive sharpening of the last pass, 0 (off) to 1
+extern ECORE_API xr_token upscaler_token[];
 extern ECORE_API int ps_r__LightSleepFrames;
 
 extern ECORE_API float ps_r__Detail_l_ambient;
