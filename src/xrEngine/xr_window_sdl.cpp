@@ -204,6 +204,9 @@ namespace xr_window
 {
 void SetBackground(bool background) { g_background = background; }
 bool IsBackground() { return g_background; }
+static bool g_offscreen = false;
+void SetOffscreen(bool offscreen) { g_offscreen = offscreen; }
+bool IsOffscreen() { return g_offscreen; }
 
 bool Create(const char* title, int width, int height)
 {
@@ -263,6 +266,16 @@ void SetMode(Mode mode, unsigned render_width, unsigned render_height, unsigned 
 	if (!w)
 		return;
 
+	if (g_offscreen)
+	{
+		// only the size matters (render size = drawable size); the window stays hidden and unfocused
+		const float d = display_density(resolve_display(display_id));
+		SDL_SetWindowSize(w, render_width ? int(std::lround(render_width / d)) : 1280,
+		                  render_height ? int(std::lround(render_height / d)) : 720);
+		g_state.mode = Windowed;
+		return;
+	}
+
 	if (kFixedFullScreen)
 	{
 		g_state.mode = Borderless;
@@ -308,7 +321,7 @@ Mode CurrentMode() { return g_state.mode; }
 
 void* MetalLayer()
 {
-	if (!g_state.window)
+	if (!g_state.window || g_offscreen)
 		return nullptr;
 	if (!g_state.layer)
 	{

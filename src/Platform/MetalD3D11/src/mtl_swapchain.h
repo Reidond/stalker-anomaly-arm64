@@ -34,14 +34,17 @@ public:
     MTLPixelFormat layerFormat() const { return pixelFormat_; }
 
     // Capture support (tools/tests)
-    void requestCapture() { captureRequested_ = true; }
+    void requestCapture();
     bool waitCapture(CaptureResult* out);
+    bool pollCapture(CaptureResult* out);
 
 private:
     Device* dev_;
     SwapChainDesc cfg_;
     CAMetalLayer* layer_ = nil;
     id<CAMetalDrawable> drawable_ = nil;
+    id<MTLTexture> offscreen_ = nil; // SwapChainDesc::offscreen: the back buffer when there is no layer
+    id<MTLTexture> makeOffscreen(UINT w, UINT h);
     Texture2D* backBuffer_ = nullptr;
     DXGI_SWAP_CHAIN_DESC1 desc1_ = {};
     MTLPixelFormat pixelFormat_ = MTLPixelFormatBGRA8Unorm;

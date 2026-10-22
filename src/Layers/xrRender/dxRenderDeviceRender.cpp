@@ -450,6 +450,10 @@ void dxRenderDeviceRender::Clear()
 }
 
 void DoAsyncScreenshot();
+#if defined(XR_PLATFORM_APPLE)
+void AppleScreenshotBeforePresent();
+void AppleScreenshotAfterPresent();
+#endif
 
 void dxRenderDeviceRender::End()
 {
@@ -461,6 +465,9 @@ void dxRenderDeviceRender::End()
 	Memory.dbg_check();
 
 	DoAsyncScreenshot();
+#if defined(XR_PLATFORM_APPLE)
+	AppleScreenshotBeforePresent();
+#endif
 
 #if defined(USE_DX10) || defined(USE_DX11)
     UINT present_flags = 0;
@@ -478,6 +485,9 @@ void dxRenderDeviceRender::End()
 	if (!Device.m_SecondViewport.IsSVPFrame() && !Device.m_SecondViewport.isCamReady) {
 		HW.m_pSwapChain->Present(present_interval, present_flags);
 	}
+#if defined(XR_PLATFORM_APPLE)
+	AppleScreenshotAfterPresent();
+#endif
 #else //!USE_DX10 || USE_DX11
 	CHK_DX(HW.pDevice->EndScene());
 
