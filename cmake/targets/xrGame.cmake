@@ -111,7 +111,8 @@ set(xrgame_compile_options
     -Wno-inline-new-delete -Wno-implicit-exception-spec-mismatch
     -Wno-macro-redefined -Wno-builtin-macro-redefined -Wno-pragma-once-outside-header
 )
-set(xrgame_link_targets luabind LuaJIT::luajit ode xrAPI xrCDB xrNetServer xrPhysics xrXMLParser)
+# gameinput: the controller layer's headers (xr_level_controller.cpp feeds its feedback model)
+set(xrgame_link_targets luabind LuaJIT::luajit ode xrAPI xrCDB xrNetServer xrPhysics xrXMLParser gameinput)
 
 # One OBJECT library per shard, configured like anomaly_add_module() configures a module.
 set(xrgame_objects "")
