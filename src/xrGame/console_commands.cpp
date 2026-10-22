@@ -408,6 +408,19 @@ static void full_memory_stats()
 #endif // DEBUG
 }
 
+// Full Lua garbage collection (twice, like the level load does). The Apple shell runs it when the OS warns about memory.
+class CCC_LuaCollectGarbage : public IConsole_Command
+{
+public:
+	CCC_LuaCollectGarbage(LPCSTR N) : IConsole_Command(N) { bEmptyArgsHandled = true; }
+	virtual void Execute(LPCSTR)
+	{
+		const size_t before = lua_gc(ai().script_engine().lua(), LUA_GCCOUNT, 0);
+		ai().script_engine().collect_all_garbage();
+		Msg("* [Lua]: garbage collected: %u K -> %u K", (u32)before, (u32)lua_gc(ai().script_engine().lua(), LUA_GCCOUNT, 0));
+	}
+};
+
 class CCC_MemStats : public IConsole_Command
 {
 public:
@@ -2617,6 +2630,8 @@ void CCC_RegisterCommands()
 	CMD4(CCC_Float, "ai_smart_factor", &g_smart_cover_factor, 0.f, 1000000.f);
 	CMD3(CCC_Mask, "ai_dbg_lua", &psAI_Flags, aiLua);
 #endif // MASTER_GOLD
+
+	CMD1(CCC_LuaCollectGarbage, "lua_collect_garbage");
 
     // Moved lua_gcstep outside of DEBUG to allow for easier experimentation.
 	CMD4(CCC_Integer, "lua_gcstep", &psLUA_GCSTEP, 1, 1000);
