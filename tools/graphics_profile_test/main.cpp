@@ -179,8 +179,30 @@ void TestUpscalerEntries()
     const std::vector<G::Setting> with = G::Settings(WithUpscaler());
     Check(Value(without, "vid_mode") && !strcmp(Value(without, "vid_mode"), "1152x864"), "without MetalFX the render size is vid_mode (Quality 1152x864)");
     Check(!Value(without, "r__render_scale"), "without MetalFX no render scale is set");
-    Check(Value(with, "r__render_scale") && !strcmp(Value(with, "r__render_scale"), "0.5"), "with MetalFX the iPad Quality scale is the floor, 0.5");
-    Check(Value(with, "vid_mode") && !strcmp(Value(with, "vid_mode"), "2304x1728"), "with MetalFX the output is twice the render size (scale 0.5, the floor)");
+    Check(Value(with, "r__render_scale") && !strcmp(Value(with, "r__render_scale"), "0.42"), "with a render scale the iPad Quality scale is 0.42");
+    Check(Value(with, "r__upscaler") && !strcmp(Value(with, "r__upscaler"), "bilinear") && Value(with, "r__upscale_sharpness"), "the iPad uses bilinear with sharpening");
+    Check(Value(with, "vid_mode") && !strcmp(Value(with, "vid_mode"), "2732x2048"), "with a render scale the output is the panel's native size");
+}
+
+struct ClampProbe : G::CommandProbe
+{
+    float lo;
+    explicit ClampProbe(float lo_) : lo(lo_) {}
+    bool HasCommand(const char* name) const override { return !strcmp(name, "r__render_scale") || !strcmp(name, "r__upscaler") || !strcmp(name, "r__upscale_sharpness"); }
+    bool Bounds(const char* name, float& l, float& h) const override { if (strcmp(name, "r__render_scale")) return false; l = lo; h = 1.0f; return true; }
+};
+
+void TestScaleClamp()
+{
+    G::Options options;
+    G::Init(Ipad(8, "Apple M3"), options);
+    const std::vector<G::Setting> floor05 = G::Settings(ClampProbe(0.5f));
+    const std::vector<G::Setting> floor035 = G::Settings(ClampProbe(0.35f));
+    Check(Value(floor05, "r__render_scale") && !strcmp(Value(floor05, "r__render_scale"), "0.5"), "a render scale under the renderer's minimum is clamped to it (0.42 -> 0.5)");
+    Check(Value(floor035, "r__render_scale") && !strcmp(Value(floor035, "r__render_scale"), "0.42"), "with the minimum lowered the profile's own scale is used");
+    G::SetMode(G::Mode::Performance);
+    Check(Value(G::Settings(ClampProbe(0.35f)), "r__render_scale") && !strcmp(Value(G::Settings(ClampProbe(0.35f)), "r__render_scale"), "0.375"), "Performance scale 0.375");
+    G::SetMode(G::Mode::Quality);
 }
 
 void Dump()
@@ -212,6 +234,7 @@ int main(int argc, char** argv)
     TestLocks();
     TestModesAndCaps();
     TestUpscalerEntries();
+    TestScaleClamp();
     if (g_failures)
     {
         printf("%d check(s) failed\n", g_failures);

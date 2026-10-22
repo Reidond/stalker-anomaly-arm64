@@ -108,7 +108,9 @@ const std::vector<Entry> kApple = {
 const std::vector<Entry> kIpad = {
     {"rs_screenmode", "borderless"}, // the view covers the screen; the size comes from vid_mode
     {"vid_mode", "1366x1024", When::WithoutUpscaler},
-    {"vid_mode", "native", When::WithUpscaler},
+    {"vid_mode", "native", When::WithUpscaler}, // the output is the panel: a sharp UI, the scene scaled by r__render_scale
+    {"r__upscaler", "bilinear", When::WithUpscaler}, // MetalFX costs 1.3 to 5 ms of GPU on the iPad (RENDERER.md): not in the shared set
+    {"r__upscale_sharpness", "0.25", When::WithUpscaler}, // no measurable cost, near MetalFX's contrast
     {"snd_cache_size", "32"},
     {"r__tf_aniso", "4"},
     // decal and particle budget: the stock Low preset's wallmark life, shorter decal ranges, footstep particles nearer
@@ -121,6 +123,8 @@ const std::vector<Entry> kIpad = {
 const std::vector<Entry> kMac = {
     // The window and the display mode are the player's: a desktop OS has windows. Everything that costs GPU time is locked.
     {"r__tf_aniso", "8"},
+    {"r__upscaler", "metalfx", When::WithUpscaler}, // free on the Mac (6.5 against 6.9 ms at 0.67, RENDERER.md)
+    {"r__upscale_sharpness", "0", When::WithUpscaler},
     // decal and particle budget: the stock Default preset's
     {"r__wallmark_ttl", "50"},
     {"g_wallmark_range_static", "100"},
@@ -137,29 +141,28 @@ const std::vector<ProfileDef> kProfiles = {
     {"ipad-8gb", "iPad, 8 GB (iPad Air M3 measured)", "ipad", true,
         "Measured on the iPad Air 13-inch (M3, 8 GB, 60 Hz). Also the target of other 8 GB iPads with an M-series chip.", "-smap1536",
         {{"texture_lod", "1"}, {"r3_dynamic_wet_surfaces", "off"}, {"r2_ssao_mode", "hdao"}, {"r__geometry_lod", "1.0"}},
-        // Quality: the first preset's settings at 1152x864 (1.0 Mpixel, 2.4x upscaled to the panel). At 1280x960 the rain scene measured 54.6 fps
-        // (frame time about 15 ms per Mpixel), so 1.0 Mpixel leaves 10 % of the frame. With MetalFX the render size is the output size
-        // times r__render_scale, whose floor is 0.5: the same render size from a smaller output
+        // Quality: the first preset's settings at about 1.0 Mpixel of scene (1152x864, 2.4x upscaled to the panel). At 1280x960 the rain scene
+        // measured 54.6 fps (about 15 ms of frame per Mpixel), so 1.0 Mpixel leaves 10 % of the frame. Scale 0.42 of the native 2732x2048 is
+        // 1147x860 (clamped to the lowest scale this build accepts: 0.5 until the renderer's minimum is lowered)
         {{"r2_sun_quality", "st_opt_low"}, {"r2_ls_squality", "0.5"}, {"r2_ssao", "st_opt_low"}, {"r__detail_density", "0.4"},
          {"r__detail_radius", "35"}, {"rs_vis_distance", "0.8"}, {"vid_mode", "1152x864", When::WithoutUpscaler},
-         {"vid_mode", "2304x1728", When::WithUpscaler}, {"r__render_scale", "0.5", When::WithUpscaler}, {"r__upscaler", "metalfx", When::WithUpscaler}},
-        // Performance: 1024x768 (0.79 Mpixel), no AO, shorter distances: 25 % of the frame to spare, for a warm iPad
+         {"r__render_scale", "0.42", When::WithUpscaler}},
+        // Performance: 1024x768 of scene (0.79 Mpixel, scale 0.375), no AO, shorter distances: 25 % of the frame to spare, for a warm iPad
         {{"r2_sun_quality", "st_opt_low"}, {"r2_ls_squality", "0.5"}, {"r2_ssao", "st_opt_off"}, {"r__detail_density", "0.4"},
          {"r__detail_radius", "30"}, {"rs_vis_distance", "0.75"}, {"r2_sun_far", "80"}, {"r__wallmark_ttl", "20"}, {"ai_use_torch_dynamic_lights", "off"},
-         {"vid_mode", "1024x768", When::WithoutUpscaler}, {"vid_mode", "2048x1536", When::WithUpscaler}, {"r__render_scale", "0.5", When::WithUpscaler},
-         {"r__upscaler", "metalfx", When::WithUpscaler}},
+         {"vid_mode", "1024x768", When::WithoutUpscaler}, {"r__render_scale", "0.375", When::WithUpscaler}},
         60, 60},
     {"ipad-16gb", "iPad, 12 and 16 GB (extrapolated)", "ipad-8gb", false,
         "Not measured. The 8 GB profile with the memory headroom spent on textures, and a GPU a third faster (M4 Pro iPads) spent on render size.", "-smap2048",
         {{"texture_lod", "0"}},
-        {{"vid_mode", "1280x960", When::WithoutUpscaler}, {"vid_mode", "2560x1920", When::WithUpscaler}},
-        {{"vid_mode", "1152x864", When::WithoutUpscaler}, {"vid_mode", "2304x1728", When::WithUpscaler}},
+        {{"vid_mode", "1280x960", When::WithoutUpscaler}, {"r__render_scale", "0.47", When::WithUpscaler}},
+        {{"vid_mode", "1152x864", When::WithoutUpscaler}, {"r__render_scale", "0.42", When::WithUpscaler}},
         60, 60},
     {"ipad-6gb", "iPad, 6 GB or less, or an A-series chip (extrapolated)", "ipad-8gb", false,
         "Not measured. One step down from the 8 GB profile in textures, render size and distances.", "-smap1024",
         {{"texture_lod", "2"}},
-        {{"vid_mode", "1024x768", When::WithoutUpscaler}, {"vid_mode", "2048x1536", When::WithUpscaler}, {"r__detail_radius", "25"}, {"rs_vis_distance", "0.7"}},
-        {{"vid_mode", "896x672", When::WithoutUpscaler}, {"vid_mode", "1792x1344", When::WithUpscaler}, {"r2_ssao", "st_opt_off"},
+        {{"vid_mode", "1024x768", When::WithoutUpscaler}, {"r__render_scale", "0.375", When::WithUpscaler}, {"r__detail_radius", "25"}, {"rs_vis_distance", "0.7"}},
+        {{"vid_mode", "896x672", When::WithoutUpscaler}, {"r__render_scale", "0.33", When::WithUpscaler}, {"r2_ssao", "st_opt_off"},
          {"r__detail_radius", "20"}, {"rs_vis_distance", "0.65"}},
         60, 60},
 
@@ -169,15 +172,15 @@ const std::vector<ProfileDef> kProfiles = {
         "Measured on a MacBook Pro 14-inch (M2 Pro, 19 GPU cores, 32 GB, 120 Hz).", "-smap2048",
         {{"texture_lod", "1"}, {"r2_ssao_mode", "default"}, {"r__geometry_lod", "1.0"}, {"r__detail_density", "0.5"}},
         {{"r2_sun_quality", "st_opt_medium"}, {"r2_ls_squality", "1.0"}, {"r3_dynamic_wet_surfaces", "on"}, {"r2_ssao", "st_opt_medium"},
-         {"r__detail_radius", "100"}, {"rs_vis_distance", "1.0"}, {"r__render_scale", "0.7", When::WithUpscaler}, {"r__upscaler", "metalfx", When::WithUpscaler}},
+         {"r__detail_radius", "100"}, {"rs_vis_distance", "1.0"}, {"r__render_scale", "1.0", When::WithUpscaler}},
         {{"r2_sun_quality", "st_opt_low"}, {"r2_ls_squality", "0.7"}, {"r3_dynamic_wet_surfaces", "off"}, {"r2_ssao", "st_opt_low"},
-         {"r__detail_radius", "75"}, {"rs_vis_distance", "0.9"}, {"r__render_scale", "0.5", When::WithUpscaler}, {"r__upscaler", "metalfx", When::WithUpscaler}},
+         {"r__detail_radius", "75"}, {"rs_vis_distance", "0.9"}, {"r__render_scale", "0.7", When::WithUpscaler}},
         60, 120},
     {"mac-base", "Mac, M-series base class (extrapolated)", "mac-pro", false,
         "Not measured. One tier below the measured Pro class (about half the GPU cores): its Quality is the Pro's Performance.", "-smap1536",
         {},
         {{"r2_sun_quality", "st_opt_low"}, {"r2_ls_squality", "0.7"}, {"r3_dynamic_wet_surfaces", "off"}, {"r2_ssao", "st_opt_low"},
-         {"r__detail_radius", "75"}, {"rs_vis_distance", "0.9"}, {"r__render_scale", "0.6", When::WithUpscaler}},
+         {"r__detail_radius", "75"}, {"rs_vis_distance", "0.9"}, {"r__render_scale", "0.7", When::WithUpscaler}},
         {{"r2_sun_quality", "st_opt_low"}, {"r2_ls_squality", "0.5"}, {"r3_dynamic_wet_surfaces", "off"}, {"r2_ssao", "st_opt_off"},
          {"r__detail_radius", "50"}, {"rs_vis_distance", "0.8"}, {"r__render_scale", "0.5", When::WithUpscaler}},
         60, 60},
@@ -187,13 +190,13 @@ const std::vector<ProfileDef> kProfiles = {
         "Not measured. One tier above the measured Pro class: its Performance is the Pro's Quality.", "-smap2048",
         {{"texture_lod", "0"}},
         {{"r2_sun_quality", "st_opt_high"}, {"r2_ssao", "st_opt_high"}, {"r__detail_density", "0.45"}, {"r__detail_radius", "125"},
-         {"rs_vis_distance", "1.2"}, {"r__render_scale", "0.8", When::WithUpscaler}},
+         {"rs_vis_distance", "1.2"}, {"r__render_scale", "1.0", When::WithUpscaler}},
         {{"r2_sun_quality", "st_opt_medium"}, {"r2_ls_squality", "1.0"}, {"r3_dynamic_wet_surfaces", "on"}, {"r2_ssao", "st_opt_medium"},
-         {"r__detail_density", "0.5"}, {"r__detail_radius", "100"}, {"rs_vis_distance", "1.0"}, {"r__render_scale", "0.6", When::WithUpscaler}},
+         {"r__detail_density", "0.5"}, {"r__detail_radius", "100"}, {"rs_vis_distance", "1.0"}, {"r__render_scale", "0.8", When::WithUpscaler}},
         60, 120},
     {"mac-ultra", "Mac, M-series Ultra class (extrapolated)", "mac-max", false,
         "Not measured. As the Max class; the extra GPU cores go to the render scale, not to settings the renderer cannot use.", "-smap2048",
-        {}, {{"r__render_scale", "0.9", When::WithUpscaler}}, {{"r__render_scale", "0.7", When::WithUpscaler}}, 60, 120},
+        {}, {{"r__render_scale", "1.0", When::WithUpscaler}}, {{"r__render_scale", "0.9", When::WithUpscaler}}, 60, 120},
 };
 
 // ---- state ----------------------------------------------------------------------------------------------------------------------
@@ -477,7 +480,18 @@ std::vector<Setting> Settings(const CommandProbe& probe)
     const ProfileDef* leaf = Find(s.id);
     if (!leaf)
         return {};
-    return Resolve(leaf, s.mode, &probe, s.hw, false);
+    std::vector<Setting> out = Resolve(leaf, s.mode, &probe, s.hw, false);
+    for (Setting& setting : out)
+    {
+        float lo = 0, hi = 0;
+        if (setting.key == "r__render_scale" && probe.Bounds("r__render_scale", lo, hi))
+        {
+            char text[32];
+            snprintf(text, sizeof(text), "%.3g", std::min(hi, std::max(lo, float(atof(setting.value.c_str())))));
+            setting.value = text;
+        }
+    }
+    return out;
 }
 
 std::vector<Setting> UserDefaults()
@@ -514,16 +528,12 @@ bool IsLocked(const char* command)
     return false;
 }
 
-std::string ProfileValue(const char* command)
+std::string ProfileValue(const char* command, const CommandProbe& probe)
 {
     if (!LocksActive() || !command)
         return {};
-    const ProfileDef* leaf = Find(S().id);
-    if (!leaf)
-        return {};
-    NoProbe probe;
     const std::string key = Lower(command);
-    for (const Setting& e : Resolve(leaf, S().mode, &probe, S().hw, false))
+    for (const Setting& e : Settings(probe))
         if (e.key == key)
             return e.value;
     return {};

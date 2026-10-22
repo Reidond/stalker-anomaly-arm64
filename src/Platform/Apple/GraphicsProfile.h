@@ -83,6 +83,9 @@ struct CommandProbe
 {
     virtual ~CommandProbe() = default;
     virtual bool HasCommand(const char* name) const = 0;
+    // The range of a numeric command; false when it has none. A value outside it is a syntax error in the console, not a clamp, so
+    // the profile clamps `r__render_scale` to what this build accepts (its range widens when the renderer's minimum is lowered).
+    virtual bool Bounds(const char*, float&, float&) const { return false; }
 };
 std::vector<Setting> Settings(const CommandProbe& probe);
 
@@ -102,7 +105,7 @@ bool HasProfileValue(const char* command);
 // A prefix-locked setting (ssfx_*) and a setting with a profile value are not among them.
 bool MayTakeGameDefault(const char* command);
 // The value the profile gives `command` in the current mode, "" when it gives none (the upscaler entries are not considered).
-std::string ProfileValue(const char* command);
+std::string ProfileValue(const char* command, const CommandProbe& probe);
 // Every command name IsLocked() knows by name, sorted (the tests and the documentation list them).
 std::vector<std::string> LockedCommands();
 std::vector<std::string> LockedPrefixes();

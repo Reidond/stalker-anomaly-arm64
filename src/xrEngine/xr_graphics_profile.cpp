@@ -39,6 +39,17 @@ struct Bypass
 struct EngineProbe : Gfx::CommandProbe
 {
     bool HasCommand(const char* name) const override { return Console && Console->GetCommand(name) != nullptr; }
+    bool Bounds(const char* name, float& lo, float& hi) const override
+    {
+        if (!Console)
+            return false;
+        if (CCC_Float* command = smart_cast<CCC_Float*>(Console->GetCommand(name)))
+        {
+            command->GetBounds(lo, hi);
+            return true;
+        }
+        return false;
+    }
 };
 
 std::string LowerName(const char* s)
@@ -274,7 +285,7 @@ void EndUserConfig()
     for (const auto& line : g_user_lines)
     {
         const std::string setting = line.first + " " + line.second;
-        if (!SameValue(line.second, Gfx::ProfileValue(line.first.c_str())) && std::find(differing.begin(), differing.end(), setting) == differing.end())
+        if (!SameValue(line.second, Gfx::ProfileValue(line.first.c_str(), EngineProbe())) && std::find(differing.begin(), differing.end(), setting) == differing.end())
             differing.push_back(setting);
     }
     if (!g_stale_in_user.empty())
