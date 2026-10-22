@@ -300,6 +300,7 @@ bool Init(const InitParams& params)
         Log("appdata: %s", p.appdata.c_str());
         Log("caches: %s", p.caches.c_str());
         Log("shell dir: %s", p.shell_dir.c_str());
+        Log("HOME: %s", getenv("HOME") ? getenv("HOME") : "(unset)");
         if (s.previous_session_unexpected)
             Log("previous session ended unexpectedly (crash, jetsam or force quit)");
         if (s.previous_crash_log)
@@ -310,6 +311,24 @@ bool Init(const InitParams& params)
             device.cpu_cores, FormatBytes(device.physical_memory).c_str(),
             device.has_memory_budget ? FormatBytes(device.available_memory).c_str() : "n/a",
             FormatBytes(device.storage_free_raw).c_str(), FormatBytes(device.storage_total).c_str());
+
+        {
+            // the iPad graphics preset: merged into user.ltx before the engine reads it
+            std::string preset;
+#if TARGET_OS_IOS
+            preset = "ipad";
+#endif
+            bool reset = false;
+            for (int i = 1; params.argv && i + 1 < params.argc; ++i)
+            {
+                if (strcmp(params.argv[i], "--device-preset") != 0)
+                    continue;
+                const std::string mode = params.argv[i + 1];
+                reset = mode == "reset";
+                preset = mode == "none" ? "" : "ipad";
+            }
+            Internal::ApplyDevicePreset(preset, reset, p.appdata, p.app_support);
+        }
 
         // The generated fsgame.ltx mounts the archive only when this run packed (or found current) the one for the overlay it
         // uses: an archive left in the cache by another build or a failed run must not be mounted.
@@ -352,6 +371,11 @@ void Shutdown()
 bool IsInitialized()
 {
     return State().initialized;
+}
+
+const std::string& DevicePresetCommandLine()
+{
+    return Internal::DevicePresetCommandLine();
 }
 
 const Paths& GetPaths()

@@ -63,6 +63,10 @@ struct App
     int exit_code = 0;
     Uint64 fps_window_ns = 0; // start of the current frame-rate window
     unsigned fps_frames = 0;
+    Uint64 frame_cpu_ns = 0;     // time spent inside xr_engine::Frame() in the current window
+    Uint64 frame_cpu_max_ns = 0;
+    Uint64 footprint_peak = 0;   // largest process footprint sampled in the current window
+    Uint64 footprint_sample_ns = 0;
     Uint64 quit_requested_ns = 0; // set when the app asked the engine to quit; it disconnects and unloads the level first
 
     // where the scripted pointer is, window points: motion events carry the position and the delta
@@ -93,6 +97,13 @@ bool LoadScript(App& app, const char* path)
         std::getline(words, step.args);
         const size_t arg_start = step.args.find_first_not_of(" \t");
         step.args = arg_start == std::string::npos ? "" : step.args.substr(arg_start);
+        // a trailing ` # comment` (not on console/log lines, whose text may hold a '#')
+        if (step.command != "console" && step.command != "log")
+        {
+            const size_t hash = step.args.find('#');
+            if (hash != std::string::npos && (hash == 0 || step.args[hash - 1] == ' ' || step.args[hash - 1] == '\t'))
+                step.args.resize(hash);
+        }
         while (!step.args.empty() && (step.args.back() == '\r' || step.args.back() == ' '))
             step.args.pop_back();
         app.script.push_back(step);
@@ -314,9 +325,6 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char** argv)
         else if (!strcmp(argv[i], "--script") && i + 1 < argc)
             script_path = argv[++i];
     }
-    if (script_path && !LoadScript(*app, script_path))
-        return SDL_APP_FAILURE;
-
     if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS | SDL_INIT_GAMEPAD))
     {
         fprintf(stderr, "anomaly: SDL_Init failed: %s\n", SDL_GetError());
@@ -332,6 +340,15 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char** argv)
         return SDL_APP_FAILURE;
     }
     const AppleShell::Paths& paths = AppleShell::GetPaths();
+    // a relative script path is looked up next to the shell's files too (iPad: Documents/, where devicectl copies it)
+    if (script_path)
+    {
+        std::string resolved = script_path;
+        if (resolved[0] != '/' && !std::ifstream(resolved))
+            resolved = paths.shell_dir + "/" + script_path;
+        if (!LoadScript(*app, resolved.c_str()))
+            return SDL_APP_FAILURE;
+    }
     AppleShell::Log("anomaly: data root %s", paths.data_root.c_str());
     AppleShell::Log("anomaly: appdata   %s", paths.appdata.c_str());
 
@@ -346,19 +363,33 @@ SDL_AppResult SDL_AppIterate(void* appstate)
     auto* app = static_cast<App*>(appstate);
     if (app->engine_up)
     {
+        const Uint64 frame_start_ns = SDL_GetTicksNS();
         if (!xr_engine::Frame())
             return SDL_APP_SUCCESS;
-        // one line in the shell log every 10 s: frames per second of the main loop
+        // one line in the shell log every 10 s: frames per second of the main loop, the CPU time of a frame (time inside
+        // Frame(): the rest of the frame interval is the wait for the GPU and the display), and the memory the OS charges us
         ++app->fps_frames;
         const Uint64 now_ns = SDL_GetTicksNS();
+        app->frame_cpu_ns += now_ns - frame_start_ns;
+        app->frame_cpu_max_ns = std::max<Uint64>(app->frame_cpu_max_ns, now_ns - frame_start_ns);
+        if (now_ns - app->footprint_sample_ns >= 100000000ull)
+        {
+            app->footprint_sample_ns = now_ns;
+            app->footprint_peak = std::max<Uint64>(app->footprint_peak, AppleShell::ProcessFootprint());
+        }
         if (!app->fps_window_ns)
             app->fps_window_ns = now_ns;
         else if (now_ns - app->fps_window_ns >= 10000000000ull)
         {
-            AppleShell::Log("anomaly: %.1f fps (%u frames in %.1f s)", app->fps_frames * 1e9 / double(now_ns - app->fps_window_ns),
-                app->fps_frames, double(now_ns - app->fps_window_ns) * 1e-9);
+            const double mb = 1.0 / (1024.0 * 1024.0);
+            AppleShell::Log("anomaly: %.1f fps (%u frames in %.1f s), frame cpu %.1f ms avg %.1f max, footprint %.0f MB (peak %.0f), available %.0f MB",
+                app->fps_frames * 1e9 / double(now_ns - app->fps_window_ns), app->fps_frames,
+                double(now_ns - app->fps_window_ns) * 1e-9, double(app->frame_cpu_ns) * 1e-6 / app->fps_frames,
+                double(app->frame_cpu_max_ns) * 1e-6, double(AppleShell::ProcessFootprint()) * mb, double(app->footprint_peak) * mb,
+                double(AppleShell::AvailableMemory()) * mb);
             app->fps_window_ns = now_ns;
             app->fps_frames = 0;
+            app->frame_cpu_ns = app->frame_cpu_max_ns = app->footprint_peak = 0;
         }
         if (!app->quit_requested_ns && !app->script.empty() && !RunScript(*app))
             AppleShell::Log("anomaly: script asked to quit");

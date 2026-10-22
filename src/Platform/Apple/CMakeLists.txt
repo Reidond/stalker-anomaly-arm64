@@ -3,6 +3,7 @@ include(AnomalyGameApp)
 
 add_library(anomaly_apple_shell STATIC
     DeviceInfo.mm
+    DevicePreset.cpp
     GameData.cpp
     GameDataManifest.inc
     Launcher.cpp

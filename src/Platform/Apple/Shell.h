@@ -132,6 +132,11 @@ struct DeviceInfo
 
 DeviceInfo QueryDeviceInfo();
 
+// Bytes the OS charges this process (phys_footprint: what jetsam counts, Metal and compressed memory included). Cheap.
+uint64_t ProcessFootprint();
+// os_proc_available_memory() on iOS: how much more the process may use before it is killed. 0 elsewhere.
+uint64_t AvailableMemory();
+
 struct Insets
 {
     float left = 0, top = 0, right = 0, bottom = 0;
@@ -246,6 +251,11 @@ struct InitParams
     bool install_crash_handler = true;
     bool keep_screen_awake = true;
 };
+
+// Command line flags the device preset adds to the engine's (e.g. "-smap1536"); empty without a preset.
+// The preset itself is merged into appdata/user.ltx by Init: on iOS the "ipad" preset (docs/ios-port/IPAD.md) the first time
+// and whenever its version is raised; `--device-preset ipad|reset|none` forces it on any platform, re-applies it, or skips it.
+const std::string& DevicePresetCommandLine();
 
 // Call after SDL_Init (the lifecycle watch needs it) and before anything else in the shell.
 // Creates the directories, opens the log, installs the crash handler, starts the lifecycle,
