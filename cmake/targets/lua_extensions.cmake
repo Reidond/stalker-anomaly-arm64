@@ -19,3 +19,8 @@ anomaly_add_module(lua_extensions
     DEFINES _CRT_SECURE_NO_WARNINGS luaL_reg=luaL_Reg
     LINK LuaJIT::luajit
 )
+
+# Host-side check of the libraries Anomaly's scripts load, against LuaJIT 2.1 (the iOS build only checks that they compile).
+if(NOT ANOMALY_IOS)
+    add_subdirectory("${PROJECT_SOURCE_DIR}/tools/lua_ext_smoke" "${CMAKE_BINARY_DIR}/tools/lua_ext_smoke")
+endif()

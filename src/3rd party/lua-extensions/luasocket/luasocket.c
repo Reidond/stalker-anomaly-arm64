@@ -96,7 +96,8 @@ static int base_open(lua_State *L) {
 /*-------------------------------------------------------------------------*\
 * Initializes all library modules.
 \*-------------------------------------------------------------------------*/
-void luaL_pushmodule(lua_State* L, const char* modname, int sizehint)
+/* LuaJIT 2.1 exports its own luaL_pushmodule (2.0.4, the Windows build, does not): keep ours private. */
+static void luasocket_pushmodule(lua_State* L, const char* modname, int sizehint)
 {
     luaL_findtable(L, LUA_REGISTRYINDEX, "_LOADED", 16);
     lua_getfield(L, -1, modname);
@@ -121,6 +122,6 @@ LUASOCKET_API int luaopen_socket_core(lua_State* L)
         lua_setfield(L, -2, "core");
         lua_setglobal(L, "socket");
     }
-    luaL_pushmodule(L, "socket.core", 0);
+    luasocket_pushmodule(L, "socket.core", 0);
     return 1;
 }

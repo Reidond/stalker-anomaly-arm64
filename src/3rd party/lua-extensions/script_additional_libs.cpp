@@ -376,6 +376,71 @@ int open_table(lua_State *L)
     return 0;
 }
 /******************** TABLE END ********************/
+#ifdef __APPLE__
+/******************** NATIVE PATHS ********************/
+// Scripts hand the engine's virtual paths ('\\' separators, roots from getFS():update_path) to io.open and friends.
+// The engine installs xr_native_path here; lfs.c (lfs.dir, lfs.mkdir, ...) uses the same hook.
+extern "C" const char *(*lfs_native_path_hook)(const char *);
+
+void lua_ext_set_native_path_hook(const char *(*hook)(const char *))
+{
+    lfs_native_path_hook = hook;
+}
+
+// Upvalue 1: the wrapped function, 2: how many leading arguments are paths.
+static int native_path_call(lua_State *L)
+{
+    if (lfs_native_path_hook)
+    {
+        int paths = (int) lua_tointeger(L, lua_upvalueindex(2));
+        for (int i = 1; i <= paths && i <= lua_gettop(L); ++i)
+        {
+            if (lua_type(L, i) == LUA_TSTRING)
+            {
+                lua_pushstring(L, lfs_native_path_hook(lua_tostring(L, i)));
+                lua_replace(L, i);
+            }
+        }
+    }
+    lua_pushvalue(L, lua_upvalueindex(1));
+    lua_insert(L, 1);
+    lua_call(L, lua_gettop(L) - 1, LUA_MULTRET);
+    return lua_gettop(L);
+}
+
+static void wrap_path_function(lua_State *L, const char *lib, const char *name, int paths)
+{
+    if (lib)
+        lua_getglobal(L, lib);
+    else
+        lua_pushvalue(L, LUA_GLOBALSINDEX);
+    if (lua_istable(L, -1))
+    {
+        lua_getfield(L, -1, name);
+        if (lua_isfunction(L, -1))
+        {
+            lua_pushinteger(L, paths);
+            lua_pushcclosure(L, native_path_call, 2);
+            lua_setfield(L, -2, name);
+        }
+        else
+            lua_pop(L, 1);
+    }
+    lua_pop(L, 1);
+}
+
+static void open_native_paths(lua_State *L)
+{
+    wrap_path_function(L, "io", "open", 1);
+    wrap_path_function(L, "io", "lines", 1);
+    wrap_path_function(L, "os", "remove", 1);
+    wrap_path_function(L, "os", "rename", 2);
+    wrap_path_function(L, NULL, "loadfile", 1);
+    wrap_path_function(L, NULL, "dofile", 1);
+}
+/******************** NATIVE PATHS END ********************/
+#endif
+
 void open_additional_libs(lua_State *L)
 {
 #ifdef USE_LUAJIT_ONE
@@ -384,4 +449,7 @@ void open_additional_libs(lua_State *L)
 #endif
     open_string(L);
     open_table(L);
+#ifdef __APPLE__
+    open_native_paths(L);
+#endif
 }

@@ -318,6 +318,9 @@ CScriptStorage::~CScriptStorage()
 }
 
 extern int luaopen_lua_extensions(lua_State* L, bool IsDebug = false);
+#ifdef XR_PLATFORM_APPLE
+extern void lua_ext_set_native_path_hook(const char* (*hook)(const char*));
+#endif
 extern lua_CFunction luaopen_socket_core_init();
 extern void pdebug_init_init(lua_State* L);
 
@@ -445,6 +448,9 @@ void CScriptStorage::reinit()
 #endif //!USE_LUAJIT_ONE
 	bool isDebugEnabled = lua_debug;
 	luaopen_lua_extensions(lua(), isDebugEnabled);
+#ifdef XR_PLATFORM_APPLE
+	lua_ext_set_native_path_hook(xr_native_path); // lfs.*, io.open, ... take the engine's virtual paths
+#endif
 	disable_os_funcs(lua());
 
 	if (isDebugEnabled)
