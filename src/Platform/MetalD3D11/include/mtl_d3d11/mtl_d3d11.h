@@ -114,6 +114,7 @@ struct Stats
     uint64_t materializedClears = 0; // clears that needed their own empty pass
     uint64_t ringBytesUsed = 0;      // this frame
     uint64_t textureBytes = 0;       // live texture memory (best effort)
+    uint64_t renderTargetBytes = 0;  // the part of it that is render target, depth or UAV
     uint64_t bufferBytes = 0;
     uint64_t deviceAllocatedBytes = 0; // MTLDevice.currentAllocatedSize
     uint64_t frames = 0;               // Present calls

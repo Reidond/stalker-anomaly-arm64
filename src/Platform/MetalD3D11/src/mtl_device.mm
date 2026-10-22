@@ -128,6 +128,8 @@ TextureImpl<I, Desc>::~TextureImpl()
         for (UINT m = 0; m < mips; ++m)
             bytes += SliceBytes(fi, Max1(width >> m), Max1(height >> m)) * Max1(depth >> m) * arraySize * samples;
         dev->textureBytes -= std::min<uint64_t>(dev->textureBytes, bytes);
+        if (bindFlags & (D3D11_BIND_RENDER_TARGET | D3D11_BIND_DEPTH_STENCIL | D3D11_BIND_UNORDERED_ACCESS))
+            dev->renderTargetBytes -= std::min<uint64_t>(dev->renderTargetBytes, bytes);
     }
     dev->Release();
 }
@@ -586,6 +588,8 @@ HRESULT Device::createTexture(ResKind kind, const void* descIn, const D3D11_SUBR
                                     src + z * srcSlice + r * srcRow, std::min(srcRow, l.rowPitch));
             }
         textureBytes += texBytes;
+        if (p.bind & (D3D11_BIND_RENDER_TARGET | D3D11_BIND_DEPTH_STENCIL | D3D11_BIND_UNORDERED_ACCESS))
+            renderTargetBytes += texBytes;
         return S_OK;
     }
 
@@ -638,6 +642,8 @@ HRESULT Device::createTexture(ResKind kind, const void* descIn, const D3D11_SUBR
         }
     }
     textureBytes += texBytes * (dynamic ? 3 : 1);
+    if (p.bind & (D3D11_BIND_RENDER_TARGET | D3D11_BIND_DEPTH_STENCIL | D3D11_BIND_UNORDERED_ACCESS))
+        renderTargetBytes += texBytes;
 
     if (init)
     {

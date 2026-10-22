@@ -2046,6 +2046,7 @@ void GetStats(ID3D11DeviceContext* pContext, Stats* out)
     *out = c->stats;
     Device* d = c->device();
     out->textureBytes = d->textureBytes;
+    out->renderTargetBytes = d->renderTargetBytes;
     out->bufferBytes = d->bufferBytes;
     out->deviceAllocatedBytes = d->mtl.currentAllocatedSize;
     out->frames = d->frameCount;
@@ -2065,6 +2066,7 @@ bool GetRenderStats(RenderStats* out)
     out->gpuSeconds = s.gpuSeconds;
     out->blockedSeconds = s.blockedSeconds;
     out->textureBytes = s.textureBytes;
+    out->renderTargetBytes = s.renderTargetBytes;
     out->bufferBytes = s.bufferBytes;
     out->deviceAllocatedBytes = s.deviceAllocatedBytes;
     return true;

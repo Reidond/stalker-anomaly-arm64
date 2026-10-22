@@ -558,6 +558,7 @@ public:
     std::atomic<uint64_t> blockedNanos{0};  // CPU time spent in waitForSerial
     std::atomic<uint64_t> frameCount{0};
     std::atomic<uint64_t> textureBytes{0};
+    std::atomic<uint64_t> renderTargetBytes{0}; // the part of textureBytes that is render target, depth or UAV
     std::atomic<uint64_t> bufferBytes{0};
     bool supportsBC = false;
     bool supportsDepth24Stencil8 = false;

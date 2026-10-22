@@ -13,6 +13,7 @@ struct RenderStats
     double gpuSeconds = 0;       // sum of (GPUEndTime - GPUStartTime) over all command buffers
     double blockedSeconds = 0;   // CPU time spent waiting for the GPU (frame throttle, ring reuse, read-backs)
     uint64_t textureBytes = 0;   // live texture memory
+    uint64_t renderTargetBytes = 0; // the part of it that is render target, depth or UAV
     uint64_t bufferBytes = 0;    // live buffer memory
     uint64_t deviceAllocatedBytes = 0; // MTLDevice.currentAllocatedSize (textures, buffers, pipelines, ...)
 };
