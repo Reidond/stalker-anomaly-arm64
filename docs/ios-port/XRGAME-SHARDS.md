@@ -50,6 +50,31 @@ multiplayer code reads it); `script-entities` the mailslot debugger and `script_
 (`ClipCursor`, `GetClientRect`, `SetCursorPos`: they wait for engine-input's cursor seam); `objects-*` a few `?:` with a `void`
 arm, `goto`/`switch` jumps over initialisers, `shared_str` through `...` and non-const references bound to temporaries.
 
+### Wave 3: script-entities, ui, objects-items, objects-world, core-physics, mp-stub, lua_extensions
+
+The xrgame-rest session took the six shards above to zero errors (`-fsyntax-only` probe with multiplayer on and PCH off, and the real
+compile with PCH on and multiplayer off, `macos-arm64` and `ios-arm64`). The real compile found nothing the probe had not: its first
+run printed 83 errors for the five single-player shards, the probe's 38 + 9 + 14 + 12 + 10 sites.
+
+| shard | TUs | errors before | sites before | errors after | files moved |
+|---|---:|---:|---:|---:|---|
+| script-entities | 118 | 38 | 32 | 0 | |
+| ui | 139 | 9 | 9 | 0 | `UIGameAHunt`, `UIGameMP` to mp-stub |
+| objects-items | 144 | 14 | 14 | 0 | `cta_game_artefact*` to mp-stub |
+| objects-world | 112 | 12 | 12 | 0 | |
+| core-physics | 161 | 10 | 10 | 0 | |
+| mp-stub (multiplayer on, 171 TUs) | 171 | 46 | 46 | 0 | |
+| mp-stub (multiplayer off) | 25 | | | 0 | |
+
+With multiplayer off the shard builds `apple_mp_stubs.cpp` and 24 leaf sources, and `tools/xrgame_mp_symbols.py` reports nothing
+(see [Multiplayer exclusion](#multiplayer-exclusion)). `lua_extensions` builds for both platforms ([LUA-EXTENSIONS.md](LUA-EXTENSIONS.md)).
+What was left from the triage list turned out to be, in this order: non-const references bound to temporaries (`auto&` on a `find()`, a
+by-value `GetCurBoosterInfluences()`), `?:` with a `void` arm, `goto`/`switch` over initialisers, `shared_str` through `...`, luabind
+member pointers (through a base class: `def_readonly(D T::*)` does not deduce, `CRenderDevice` needs a conversion helper; through an
+overloaded or template `bind`; a C-style cast that dropped `const` or the `const float` return type), the Win32 pieces (`SM_*`,
+`GetProcessAffinityMask`, the SEH stack-overflow guard in `CScriptStorage::load_buffer`, the Lua Studio and mailslot debuggers, the
+registry) and cximage's own copies of `DWORD`/`RECT`/`ntohs`.
+
 ## Quick start
 
 ```bash
@@ -135,7 +160,7 @@ to recompute `overrides.txt` and the dependency tables). Only the triage session
 | `tools/xrgame_probe.py <build> [--shard S] [--file TEXT] [--sample N] [--markdown] [--json F]` | `-fsyntax-only` over the shard's translation units; errors per shard and file, the most frequent sites, sites in a file the shard does not own. `--from-raw` re-reads a `--raw` file. |
 | `tools/xrgame_fixit.py <build> --owner <shard\|shared\|any> [--shard S] [--write]` | applies the mechanical fixes below to the files of one owner |
 | `tools/xrgame_shards.py` | the lists (triage only) |
-| `tools/xrgame_mp_symbols.py <build>` | see multiplayer exclusion |
+| `tools/xrgame_mp_symbols.py <off-build> --mp-build <on-build>` | the link check of the multiplayer exclusion (below) |
 
 `xrgame_fixit.py` reads clang's own fix-its (`typename`, `template`, `template<>`, `Class::` before a member address) and adds what
 clang names but does not fix: `this->` for a member of a dependent base class (`explicit qualification required to use member`), `typename` for
@@ -146,21 +171,41 @@ The triage run changed about 2,150 sites over eight passes (1,741 in the first).
 
 ## Multiplayer exclusion
 
-The mp-stub shard is the 167 sources of the multiplayer game types, GameSpy, accounts, anti-cheat, MP screenshots, award system, file transfer
-and secure messages. The mechanism:
+The mp-stub shard is the multiplayer game types, GameSpy, accounts, anti-cheat, MP screenshots, award system, file transfer
+and secure messages (171 sources). The mechanism:
 
 - `ANOMALY_XRGAME_MULTIPLAYER` (default **OFF**) in `cmake/targets/xrGame.cmake`. OFF: the `xrGame_mp_stub` target compiles only the files in
-  `cmake/targets/xrgame_shards/mp-stub-compiled.txt`; every other file of `mp-stub.txt` is not built and not part of `libxrGame.a`. ON: it compiles them all
-  (what the probe build uses, so the sources stay checkable).
-- `src/xrGame/apple_mp_stubs.cpp` is the home of the stand-ins for entry points that single-player code still calls (factory registrations
-  of the multiplayer game types, `xrServer` MP hooks, GameSpy calls). It starts empty and is listed in `mp-stub-compiled.txt`. The Visual Studio project does not list it.
-- Headers are never excluded, so single-player code that names a multiplayer class still parses. Only link-time references need a stand-in.
+  `cmake/targets/xrgame_shards/mp-stub-compiled.txt`; every other file of `mp-stub.txt` is not built and not part of `libxrGame.a`, and the
+  shard targets get `XRGAME_NO_MULTIPLAYER`. ON: it compiles them all (what the probe build uses, so the sources stay checkable).
+- Headers are never excluded, so single-player code that names a multiplayer class still parses. Three kinds of link-time reference
+  remain, each with its own answer:
+  1. **Guarded.** Single-player code that only *mentions* a multiplayer class has `#ifndef XRGAME_NO_MULTIPLAYER` around it: the object factory
+     entries of the MP game types and the MP actor (`object_factory_register.cpp`), the GameSpy script exports
+     (`script_engine_export.cpp`), the MP console commands (`console_commands_mp.cpp`; `register_mp_console_commands()` is commented out in
+     `console_commands.cpp` anyway), the reward-event calls in `GameObject.cpp`/`WeaponFire.cpp`/`Level_Bullet_Manager.cpp`, `game_sv_GameState::CheckNewPlayer`,
+     and `CLevel::net_start1`, which **refuses every game type but "single"** (log, `net_start_result_total = FALSE`).
+     `smart_cast<game_cl_mp*>`/`<game_sv_mp*>` in single-player files is `mp_cl_game_cast`/`mp_sv_game_cast` (`game_cl_mp.h`, `game_sv_mp.h`): the
+     RTTI of those classes lives in excluded sources, so the cast is a constant `nullptr` there. Windows expands to the old `smart_cast`.
+  2. **Compiled leaf sources** (`mp-stub-compiled.txt`): the MP sources the single-player objects reference and that need nothing else from the
+     multiplayer code: `file_transfer` (xrServer's file transfers), `secure_messaging`, `player_account`, the weapon/ammo/shooting dump helpers,
+     the two script-export leaves (`script_monster_*_info`) and the small MP windows the XML loader and the message window create
+     (`ServerList`, `UIMapList`, `UICDkey`, `UIChatWnd`, `UIGameLog`, `UIMapInfo`, ...).
+  3. **Stubs** in `src/xrGame/apple_mp_stubs.cpp`: the five console variables `xrServer::GetServerInfo` prints, `game_sv_mp::IsPlayerBanned`,
+     the MP screenshot file names `screenshot_server.cpp` asks `game_cl_mp` for, and the two CTA getters of the main HUD. Each logs and refuses
+     (`! Multiplayer is not available in this build (...)`); none can be reached in a single-player game.
+- Files the include graph had put into single-player shards but that are multiplayer only moved to mp-stub (`pins.txt`): `UIGameAHunt`, `UIGameMP`,
+  `cta_game_artefact`, `cta_game_artefact_activation`.
+- `GameSpy`, `xr_dsa_*` and the stats/screenshot signing are not built: the GameSpy script classes are not exported to Lua, the MP game
+  types are not in the object factory, so a script that names them gets `nil`.
 
-How the mp-stub session finds them: build every shard with `ANOMALY_XRGAME_MULTIPLAYER=ON`, then
-`tools/xrgame_mp_symbols.py <build>` lists, per multiplayer source, the symbols that objects outside mp-stub reference and only mp-stub defines.
-For each source: put its symbols into `apple_mp_stubs.cpp`, or add the source to `mp-stub-compiled.txt` when it is a leaf the
-single-player game genuinely uses. Both edits are in mp-stub's own files; no other shard changes. The final check is a `libxrGame.a` with
-`ANOMALY_XRGAME_MULTIPLAYER=OFF` whose undefined symbols (`nm -u`) are only engine/shim ones.
+How to find the next missing symbol (after a merge or a new file): build every shard with multiplayer off (the default) and `xrGame_mp_stub`
+once with `ANOMALY_XRGAME_MULTIPLAYER=ON` (only to learn what the excluded sources define), then
+`tools/xrgame_mp_symbols.py build/xrgame --mp-build build/mp` lists, per excluded source, the symbols that the OFF objects reference and
+only it defines; exit status 0 means libxrGame.a has no unresolved multiplayer reference (0 on `main` after this wave). For each new symbol choose,
+cheapest first: guard the single-player reference with `XRGAME_NO_MULTIPLAYER`, add a leaf source to `mp-stub-compiled.txt` (check with the
+script that its own references stay inside the compiled set), or stub it. A class with a vtable cannot be stubbed cheaply (every
+virtual of the class has to exist): guard the use instead. The check does not see symbols that nobody in xrGame defines (engine, shim,
+GameSpy SDK): those are the integration link's.
 
 ## Fix patterns
 

@@ -293,7 +293,22 @@ Created with `CInput`: `pInput->Pad()` is the `gameinput::GameInput` (bindings, 
 ## Hooks still needed in the engine and the game
 
 `CInput` (above) already does the pump, the look conversion, the pad key codes, the cursor deltas and text input. What is left is
-in files outside the input session, with the call to make in each:
+in files outside the input session, with the call to make in each. The three xrGame symbols the engine's input code names
+(`GetUICursor()`, `CUICursor::SetUICursorPosition`, `get_binded_action(int)`) are the game's own definitions and are in `libxrGame.a`.
+The xrgame-rest session did the small ones, behind `XR_PLATFORM_APPLE` (helpers `xr_pad_*` in `xrGame/xr_level_controller.cpp`):
+
+| # | Hook | Status |
+|---|---|---|
+| 1 | key names | open |
+| 2 | pad binding slot, `bind_pad`, Controls screen | open |
+| 3 | UI context | **done**: `CUICursor::Show/Hide` call `SetUiContext`, `Feedback::SetMenu` and `Pad()->SetCursorPosition` (`xr_pad_ui_context`); `CGamePersistent` installs `pad_hooks.cursor_jump` (`SetUICursorPosition`) and `pad_hooks.connection` (pauses the game in a level while no pad is connected, resumes when one is back; no "reconnect the controller" message yet). **Open:** `pad_hooks.ui_action` (tabs), `INavigationProvider` |
+| 4 | look scale | **done**: `CActor::IR_OnMouseMove` passes its `scale` to `SetLookRadiansPerCount`. It runs on input, so the first stick motion after a zoom change uses the previous figure |
+| 5 | text fields and the on-screen keyboard | open (`CUICustomEdit` focus, `IR_OnTextInput` through `CDialogHolder`/`CLevel`/`CMainMenu`, `CConsole`) |
+| 6 | Win32 pointer calls | the shim's `SetCursorPos`/`ClientToScreen` keep `UICursor.cpp`/`Level_input.cpp` compiling; `m_b_use_win_cursor` is forced false on Apple (`CUICursor::InitInternal`) |
+| 7 | the window | engine-core's, nothing in xrGame |
+| 8 | feedback | **done:** `CActor::UpdateCL` -> `xr_pad_update_actor` (health, bleeding, radiation, aiming, weapon class by `ClassifyWeapon(section)`, automatic = fire mode other than 0/1, empty/jammed/reloading); `CActor::Hit` -> `OnHit` with the mapping in item 8 below and `power` clamped to 0..1; `CWeaponMagazined::OnShot`/`OnEmptyClick` -> `OnShot`/`OnDryFire`. **Open:** `SetBlowout` (script side), shots of weapons that are not `CWeaponMagazined` (missiles, knives). Only the controlled actor (`Level().CurrentControlEntity()`) feeds the layer |
+
+None of the feedback calls were exercised against the real engine yet (no running game); they compile for both platforms.
 
 **1. Key names.** Append `EnginePadKeyTable(...)` to `keyboards[]` before its `{NULL, 0}` terminator
 (`xrGame/xr_level_controller.cpp`). `remap_keys()` fills `key_local_name` from `CInput::get_dik_name`; pad keys have no DIK name, so set it from the
