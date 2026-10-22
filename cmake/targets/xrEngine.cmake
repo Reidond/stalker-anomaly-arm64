@@ -67,7 +67,5 @@ anomaly_add_module(xrEngine
 # Fragment of the engine-input session: it extends the xrEngine target (target_sources/target_link_libraries) from
 # cmake/targets/xrEngine_input.cmake, which the root CMakeLists includes after this file.
 
-# tools/xrengine_smoke: the macOS smoke test (engine init through the Apple shell, the SDL3 window).
-if(NOT ANOMALY_IOS)
-    add_subdirectory("${PROJECT_SOURCE_DIR}/tools/xrengine_smoke" "${CMAKE_BINARY_DIR}/tools/xrengine_smoke")
-endif()
+# tools/xrengine_smoke (the macOS smoke test: engine init through the Apple shell, the SDL3 window) is added from the root
+# CMakeLists.txt, after every module file has run: it links the modules that exist and stubs the others.
