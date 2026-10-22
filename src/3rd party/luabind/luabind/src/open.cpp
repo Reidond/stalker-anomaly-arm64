@@ -52,6 +52,11 @@ namespace luabind {
         new(r) detail::class_registry(L);
         lua_settable(L, LUA_REGISTRYINDEX);
 
+        // The main thread, for the weak references: a reference is created from whatever coroutine the script runs in, and that
+        // coroutine can be collected long before the reference is released (see weak_ref.cpp).
+        lua_pushthread(L);
+        lua_setfield(L, LUA_REGISTRYINDEX, "__luabind_main_thread");
+
         // add functions (class, cast etc...)
         lua_pushstring(L, "class");
         lua_pushcclosure(L, detail::create_class::stage1, 0);
