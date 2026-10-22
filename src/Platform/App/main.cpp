@@ -61,6 +61,8 @@ struct App
     double exit_after_s = 0;
     Uint64 engine_start_ns = 0;
     int exit_code = 0;
+    Uint64 fps_window_ns = 0; // start of the current frame-rate window
+    unsigned fps_frames = 0;
     Uint64 quit_requested_ns = 0; // set when the app asked the engine to quit; it disconnects and unloads the level first
 
     // where the scripted pointer is, window points: motion events carry the position and the delta
@@ -337,6 +339,18 @@ SDL_AppResult SDL_AppIterate(void* appstate)
     {
         if (!xr_engine::Frame())
             return SDL_APP_SUCCESS;
+        // one line in the shell log every 10 s: frames per second of the main loop
+        ++app->fps_frames;
+        const Uint64 now_ns = SDL_GetTicksNS();
+        if (!app->fps_window_ns)
+            app->fps_window_ns = now_ns;
+        else if (now_ns - app->fps_window_ns >= 10000000000ull)
+        {
+            AppleShell::Log("anomaly: %.1f fps (%u frames in %.1f s)", app->fps_frames * 1e9 / double(now_ns - app->fps_window_ns),
+                app->fps_frames, double(now_ns - app->fps_window_ns) * 1e-9);
+            app->fps_window_ns = now_ns;
+            app->fps_frames = 0;
+        }
         if (!app->quit_requested_ns && !app->script.empty() && !RunScript(*app))
             AppleShell::Log("anomaly: script asked to quit");
         else if (!app->quit_requested_ns && app->exit_after_s > 0 &&
