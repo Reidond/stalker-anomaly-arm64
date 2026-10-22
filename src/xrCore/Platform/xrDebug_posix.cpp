@@ -464,6 +464,10 @@ static void install_alt_stack()
 	static thread_local bool done = false;
 	if (done) return;
 	done = true;
+	// A sanitizer runtime installs (and at thread exit unmaps) its own alternate stack; replacing it with a malloc'ed block
+	// makes ASan's thread teardown munmap that block and die ("failed to deallocate", CHECK in UnsetAlternateSignalStack).
+	stack_t old = {};
+	if (sigaltstack(nullptr, &old) == 0 && !(old.ss_flags & SS_DISABLE) && old.ss_sp) return;
 	const size_t size = 128 * 1024;
 	stack_t ss;
 	ss.ss_sp = malloc(size);
