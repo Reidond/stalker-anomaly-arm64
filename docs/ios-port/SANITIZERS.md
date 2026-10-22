@@ -155,7 +155,7 @@ Last run of the whole matrix on the final binary (RelWithDebInfo, ASan+UBSan). T
 | `saveload` | save in the middle of a fight, load it back | clean, 122 s |
 | `die_reload` | die, the game-over tutorial, "Load last save" | clean, 85 s |
 | `smoke` | all of the above in one run (about 8 minutes from the menu) | one ASan report, a script-side use after free (Open items 1); the rest clean, 466 s |
-| `smoke` from the menu with a **cold shader cache** (fresh `ANOMALY_STATE_ROOT`: every shader translated by ShaderXlat/vkd3d during the run) | the whole plan, new game included | **clean**: 0 ASan reports, no crash file, 1462 s |
+| `smoke` from the menu with a **cold shader cache** (a fresh `ANOMALY_STATE_ROOT`: every shader is translated by ShaderXlat/vkd3d during the run, 464 cache files written) | the whole plan, new game included | **clean**: 0 ASan reports, no crash file, driver reaches `DONE`, 265 s. An earlier cold run that sat on the loading screen's "press any key" for 24 minutes (the runner did not tap keys in the new-game path then; it does now) was clean too |
 | `quit_menu` `quit_loading` `quit_inventory` `quit_pda` `quit_dialog` `quit_combat` `quit_dead` `quit_surge` `quit_level` | quit from each state | all exit 0 and shut down by themselves, 20 to 60 s each, no ASan report, no crash file |
 
 Commands that need the debug build (`-dbg`; the runner passes it): `g_god` (all fights), `jump_to_level` (`transition`, `smoke`, `quit_level`). The rest is Lua exports and keys.
@@ -234,7 +234,7 @@ Compiled out instead of suppressed: `vptr`, `function` and `alignment` (see Buil
 5. **`CTimer::GetElapsed_ticks`** (`xrCore/FTimer.h:81`): the `u64` delta wraps when the ALife update thread reads the counter behind `m_real_ticks`, and the wrapped value converted to `double`
    and back is out of range (`float-cast-overflow`). Harmless in effect (about one tick). Suppressed; the fix is an xrCore header edit that rebuilds everything.
 6. **The iPad's intermittent heap corruption** ("pointer being freed was not allocated" in vkd3d `preproc_free_macro`/`preproc_yyparse`, in `CloseLog`): **not caught on the Mac.**
-   Whole-engine ASan runs with an empty shader cache (a fresh `ANOMALY_STATE_ROOT`: the cold `smoke` of this PR and an earlier cold run) found nothing in ShaderXlat or vkd3d. What the sweep did
+   Whole-engine ASan runs with an empty shader cache (a fresh `ANOMALY_STATE_ROOT`: two cold-cache `smoke` runs, the table above) found nothing in ShaderXlat or vkd3d. What the sweep did
    find are two writes to freed or out-of-range memory in code that runs at the end of a session: finding 23 (`LogFile.erase(end() - 1)` on an empty vector, and the next `push_back` writes
    there) and finding 25 (luabind releasing slots on the stacks of collected coroutines at `lua_close`). Either could corrupt the heap an unrelated allocator later trips over; that they are
    the cause on the iPad is plausible, not shown. If it still happens with this PR, run the iPad build's equivalent under ASan (`-fsanitize=address` is refused on iOS by the option; use
