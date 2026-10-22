@@ -1,7 +1,0 @@
-# The hut in heavy rain; the scene depth as the rain drops see it, and before the post-process (debugging).
-1 console run_string xr_harness.env(9,0,"w_rain3")
-27 console rt_dump depth hut_depth_gbuffer gbuffer d 0.9 1
-28 console rt_dump depth hut_depth_raydraw rain_draw d 0.9 1
-29 console rt_dump $user$generic_0 hut_generic0_raydraw rain_draw c
-30 console screenshot 03f_rain_depth
-32 quit

@@ -79,6 +79,14 @@ IC u64 btwCount1(u64 v)
 }
 
 
+#if defined(XR_PLATFORM_APPLE)
+// The bit tricks below shift by up to 158 bits (and by negative counts), which only x86 defines (it masks the count). Clang
+// folds a constant argument to poison on arm64: color_argb_f(1.f, 1.f, 1.f, 1.f) came out as 0x0000ffff, and every progress
+// bar, light flicker and other UI colour built from floats was wrong.
+ICF int iFloor(float x) { return int(floorf(x)); }
+
+ICF int iCeil(float x) { return int(ceilf(x)); }
+#else
 ICF int iFloor(float x)
 {
 	int a = *(const int*)(&x);
@@ -118,6 +126,7 @@ ICF int iCeil(float x)
 	}
 	return r; /* r = (int)(ceil(f)) */
 }
+#endif
 
 // Validity checks
 IC bool fis_gremlin(const float& f)

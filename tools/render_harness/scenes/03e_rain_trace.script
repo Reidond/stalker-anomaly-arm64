@@ -1,5 +1,0 @@
-# The hut in heavy rain with a draw trace of one frame (debugging: the state of the rain drop draw).
-1 console run_string xr_harness.env(9,0,"w_rain3")
-28 console mtl_trace 3000
-30 console screenshot 03e_rain_trace
-32 quit
