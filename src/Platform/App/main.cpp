@@ -1,11 +1,23 @@
 // The Anomaly app: SDL3 callbacks around xr_engine::Init / Frame / Shutdown (src/xrEngine/xr_engine_app.h).
 //
-//   anomaly [--data-root <path>] [--exit-after <seconds>] [--show-launcher] [engine flags...]
+//   anomaly [--data-root <path>] [--exit-after <seconds>] [--script <file>] [--show-launcher] [engine flags...]
 //
 // Everything that is not one of the app's own flags goes to the engine as its command line (the same flags the Windows
 // build takes, e.g. -nointro, -ltx, -start, -nosound), after the contents of commandline.txt (xrEngine, XRENGINE.md).
 // The launcher (game-data status and how to copy the data) is shown when the data is missing or incomplete, or with
 // --show-launcher.
+//
+// --script <file> replays a timeline against the running engine, for runs without a person at the keyboard (one step per
+// line, `#` starts a comment, the time is seconds since the engine came up):
+//
+//   <t> console <command...>        Console->Execute: `start server(all/single/alife/new) client(localhost)`, `quit`, ...
+//   <t> key <name> [ms]             SDL key (SDL_GetScancodeFromName: W, Space, Escape, F1, Left Shift ...) pressed for ms (80)
+//   <t> keydown <name> | keyup <name>
+//   <t> move <x> <y>                mouse pointer, window points
+//   <t> relmove <dx> <dy>           relative mouse motion
+//   <t> click <x> <y> [button]      move, press and release (1 left, 2 middle, 3 right)
+//   <t> log <text...>               a line in the shell log
+//   <t> quit                        leave the app
 
 #define SDL_MAIN_USE_CALLBACKS 1
 #include <SDL3/SDL.h>
@@ -16,14 +28,26 @@
 
 #include "xrEngine/xr_engine_app.h"
 
+#include <algorithm>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <fstream>
 #include <memory>
+#include <sstream>
 #include <string>
+#include <vector>
 
 namespace
 {
+struct ScriptStep
+{
+    double at = 0; // seconds since the engine came up
+    std::string command;
+    std::string args;
+    double release_at = -1; // key presses: when the matching key-up is due
+};
+
 struct App
 {
     // the launcher's own window, while it is up
@@ -37,7 +61,150 @@ struct App
     double exit_after_s = 0;
     Uint64 engine_start_ns = 0;
     int exit_code = 0;
+
+    std::vector<ScriptStep> script;
+    size_t script_next = 0;
+    std::vector<ScriptStep> pending_releases;
 };
+
+bool LoadScript(App& app, const char* path)
+{
+    std::ifstream in(path);
+    if (!in)
+    {
+        AppleShell::Log("anomaly: cannot read script %s", path);
+        return false;
+    }
+    std::string line;
+    while (std::getline(in, line))
+    {
+        const size_t first = line.find_first_not_of(" \t\r");
+        if (first == std::string::npos || line[first] == '#')
+            continue;
+        std::istringstream words(line.substr(first));
+        ScriptStep step;
+        if (!(words >> step.at >> step.command))
+            continue;
+        std::getline(words, step.args);
+        const size_t arg_start = step.args.find_first_not_of(" \t");
+        step.args = arg_start == std::string::npos ? "" : step.args.substr(arg_start);
+        while (!step.args.empty() && (step.args.back() == '\r' || step.args.back() == ' '))
+            step.args.pop_back();
+        app.script.push_back(step);
+    }
+    std::stable_sort(app.script.begin(), app.script.end(), [](const ScriptStep& a, const ScriptStep& b) { return a.at < b.at; });
+    AppleShell::Log("anomaly: script %s, %zu steps", path, app.script.size());
+    return true;
+}
+
+SDL_WindowID EngineWindowID()
+{
+    return SDL_GetWindowID(static_cast<SDL_Window*>(xr_engine::WindowHandle()));
+}
+
+void PushKey(const std::string& name, bool down)
+{
+    const SDL_Scancode code = SDL_GetScancodeFromName(name.c_str());
+    if (code == SDL_SCANCODE_UNKNOWN)
+    {
+        AppleShell::Log("anomaly: script: unknown key '%s'", name.c_str());
+        return;
+    }
+    SDL_Event e{};
+    e.type = down ? SDL_EVENT_KEY_DOWN : SDL_EVENT_KEY_UP;
+    e.key.timestamp = SDL_GetTicksNS();
+    e.key.windowID = EngineWindowID();
+    e.key.scancode = code;
+    e.key.key = SDL_GetKeyFromScancode(code, SDL_KMOD_NONE, false);
+    e.key.down = down;
+    SDL_PushEvent(&e);
+}
+
+void PushMotion(float x, float y, float xrel, float yrel)
+{
+    SDL_Event e{};
+    e.type = SDL_EVENT_MOUSE_MOTION;
+    e.motion.timestamp = SDL_GetTicksNS();
+    e.motion.windowID = EngineWindowID();
+    e.motion.x = x;
+    e.motion.y = y;
+    e.motion.xrel = xrel;
+    e.motion.yrel = yrel;
+    SDL_PushEvent(&e);
+}
+
+void PushButton(int button, bool down, float x, float y)
+{
+    SDL_Event e{};
+    e.type = down ? SDL_EVENT_MOUSE_BUTTON_DOWN : SDL_EVENT_MOUSE_BUTTON_UP;
+    e.button.timestamp = SDL_GetTicksNS();
+    e.button.windowID = EngineWindowID();
+    e.button.button = Uint8(button);
+    e.button.down = down;
+    e.button.clicks = 1;
+    e.button.x = x;
+    e.button.y = y;
+    SDL_PushEvent(&e);
+}
+
+// Runs the steps that are due. Returns false once the script asked to quit.
+bool RunScript(App& app)
+{
+    const double now = double(SDL_GetTicksNS() - app.engine_start_ns) * 1e-9;
+    for (size_t i = 0; i < app.pending_releases.size();)
+    {
+        if (now >= app.pending_releases[i].release_at)
+        {
+            PushKey(app.pending_releases[i].args, false);
+            app.pending_releases.erase(app.pending_releases.begin() + long(i));
+        }
+        else
+            ++i;
+    }
+    while (app.script_next < app.script.size() && app.script[app.script_next].at <= now)
+    {
+        const ScriptStep& step = app.script[app.script_next++];
+        AppleShell::Log("anomaly: script t=%.1f %s %s", now, step.command.c_str(), step.args.c_str());
+        float x = 0, y = 0;
+        int button = 1;
+        if (step.command == "console")
+            xr_engine::ExecuteConsole(step.args.c_str());
+        else if (step.command == "key")
+        {
+            std::istringstream a(step.args);
+            std::string name;
+            std::getline(a, name, ' ');
+            double ms = 80;
+            a >> ms;
+            PushKey(name, true);
+            ScriptStep release;
+            release.args = name;
+            release.release_at = now + ms * 1e-3;
+            app.pending_releases.push_back(release);
+        }
+        else if (step.command == "keydown")
+            PushKey(step.args, true);
+        else if (step.command == "keyup")
+            PushKey(step.args, false);
+        else if (step.command == "move" && sscanf(step.args.c_str(), "%f %f", &x, &y) == 2)
+            PushMotion(x, y, 0, 0);
+        else if (step.command == "relmove" && sscanf(step.args.c_str(), "%f %f", &x, &y) == 2)
+            PushMotion(0, 0, x, y);
+        else if (step.command == "click" && sscanf(step.args.c_str(), "%f %f %d", &x, &y, &button) >= 2)
+        {
+            PushMotion(x, y, 0, 0);
+            PushButton(button, true, x, y);
+            PushButton(button, false, x, y);
+        }
+        else if (step.command == "log")
+            AppleShell::Log("anomaly: script: %s", step.args.c_str());
+        else if (step.command == "quit")
+            return false;
+        else
+            AppleShell::Log("anomaly: script: cannot run '%s %s'", step.command.c_str(), step.args.c_str());
+    }
+    return true;
+}
 
 bool StartEngine(App& app)
 {
@@ -99,13 +266,18 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char** argv)
     app->argv = argv;
 
     bool want_launcher = false;
+    const char* script_path = nullptr;
     for (int i = 1; i < argc; ++i)
     {
         if (!strcmp(argv[i], "--show-launcher"))
             want_launcher = true;
         else if (!strcmp(argv[i], "--exit-after") && i + 1 < argc)
             app->exit_after_s = atof(argv[++i]);
+        else if (!strcmp(argv[i], "--script") && i + 1 < argc)
+            script_path = argv[++i];
     }
+    if (script_path && !LoadScript(*app, script_path))
+        return SDL_APP_FAILURE;
 
     if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS | SDL_INIT_GAMEPAD))
     {
@@ -138,6 +310,11 @@ SDL_AppResult SDL_AppIterate(void* appstate)
     {
         if (!xr_engine::Frame())
             return SDL_APP_SUCCESS;
+        if (!app->script.empty() && !RunScript(*app))
+        {
+            AppleShell::Log("anomaly: script asked to quit");
+            return SDL_APP_SUCCESS;
+        }
         if (app->exit_after_s > 0 && double(SDL_GetTicksNS() - app->engine_start_ns) * 1e-9 >= app->exit_after_s)
         {
             AppleShell::Log("anomaly: --exit-after %.1f s reached", app->exit_after_s);
