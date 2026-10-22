@@ -77,6 +77,7 @@ fi
 
 state="${state:-$repo/build/sweep-state}"
 mkdir -p "$state"
+state="$(cd "$state" && pwd)"
 stamp="$(date +%Y%m%d-%H%M%S)"
 [ -n "$out" ] || out="$repo/build/sweep-runs/$stamp-$plan"
 mkdir -p "$out"
