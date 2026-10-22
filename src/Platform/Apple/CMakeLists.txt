@@ -8,6 +8,7 @@ add_library(anomaly_apple_shell STATIC
     Launcher.cpp
     Launcher.h
     Lifecycle.mm
+    Overlay.cpp
     Shell.h
     Shell.mm
     ShellInternal.h

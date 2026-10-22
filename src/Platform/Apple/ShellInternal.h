@@ -20,6 +20,10 @@ void WriteCrashText(const char* text);
 // Extra line included in every crash report, e.g. the app version. Copied; call from Init.
 void SetCrashContext(const std::string& context);
 
+// The Monolith gamedata overlay (Overlay.cpp): packs `source_dir` into <archive_dir>/monolith_overlay.db0 unless the archive
+// is already current. False when there is nothing to pack.
+bool BuildOverlayArchive(const std::string& source_dir, const std::string& archive_dir);
+
 // Event history (Lifecycle.mm)
 void RecordEvent(const char* category, const std::string& text);
 
