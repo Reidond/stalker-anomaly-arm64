@@ -1,4 +1,7 @@
 #include "stdafx.h"
+#if defined(XR_PLATFORM_APPLE)
+# include <mtl_d3d11/mtl_d3d11.h>
+#endif
 #pragma hdrstop
 
 #include "../xrRender/ResourceManager.h"
@@ -134,6 +137,9 @@ void CRT::create(LPCSTR Name, u32 w, u32 h, D3DFORMAT f, u32 SampleCount)
 #endif
 
 	CHK_DX(HW.pDevice->CreateTexture2D( &desc, NULL, &pSurface ));
+#if defined(XR_PLATFORM_APPLE)
+	mtl_d3d11::SetDebugName(pSurface, Name); // shows up in GPU captures and in the draw trace
+#endif
 	HW.stats_manager.increment_stats_rtarget(pSurface);
 	// OK
 #ifdef DEBUG

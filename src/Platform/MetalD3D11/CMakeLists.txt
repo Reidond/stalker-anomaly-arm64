@@ -2,6 +2,7 @@
 add_library(metal_d3d11 STATIC
     src/mtl_context.mm
     src/mtl_d3dx11.mm
+    src/mtl_debug.mm
     src/mtl_device.mm
     src/mtl_dxgi.mm
     src/mtl_formats.mm

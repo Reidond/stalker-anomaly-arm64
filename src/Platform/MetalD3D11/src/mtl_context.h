@@ -167,6 +167,8 @@ public:
     Device* device() const { return dev_; }
     uint32_t passEpoch() const { return passEpoch_; }
     Stats stats;
+    // Debug: log the next `n` draws (shader names, render targets, depth/stencil/blend state, viewport).
+    void traceDraws(int n) { traceDraws_ = n; }
 
 private:
     friend class Annotation;
@@ -223,6 +225,8 @@ private:
     std::vector<id<MTLBuffer>> visBufs_;
     uint32_t visSlot_ = 0;
     uint32_t passEpoch_ = 0;
+    int traceDraws_ = 0;
+    void traceDraw();
 
     // D3D state
     Ref<InputLayout> layout_;

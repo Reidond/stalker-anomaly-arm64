@@ -1,6 +1,7 @@
 // ID3D11DeviceContext on Metal: state tracking, lazy render passes, draws, copies, queries.
 #import "mtl_context.h"
 #import "mtl_swapchain.h"
+#include <mtl_d3d11/mtl_stats.h>
 
 #include <algorithm>
 #include <cmath>
@@ -225,6 +226,8 @@ void Context::commit(bool wait)
     [cb_ addCompletedHandler:^(id<MTLCommandBuffer> b) {
         if (b.error)
             Log("command buffer %llu failed: %s", (unsigned long long)s, b.error.localizedDescription.UTF8String);
+        if (b.GPUEndTime > b.GPUStartTime && b.GPUStartTime > 0)
+            d->gpuNanos += uint64_t((b.GPUEndTime - b.GPUStartTime) * 1e9);
         self->harvestQueries(s);
         d->noteCompleted(s);
     }];
@@ -325,6 +328,7 @@ void Context::present(id<CAMetalDrawable> drawable, void (^preCommit)(id<MTLComm
     if (drawable)
         [cb_ presentDrawable:drawable];
     commit(false);
+    ++dev_->frameCount;
     endFrame();
 }
 
@@ -1287,7 +1291,54 @@ bool Context::prepareDraw(bool, D3D11_PRIMITIVE_TOPOLOGY* topo)
     if (ps_)
         bindRenderStage(1, ps_->refl, bind_[1]);
     ++pass_.draws;
+    if (traceDraws_ > 0)
+        traceDraw();
     return true;
+}
+
+static const char* nameOf(TextureCore* t)
+{
+    if (t->isBackBuffer)
+        return "backbuffer";
+    return t->tex && t->tex.label ? t->tex.label.UTF8String : "?";
+}
+
+void Context::traceDraw()
+{
+    --traceDraws_;
+    std::string rts;
+    for (int i = 0; i < 8; ++i)
+        if (RenderTargetView* v = rtv_[i].get())
+        {
+            char b[160];
+            snprintf(b, sizeof b, " rt%d=%s(%ux%u fmt %u)", i, nameOf(v->tex), v->tex->width, v->tex->height, unsigned(v->format));
+            rts += b;
+        }
+    std::string z = "none";
+    if (DepthStencilView* d = dsv_.get())
+    {
+        char zb[96];
+        snprintf(zb, sizeof zb, "%s@%p(%ux%u s%u)", nameOf(d->tex), (__bridge void*)d->tex->tex, d->tex->width, d->tex->height,
+                 d->tex->samples);
+        z = zb;
+    }
+    char ds[200] = "default";
+    if (dss_)
+    {
+        const D3D11_DEPTH_STENCIL_DESC& s = dss_->desc;
+        snprintf(ds, sizeof ds, "z%d/w%d/f%d st%d(f%d r%u m%02x)", s.DepthEnable, int(s.DepthWriteMask), int(s.DepthFunc),
+                 s.StencilEnable, int(s.FrontFace.StencilFunc), stencilRef_, s.StencilReadMask);
+    }
+    char bl[120] = "default";
+    if (blend_)
+    {
+        const D3D11_RENDER_TARGET_BLEND_DESC& r = blend_->desc.RenderTarget[0];
+        snprintf(bl, sizeof bl, "%d src%d dst%d op%d wr%x", r.BlendEnable, int(r.SrcBlend), int(r.DestBlend), int(r.BlendOp),
+                 r.RenderTargetWriteMask);
+    }
+    Log("trace draw: vs=%s ps=%s |%s| zs=%s %s | blend %s | cull %d | vp %.0fx%.0f z %.2f-%.2f", vs_->debugName.c_str(),
+        ps_ ? ps_->debugName.c_str() : "-", rts.c_str(), z.c_str(), ds, bl, rs_ ? int(rs_->desc.CullMode) : 3, viewport_.Width,
+        viewport_.Height, viewport_.MinDepth, viewport_.MaxDepth);
 }
 
 void Context::Draw(UINT count, UINT start) { DrawInstanced(count, 1, start, 0); }
@@ -1974,9 +2025,44 @@ void GetStats(ID3D11DeviceContext* pContext, Stats* out)
 {
     Context* c = static_cast<Context*>(static_cast<ID3D11DeviceContext1*>(pContext));
     *out = c->stats;
-    out->textureBytes = c->device()->textureBytes;
-    out->bufferBytes = c->device()->bufferBytes;
-    out->deviceAllocatedBytes = c->device()->mtl.currentAllocatedSize;
+    Device* d = c->device();
+    out->textureBytes = d->textureBytes;
+    out->bufferBytes = d->bufferBytes;
+    out->deviceAllocatedBytes = d->mtl.currentAllocatedSize;
+    out->frames = d->frameCount;
+    out->gpuSeconds = double(d->gpuNanos.load()) * 1e-9;
+    out->blockedSeconds = double(d->blockedNanos.load()) * 1e-9;
+}
+
+bool GetRenderStats(RenderStats* out)
+{
+    Stats s;
+    if (!GetGlobalStats(&s))
+        return false;
+    out->frames = s.frames;
+    out->draws = s.draws;
+    out->renderPasses = s.renderPasses;
+    out->commandBuffers = s.commandBuffers;
+    out->gpuSeconds = s.gpuSeconds;
+    out->blockedSeconds = s.blockedSeconds;
+    out->textureBytes = s.textureBytes;
+    out->bufferBytes = s.bufferBytes;
+    out->deviceAllocatedBytes = s.deviceAllocatedBytes;
+    return true;
+}
+
+bool GetGlobalStats(Stats* out)
+{
+    Device* d = LatestDevice();
+    if (!d || !d->context)
+        return false;
+    GetStats(static_cast<ID3D11DeviceContext*>(static_cast<ID3D11DeviceContext1*>(d->context)), out);
+    return true;
+}
+
+void TraceDraws(ID3D11DeviceContext* pContext, int count)
+{
+    static_cast<Context*>(static_cast<ID3D11DeviceContext1*>(pContext))->traceDraws(count);
 }
 
 void ResetFrameStats(ID3D11DeviceContext* pContext)

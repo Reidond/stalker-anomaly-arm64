@@ -453,6 +453,7 @@ void DoAsyncScreenshot();
 #if defined(XR_PLATFORM_APPLE)
 void AppleScreenshotBeforePresent();
 void AppleScreenshotAfterPresent();
+void AppleRTDumpHook(const char* stage);
 #endif
 
 void dxRenderDeviceRender::End()
@@ -466,6 +467,7 @@ void dxRenderDeviceRender::End()
 
 	DoAsyncScreenshot();
 #if defined(XR_PLATFORM_APPLE)
+	AppleRTDumpHook("frame_end");
 	AppleScreenshotBeforePresent();
 #endif
 

@@ -57,10 +57,17 @@ void dxRainRender::Copy(IRainRender& _in)
 
 #include "../../xrEngine/iGame_persistent.h"
 
+#if defined(XR_PLATFORM_APPLE)
+void AppleRTDumpHook(const char* stage); // rt_dump (r__screenshot.cpp)
+#endif
+
 void dxRainRender::Render(CEffect_Rain& owner)
 {
 	float factor = g_pGamePersistent->Environment().CurrentEnv->rain_density;
 	if (factor < EPS_L) return;
+#if defined(XR_PLATFORM_APPLE)
+	AppleRTDumpHook("rain_draw");
+#endif
 
 	float _drop_len = drop_length;
 	float _drop_width = drop_width;

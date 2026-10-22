@@ -1,5 +1,12 @@
 #include "stdafx.h"
 
+#if defined(XR_PLATFORM_APPLE)
+void AppleRTDumpHook(const char* stage); // rt_dump (r__screenshot.cpp)
+# define RT_DUMP_HOOK(stage) AppleRTDumpHook(stage)
+#else
+# define RT_DUMP_HOOK(stage) ((void)0)
+#endif
+
 void CRenderTarget::draw_rain(light& RainSetup)
 {
 	float fRainFactor = g_pGamePersistent->Environment().CurrentEnv->rain_density;
@@ -302,6 +309,8 @@ void CRenderTarget::draw_rain(light& RainSetup)
 			}
 		}
 
+		RT_DUMP_HOOK("rain_patch");
+
 		//	Apply normal
 		RCache.set_Element(s_rain->E[2]);
 		RCache.set_c("Ldynamic_dir", L_dir.x, L_dir.y, L_dir.z, 0);
@@ -393,6 +402,8 @@ void CRenderTarget::draw_rain(light& RainSetup)
 				StateManager.SetSampleMask(0xffffffff);
 			}
 		}
+
+		RT_DUMP_HOOK("rain_end");
 
 		//	TODO: DX10: Check if DX10 has analog for NV DBT
 		// disable depth bounds

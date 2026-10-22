@@ -42,9 +42,110 @@ void AppleQueueScreenshot(LPCSTR name, int delay)
 	}
 	g_apple_shot.queued = true;
 	g_apple_shot.delay = delay < 0 ? 0 : delay;
+	Msg("* screenshot: queued '%s', %d frames ahead", name ? name : "", g_apple_shot.delay);
 	g_apple_shot.name[0] = 0;
 	if (name && name[0])
 		xr_strcpy(g_apple_shot.name, sizeof(g_apple_shot.name), name);
+}
+
+// ---- rt_dump: look at intermediate render targets -------------------------------------------------------------------
+// rt_dump <target> <file> [stage] [mode] [lo hi]
+//   target: a render target name ($user$accum, $user$position, ...), `depth` (the scene depth-stencil), `smap` (the shadow map)
+//   stage:  where in the frame: gbuffer (after the G-buffer and wallmarks), rain_patch, rain_end (inside the wet-surface layer),
+//           lit (before the post-process), frame_end (default)
+//   mode:   c = RGB (default), s = signed RGB, r/g/b/a = one channel as grey, d = depth, st = stencil; lo hi = the range for grey
+// The image goes to $screenshots$\<file>.png (8 bit); the log line has the format, size, min, max and mean.
+namespace
+{
+struct RTDump
+{
+	bool pending = false;
+	string64 target = "";
+	string64 file = "";
+	string32 stage = "frame_end";
+	string32 mode = "c";
+	float lo = 0, hi = 0;
+} g_rt_dump;
+} // namespace
+
+void AppleQueueRTDump(LPCSTR target, LPCSTR file, LPCSTR stage, LPCSTR mode, float lo, float hi)
+{
+	xr_strcpy(g_rt_dump.target, target);
+	xr_strcpy(g_rt_dump.file, file);
+	xr_strcpy(g_rt_dump.stage, stage && *stage ? stage : "frame_end");
+	xr_strcpy(g_rt_dump.mode, mode && *mode ? mode : "c");
+	g_rt_dump.lo = lo;
+	g_rt_dump.hi = hi;
+	g_rt_dump.pending = true;
+	Msg("* rt_dump: '%s' at %s (%s) queued", target, g_rt_dump.stage, g_rt_dump.mode);
+}
+
+void AppleRTDumpHook(const char* stage)
+{
+	if (!g_rt_dump.pending || xr_strcmp(stage, g_rt_dump.stage))
+		return;
+	g_rt_dump.pending = false;
+
+	ID3DResource* res = nullptr;
+	bool release = false;
+	if (!xr_strcmp(g_rt_dump.target, "depth"))
+	{
+		if (HW.pBaseZB)
+		{
+			HW.pBaseZB->GetResource(&res);
+			release = true;
+		}
+	}
+	else if (!xr_strcmp(g_rt_dump.target, "smap"))
+		res = RImplementation.Target->rt_smap_depth ? RImplementation.Target->rt_smap_depth->pSurface : nullptr;
+	else if (CRT* rt = dxRenderDeviceRender::Instance().Resources->DebugFindRT(g_rt_dump.target))
+		res = rt->pSurface;
+	if (!res)
+	{
+		Msg("! rt_dump: no render target '%s'", g_rt_dump.target);
+		return;
+	}
+
+	mtl_d3d11::DebugReadOptions opt;
+	const char* m = g_rt_dump.mode;
+	opt.lo = g_rt_dump.lo;
+	opt.hi = g_rt_dump.hi;
+	if (!xr_strcmp(m, "s"))
+		opt.mode = mtl_d3d11::DebugReadOptions::Signed;
+	else if (!xr_strcmp(m, "c"))
+		opt.mode = mtl_d3d11::DebugReadOptions::Colour;
+	else
+	{
+		opt.mode = mtl_d3d11::DebugReadOptions::Channel;
+		if (!xr_strcmp(m, "g")) opt.channel = 1;
+		else if (!xr_strcmp(m, "b")) opt.channel = 2;
+		else if (!xr_strcmp(m, "a")) opt.channel = 3;
+		else if (!xr_strcmp(m, "st")) opt.stencil = true;
+	}
+	mtl_d3d11::DebugImage img;
+	if (!mtl_d3d11::DebugReadTexture(HW.pContext, res, opt, &img))
+		Msg("! rt_dump: cannot read '%s'", g_rt_dump.target);
+	else
+	{
+		mtl_d3d11::CaptureResult cap;
+		cap.width = img.width;
+		cap.height = img.height;
+		cap.rgba = std::move(img.rgba);
+		std::vector<uint8_t> png;
+		string_path name;
+		xr_sprintf(name, sizeof(name), "%s.png", g_rt_dump.file);
+		if (mtl_d3d11::EncodeCapture(cap, 1, &png))
+			if (IWriter* fs = FS.w_open("$screenshots$", name))
+			{
+				fs->w(png.data(), (u32)png.size());
+				FS.w_close(fs);
+			}
+		Msg("* rt_dump: %s '%s' %ux%u %s min %.4f max %.4f mean %.4f", name, g_rt_dump.target, img.width, img.height,
+		    img.format.c_str(), img.minValue, img.maxValue, img.mean);
+	}
+	FlushLog(); // scripted runs are sometimes killed on the way out, and the engine log is buffered
+	if (release)
+		_RELEASE(res);
 }
 
 void AppleScreenshotBeforePresent()
@@ -99,6 +200,7 @@ void AppleScreenshotAfterPresent()
 		fs->w(encoded.data(), (u32)encoded.size());
 		FS.w_close(fs);
 		Msg("* screenshot: %s (%ux%u, %u KB)", buf, shot.width, shot.height, (u32)(encoded.size() / 1024));
+		FlushLog();
 	}
 	else
 		Msg("! screenshot: cannot write %s", buf);

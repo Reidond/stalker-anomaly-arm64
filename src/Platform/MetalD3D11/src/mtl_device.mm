@@ -1,5 +1,6 @@
 // ID3D11Device implementation: resource, view, state and shader creation.
 #import "mtl_internal.h"
+#include <chrono>
 #import "mtl_context.h"
 
 #include <algorithm>
@@ -255,7 +256,13 @@ id<MTLTexture> UnorderedAccessView::texture(Context* ctx) const
 // ---------------------------------------------------------------------------------------------------------
 // Device
 // ---------------------------------------------------------------------------------------------------------
-Device::Device(const DeviceDesc& d) : desc(d) {}
+namespace
+{
+std::atomic<Device*> g_latestDevice{nullptr};
+}
+Device* LatestDevice() { return g_latestDevice.load(); }
+
+Device::Device(const DeviceDesc& d) : desc(d) { g_latestDevice = this; }
 
 Device::~Device()
 {
@@ -282,8 +289,12 @@ void Device::waitForSerial(uint64_t s)
 {
     if (completedSerial.load(std::memory_order_acquire) >= s)
         return;
-    std::unique_lock<std::mutex> lk(fenceMutex);
-    fenceCv.wait(lk, [&] { return completedSerial.load(std::memory_order_acquire) >= s; });
+    const auto t0 = std::chrono::steady_clock::now();
+    {
+        std::unique_lock<std::mutex> lk(fenceMutex);
+        fenceCv.wait(lk, [&] { return completedSerial.load(std::memory_order_acquire) >= s; });
+    }
+    blockedNanos += uint64_t(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - t0).count());
 }
 
 void Device::noteCompleted(uint64_t s)
@@ -1332,6 +1343,8 @@ void SetDebugName(ID3D11DeviceChild* o, const char* name)
 {
     if (!o || !name)
         return;
+    if (DeviceChildBase* c = dynamic_cast<DeviceChildBase*>(o))
+        c->debugName = name;
     // Resources carry the label on the Metal object.
     if (ID3D11Resource* r = dynamic_cast<ID3D11Resource*>(o))
     {

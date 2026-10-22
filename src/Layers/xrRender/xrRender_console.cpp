@@ -687,7 +687,41 @@ public:
 };
 
 #if defined(XR_PLATFORM_APPLE)
+#include <mtl_d3d11/mtl_d3d11.h>
 void AppleQueueScreenshot(LPCSTR name, int delay);
+void AppleQueueRTDump(LPCSTR target, LPCSTR file, LPCSTR stage, LPCSTR mode, float lo, float hi);
+
+// mtl_trace <draws>: logs the next draws with shader names, render targets and fixed-function state (Metal shim)
+class CCC_MtlTrace : public IConsole_Command
+{
+public:
+	CCC_MtlTrace(LPCSTR N) : IConsole_Command(N) {}
+	virtual void Execute(LPCSTR args)
+	{
+		int n = 0;
+		sscanf(args, "%d", &n);
+		mtl_d3d11::TraceDraws(HW.pContext, n);
+		Msg("* mtl_trace: the next %d draws are logged", n);
+	}
+};
+
+class CCC_RTDump : public IConsole_Command
+{
+public:
+	CCC_RTDump(LPCSTR N) : IConsole_Command(N) {}
+	virtual void Execute(LPCSTR args)
+	{
+		string64 target = "", file = "", stage = "", mode = "";
+		float lo = 0, hi = 0;
+		int n = sscanf(args, "%63s %63s %31s %31s %f %f", target, file, stage, mode, &lo, &hi);
+		if (n < 2)
+		{
+			Log("rt_dump <target> <file> [stage] [mode] [lo hi]: see r__screenshot.cpp");
+			return;
+		}
+		AppleQueueRTDump(target, file, stage, mode, lo, hi);
+	}
+};
 #endif
 
 class CCC_Screenshot : public IConsole_Command
@@ -1303,6 +1337,10 @@ void xrRender_initconsole()
 
 	// Common
 	CMD1(CCC_Screenshot, "screenshot");
+#if defined(XR_PLATFORM_APPLE)
+	CMD1(CCC_RTDump, "rt_dump");
+	CMD1(CCC_MtlTrace, "mtl_trace");
+#endif
 
 	//	Igor: just to test bug with rain/particles corruption
 	CMD1(CCC_RestoreQuadIBData, "r_restore_quad_ib_data");
