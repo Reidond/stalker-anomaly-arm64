@@ -13,16 +13,16 @@ is rebuilt for arm64:
 The repo holds source code only. You need your own copy of the Anomaly 1.5.3 game files, which are
 free from ModDB.
 
-> **Status: not playable yet.** The foundations are in place and verified on both devices: the core
-> library, physics, scripting, shader translation, the Metal graphics layer, controls and the app
-> shell. The rest of the engine and the game code are being ported now.
+> **Status: runs on the Mac, not playable yet.** The whole engine is linked into one macOS app that
+> starts a new game and loads a save; the rendering has defects and nothing has been checked on the
+> iPad yet. See [INTEGRATION.md](docs/ios-port/INTEGRATION.md).
 
 ## Progress
 
 | Milestone | Goal | State |
 |---|---|---|
 | M0 | Build system, dependencies, platform probe | Done. Runs on the Mac and the iPad. |
-| M1 | Engine runs headless on macOS | In progress. Ported so far: xrCore (reads the real `.db` archives), luabind and ODE. The remaining modules are next ([M1-AUDIT](docs/ios-port/M1-AUDIT.md)). |
+| M1 | Engine runs on macOS | Reached on the Mac: all modules link into one app, a new game runs in the Cordon against the real data (main menu, faction dialog, scripts and AI ticking, walking), a save round-trips ([INTEGRATION](docs/ios-port/INTEGRATION.md)). Rendering has visible defects; that is M2. |
 | M2 | Metal renderer | Groundwork done. 98% of Anomaly's shaders translate to Metal, and the D3D11 calls the renderer needs work on Metal. Porting the renderer itself is next. |
 | M3 | DualSense controls | Controller layer done and checked on the iPad. Not yet hooked into the engine. |
 | M4 | iPad app | App shell done, and the game data copies to the iPad. Packaging the engine into it is pending. |
