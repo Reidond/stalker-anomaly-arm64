@@ -1254,7 +1254,7 @@ bool CWeaponMagazined::TryPlayAnimBore()
 void CWeaponMagazined::PlayAnimIdleSprint()
 {
 	iAmmoElapsed == 0 && HudAnimationExist("anm_idle_sprint_empty")
-		? PlayHUDMotion("anm_idle_sprint_empty", TRUE, NULL, GetState())
+		? (void)PlayHUDMotion("anm_idle_sprint_empty", TRUE, NULL, GetState())
 		: inherited::PlayAnimIdleSprint();
 }
 
@@ -1263,7 +1263,7 @@ void CWeaponMagazined::PlayAnimIdleMoving()
 	bool bAccelerated = isActorAccelerated(Actor()->MovingState(), IsZoomed());
 
 	iAmmoElapsed == 0 && HudAnimationExist("anm_idle_moving_empty")
-		? PlayHUDMotion("anm_idle_moving_empty", TRUE, NULL, GetState(), bAccelerated ? 1.f : .75f)
+		? (void)PlayHUDMotion("anm_idle_moving_empty", TRUE, NULL, GetState(), bAccelerated ? 1.f : .75f)
 		: inherited::PlayAnimIdleMoving();
 }
 

@@ -674,6 +674,7 @@ void CLevel::ProcessSpawnEvents()
 			goto spawn;
 		}
 
+		{ // scoped: the goto above must not jump over these initialisers
         // If the object was in alife, but now its absent, skip it
         auto spawn_data_it = spawn_events_data_copy.find(obj_id);
         if (spawn_data_it != spawn_events_data_copy.end())
@@ -698,6 +699,7 @@ void CLevel::ProcessSpawnEvents()
 				if (spawn_antifreeze_debug) Msg("![ProcessSpawnEvents] parent object is not in alife, do not spawn, section %s, obj_id %d, parent_id %d, event_id %d", section.c_str(), obj_id, parent_id, dest);
 				continue;
 			}
+		}
 		}
 
 	spawn:
@@ -1447,7 +1449,7 @@ script_attachment* CLevel::get_attachment(LPCSTR name)
 {
 	if (m_script_attachments.size())
 	{
-		auto& att = m_script_attachments.find(name);
+		auto att = m_script_attachments.find(name);
 		if (att != m_script_attachments.end())
 			return att->second;
 	}

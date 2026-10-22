@@ -1264,9 +1264,16 @@ void refresh_npc_names()
 }
 
 
+#ifdef XR_PLATFORM_APPLE
+// SDL reports the buttons as the user configured them, so there is no swap to undo.
+static inline bool xr_mouse_buttons_swapped() { return false; }
+#else
+static inline bool xr_mouse_buttons_swapped() { return !!GetSystemMetrics(SM_SWAPBUTTON); }
+#endif
+
 void LevelPressAction(int cmd)
 {
-	if ((cmd == MOUSE_1 || cmd == MOUSE_2) && !!GetSystemMetrics(SM_SWAPBUTTON))
+	if ((cmd == MOUSE_1 || cmd == MOUSE_2) && xr_mouse_buttons_swapped())
 		cmd = cmd == MOUSE_1 ? MOUSE_2 : MOUSE_1;
 
 	Level().IR_OnKeyboardPress(cmd);
@@ -1274,7 +1281,7 @@ void LevelPressAction(int cmd)
 
 void LevelReleaseAction(int cmd)
 {
-	if ((cmd == MOUSE_1 || cmd == MOUSE_2) && !!GetSystemMetrics(SM_SWAPBUTTON))
+	if ((cmd == MOUSE_1 || cmd == MOUSE_2) && xr_mouse_buttons_swapped())
 		cmd = cmd == MOUSE_1 ? MOUSE_2 : MOUSE_1;
 
 	Level().IR_OnKeyboardRelease(cmd);
@@ -1282,7 +1289,7 @@ void LevelReleaseAction(int cmd)
 
 void LevelHoldAction(int cmd)
 {
-	if ((cmd == MOUSE_1 || cmd == MOUSE_2) && !!GetSystemMetrics(SM_SWAPBUTTON))
+	if ((cmd == MOUSE_1 || cmd == MOUSE_2) && xr_mouse_buttons_swapped())
 		cmd = cmd == MOUSE_1 ? MOUSE_2 : MOUSE_1;
 
 	Level().IR_OnKeyboardHold(cmd);
@@ -2074,7 +2081,7 @@ enum ETraceTarget {
 
 static SPickParam* get_pick(ETraceTarget tt)
 {
-	R_ASSERT(tt >= 0, tt < TT_MAX);
+	R_ASSERT(tt >= 0 && tt < TT_MAX);
 
 	const attachable_hud_item* item = NULL;
 	switch (tt)

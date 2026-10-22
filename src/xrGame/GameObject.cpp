@@ -885,7 +885,7 @@ script_attachment* CGameObject::get_attachment(LPCSTR name)
 {
 	if (m_script_attachments.size())
 	{
-		auto& att = m_script_attachments.find(name);
+		auto att = m_script_attachments.find(name);
 		if (att != m_script_attachments.end())
 			return att->second;
 	}

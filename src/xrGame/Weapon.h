@@ -213,6 +213,7 @@ public:
 
 	bool IsMisfire() const;
 	void SetMisfireScript(bool b);
+	using CHudItem::SetPending; // exported to scripts as &CWeapon::SetPending
 	BOOL CheckForMisfire();
 
 	BOOL AutoSpawnAmmo() const

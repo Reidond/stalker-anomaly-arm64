@@ -190,7 +190,7 @@ void CCustomDevice::OnStateSwitch(u32 S, u32 oldState)
 		m_bZoomed = true;
 
 		HudAnimationExist(m_bOldZoom ? "anm_zoom_in" : "anm_zoom")
-			? PlayHUDMotion(m_bOldZoom ? "anm_zoom_in" : "anm_zoom", TRUE, this, GetState())
+			? (void)PlayHUDMotion(m_bOldZoom ? "anm_zoom_in" : "anm_zoom", TRUE, this, GetState())
 			: SwitchState(eIdleZoom);
 		SetPending(FALSE);
 	}
@@ -199,7 +199,7 @@ void CCustomDevice::OnStateSwitch(u32 S, u32 oldState)
 	{
 		m_bZoomed = false;
 		HudAnimationExist(m_bOldZoom ? "anm_zoom_out" : "anm_zoom")
-			? PlayHUDMotion(m_bOldZoom ? "anm_zoom_out" : "anm_zoom", TRUE, this, GetState())
+			? (void)PlayHUDMotion(m_bOldZoom ? "anm_zoom_out" : "anm_zoom", TRUE, this, GetState())
 			: SwitchState(eIdle);
 		SetPending(FALSE);
 	}

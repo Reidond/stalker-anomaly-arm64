@@ -46,9 +46,14 @@ void CUICursor::InitInternal()
 	m_static->SetWndSize(sz);
 	m_static->SetStretchTexture(true);
 
+#ifdef XR_PLATFORM_APPLE
+	// The pointer is CInput's own (SDL relative motion, scaled to UI units while a dialog is up); there is no OS cursor to follow.
+	m_b_use_win_cursor = false;
+#else
 	u32 screen_size_x = GetSystemMetrics(SM_CXSCREEN);
 	u32 screen_size_y = GetSystemMetrics(SM_CYSCREEN);
 	m_b_use_win_cursor = (screen_size_y >= Device.dwHeight && screen_size_x >= Device.dwWidth);
+#endif
 }
 
 //--------------------------------------------------------------------

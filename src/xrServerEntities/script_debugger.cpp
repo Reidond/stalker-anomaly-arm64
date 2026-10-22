@@ -1,4 +1,5 @@
 #include "stdafx.h"
+#ifndef XR_PLATFORM_APPLE // Win32 mailslot IDE debugger; USE_DEBUGGER is never defined
 #include "script_debugger.h"
 #include "script_lua_helper.h"
 #include "mslotutils.h"
@@ -581,3 +582,4 @@ void CScriptDebugger::AddThread(SScriptThread& th)
 {
 	_SendMessage(DMSG_ADD_THREAD, (WPARAM)(&th), 0);
 }
+#endif // XR_PLATFORM_APPLE

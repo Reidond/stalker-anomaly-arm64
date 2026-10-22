@@ -730,6 +730,20 @@ bool CScriptStorage::load_buffer(lua_State* L, LPCSTR caBuffer, size_t tSize, LP
 		LPSTR script = 0;
 		bool dynamic_allocation = false;
 
+#ifdef XR_PLATFORM_APPLE
+		// No SEH, and secondary threads have small stacks: only small scripts go on the stack.
+		if (total_size < 64 * 1024)
+			script = (LPSTR)_alloca(total_size);
+		else
+		{
+#ifdef DEBUG
+			script = (LPSTR)Memory.mem_alloc(total_size, "lua script file");
+#else //!DEBUG
+			script = (LPSTR)Memory.mem_alloc(total_size);
+#endif //-DEBUG
+			dynamic_allocation = true;
+		}
+#else // XR_PLATFORM_APPLE
 		__try
 		{
 			if (total_size < 768 * 1024)
@@ -755,6 +769,7 @@ bool CScriptStorage::load_buffer(lua_State* L, LPCSTR caBuffer, size_t tSize, LP
 #endif //#ifdef DEBUG
 			dynamic_allocation = true;
 		};
+#endif // XR_PLATFORM_APPLE
 
 		xr_strcpy(script, total_size, insert);
 		CopyMemory(script + str_len, caBuffer, u32(tSize));
