@@ -59,6 +59,7 @@ void AppleScreenshotBeforePresent()
 	g_apple_shot.queued = false;
 	g_apple_shot.armed = true;
 	g_apple_shot.waited = 0;
+	Msg("* screenshot: capturing '%s'", g_apple_shot.name);
 	mtl_d3d11::RequestCapture(HW.m_pSwapChain);
 }
 
