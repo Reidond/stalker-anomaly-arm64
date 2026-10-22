@@ -35,6 +35,7 @@ namespace luabind { namespace detail
 
 	int LUABIND_API ref(lua_State *L);
 	void LUABIND_API unref(lua_State *L, int ref);
+	lua_State* LUABIND_API release_state_of(lua_State* L);
 
 	inline void getref(lua_State* L, int r)
 	{
@@ -45,10 +46,12 @@ namespace luabind { namespace detail
 	{
 		lua_reference(lua_State* L_ = 0)
 			: L(L_)
+			, R(0)
 			, m_ref(LUA_NOREF)
 		{}
 		lua_reference(lua_reference const& r)
 			: L(r.L)
+			, R(0)
 			, m_ref(LUA_NOREF)
 		{
 			if (!r.is_valid()) return;
@@ -76,6 +79,7 @@ namespace luabind { namespace detail
 			reset();
 			L = L_;
 			m_ref = ref(L);
+			R = release_state_of(L);
 		}
 
 		void replace(lua_State* L_)
@@ -96,7 +100,8 @@ namespace luabind { namespace detail
 
 		void reset()
 		{
-			if (L && m_ref != LUA_NOREF) unref(L, m_ref);
+			// R, not L: L can be a coroutine that is gone by now
+			if (R && m_ref != LUA_NOREF) unref(R, m_ref);
 			m_ref = LUA_NOREF;
 		}
 
@@ -104,10 +109,12 @@ namespace luabind { namespace detail
 		{
 			assert(r.L == L);
 			std::swap(r.m_ref, m_ref);
+			std::swap(r.R, R);
 		}
 
 	private:
 		lua_State* L;
+		lua_State* R; // where the slot is released (see release_state_of)
 		int m_ref;
 	};
 

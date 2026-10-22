@@ -27,12 +27,8 @@
 
 namespace luabind {
 
-    namespace detail { void set_main_state(lua_State* L); } // ref.cpp
-
     void open(lua_State* L)
     {
-        detail::set_main_state(L);
-
         // get the global class registry, or create one if it doesn't exist
         // (it's global within a lua state)
         detail::class_registry* r = nullptr;
@@ -56,10 +52,11 @@ namespace luabind {
         new(r) detail::class_registry(L);
         lua_settable(L, LUA_REGISTRYINDEX);
 
-        // The main thread, for the weak references: a reference is created from whatever coroutine the script runs in, and that
-        // coroutine can be collected long before the reference is released (see weak_ref.cpp).
-        lua_pushthread(L);
-        lua_setfield(L, LUA_REGISTRYINDEX, "__luabind_main_thread");
+        // A thread of its own, only for releasing registry slots and weak references (see ref.cpp, weak_ref.cpp): a reference is
+        // made from whatever coroutine the script runs in, and that coroutine can be collected long before the reference is
+        // released. The main thread is no substitute: while it runs a coroutine its stack is not in a state to push onto.
+        lua_newthread(L);
+        lua_setfield(L, LUA_REGISTRYINDEX, "__luabind_release_thread");
 
         // add functions (class, cast etc...)
         lua_pushstring(L, "class");

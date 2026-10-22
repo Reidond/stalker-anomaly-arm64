@@ -99,10 +99,10 @@ namespace luabind {
             , ref(0)
         {
             // ~impl runs when the wrapped object is destroyed, which can be long after the coroutine `s` was collected (or
-            // while the main state closes): it has to use a state that outlives the reference, the main thread.
-            lua_getfield(s, LUA_REGISTRYINDEX, "__luabind_main_thread");
-            if (lua_State* main_thread = lua_tothread(s, -1))
-                release_state = main_thread;
+            // while the main state closes): it has to use a state that outlives the reference, luabind::open()'s release thread.
+            lua_getfield(s, LUA_REGISTRYINDEX, "__luabind_release_thread");
+            if (lua_State* release_thread = lua_tothread(s, -1))
+                release_state = release_thread;
             lua_pop(s, 1);
 
             lua_pushvalue(s, index);

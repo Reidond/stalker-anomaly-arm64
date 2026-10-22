@@ -138,16 +138,21 @@ namespace luabind { namespace detail
 		return ref;
 	}
 
-	// The main thread of the (one) Lua VM, set by luabind::open(). A lua_reference remembers the state it was made on, which is
-	// usually the coroutine a script runs in and can be collected long before the reference is released (when a C++ object holding
-	// a functor dies, or when the VM closes): unref must not touch that thread's stack. The registry is shared by all threads.
-	static lua_State* g_main_state = 0;
-	void set_main_state(lua_State* L) { g_main_state = L; }
+	// The thread luabind::open() made in this VM for releasing slots (or `L` itself in a VM without one). A lua_reference
+	// remembers the state it was made on, usually the coroutine a script runs in, which can be collected long before the
+	// reference is released (when a C++ object holding a functor dies, or when the VM closes): releasing must not touch that
+	// thread's stack. The registry is shared by all threads of a VM. Per VM: the renderer has one of its own.
+	lua_State* LUABIND_API release_state_of(lua_State* L)
+	{
+		lua_getfield(L, LUA_REGISTRYINDEX, "__luabind_release_thread");
+		lua_State* t = lua_tothread(L, -1);
+		lua_pop(L, 1);
+		return t ? t : L;
+	}
 
 	void LUABIND_API unref(lua_State *L, int ref)
 	{
-		if (g_main_state)
-			L = g_main_state;
+		lua_checkstack(L, 4);
 		try
 		{
 			int t = LUA_REGISTRYINDEX;
