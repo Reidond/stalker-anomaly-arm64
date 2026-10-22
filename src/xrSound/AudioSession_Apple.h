@@ -24,6 +24,9 @@ bool configure_session();
 // Reactivates the session after an interruption. Returns false while the system still refuses (app in background).
 bool activate_session();
 
+// iOS: the outputs of the current route, e.g. "Speaker" or "AirPods Max (BluetoothA2DPOutput)". "" elsewhere.
+const char* output_route();
+
 // Calls fn on the thread that posted the notification (main thread for all of the above).
 void observe_session(SessionEventFn fn, void* user);
 void unobserve_session();

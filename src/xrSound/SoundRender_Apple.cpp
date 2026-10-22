@@ -73,6 +73,7 @@ void on_session_event(SessionEvent event, void*)
 		resume_after_interruption(core);
 		break;
 	case SessionEvent::OutputChanged:
+		Msg("SOUND: output route changed: %s", output_route());
 		core->bPendingDeviceListRefresh = TRUE;
 		core->bPendingDefaultDeviceSwitch = TRUE;
 		break;
@@ -142,6 +143,7 @@ void prepare()
 	// A refusal (a call in progress, launched in the background) is retried on InterruptionEnded / AppActive.
 	if (!configure_session())
 		g_session_pending = true;
+	Msg("SOUND: audio session ready, output route: %s", output_route());
 }
 } // namespace xr_sound_apple
 

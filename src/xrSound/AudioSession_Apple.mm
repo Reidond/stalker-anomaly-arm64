@@ -10,6 +10,7 @@
 #endif
 
 #include <atomic>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 
@@ -62,6 +63,16 @@ bool activate_session()
 	return true;
 }
 
+const char* output_route()
+{
+	static char buf[256];
+	NSMutableArray<NSString*>* names = [NSMutableArray array];
+	for (AVAudioSessionPortDescription* port in AVAudioSession.sharedInstance.currentRoute.outputs)
+		[names addObject:[NSString stringWithFormat:@"%@ (%@)", port.portName, port.portType]];
+	snprintf(buf, sizeof(buf), "%s", names.count ? [names componentsJoinedByString:@", "].UTF8String : "none");
+	return buf;
+}
+
 void observe_session(SessionEventFn fn, void* user)
 {
 	unobserve_session();
@@ -98,6 +109,7 @@ void unobserve_session()
 }
 #else
 bool configure_session() { return true; }
+const char* output_route() { return ""; }
 bool activate_session() { return true; }
 void observe_session(SessionEventFn, void*) {}
 void unobserve_session() {}
