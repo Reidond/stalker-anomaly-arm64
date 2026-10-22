@@ -58,7 +58,8 @@ enum ECamEffectorType : int
 	cefNext
 };
 
-enum EEffectorPPType
+// Fixed underlying type, like ECamEffectorType: the game passes ids beyond ppeNext.
+enum EEffectorPPType : int
 {
 	ppeNext = 0,
 };
