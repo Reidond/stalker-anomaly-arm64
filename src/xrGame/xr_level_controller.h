@@ -171,6 +171,19 @@ EGameActions get_binded_action(int dik);
 
 extern void CCC_RegisterInput();
 
+#ifdef XR_PLATFORM_APPLE
+// xrGame's side of the controller layer (docs/ios-port/CONTROLS.md, "Hooks still needed"). pInput->Pad() is null until
+// CInput has created the layer, so every call is safe before that.
+class CActor;
+class CWeapon;
+void xr_pad_install_hooks(); // once, at game start: pInput->pad_hooks (cursor jump, controller connection)
+void xr_pad_ui_context(bool ui, const Fvector2& cursor); // a dialog needing the cursor opened (true) or closed (false)
+void xr_pad_update_actor(CActor* actor); // every frame for the controlled actor: health, bleeding, radiation, weapon state
+void xr_pad_on_hit(int hit_type, float power); // CActor::Hit for the controlled actor (ALife::EHitType, health lost)
+void xr_pad_on_shot(CWeapon* weapon);
+void xr_pad_on_dry_fire(CWeapon* weapon);
+#endif
+
 struct _conCmd
 {
 	shared_str cmd;

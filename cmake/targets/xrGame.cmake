@@ -114,7 +114,9 @@ set(xrgame_compile_options
     # (ai_location(), script exports) worked on MSVC; clang folds them to "false" unless null is declared valid.
     -fno-delete-null-pointer-checks
 )
-set(xrgame_link_targets luabind LuaJIT::luajit ode xrAPI xrCDB xrNetServer xrPhysics xrXMLParser)
+# gameinput: the controller layer's headers (xr_level_controller.cpp feeds its feedback model); lua_extensions: luaopen_lua_extensions,
+# luaopen_socket_core_init and pdebug_init_init, called by CScriptStorage (absent targets are skipped)
+set(xrgame_link_targets luabind LuaJIT::luajit ode xrAPI xrCDB xrNetServer xrPhysics xrXMLParser gameinput lua_extensions)
 
 # One OBJECT library per shard, configured like anomaly_add_module() configures a module.
 set(xrgame_objects "")
@@ -139,8 +141,18 @@ foreach(shard IN LISTS XRGAME_SHARDS)
         target_compile_options(${tgt} PRIVATE "SHELL:-iquote \"${dir}\"")
     endforeach()
     target_compile_definitions(${tgt} PRIVATE XRGAME_EXPORTS)
+    if(NOT ANOMALY_XRGAME_MULTIPLAYER)
+        # single-player code that names a multiplayer class guards that code with this (see XRGAME-SHARDS.md)
+        target_compile_definitions(${tgt} PRIVATE XRGAME_NO_MULTIPLAYER)
+    endif()
     target_compile_options(${tgt} PRIVATE ${xrgame_compile_options})
     if(ANOMALY_XRGAME_PCH)
+        # the multiplayer sources include plain C files (GameSpy, atlas): there is no C PCH to reuse for them
+        foreach(src IN LISTS xrgame_sources_${shard})
+            if(src MATCHES "\\.c$")
+                set_source_files_properties("${src}" PROPERTIES SKIP_PRECOMPILE_HEADERS ON)
+            endif()
+        endforeach()
         if(NOT xrgame_pch_owner)
             target_precompile_headers(${tgt} PRIVATE "$<$<COMPILE_LANGUAGE:CXX>:${ANOMALY_SRC_DIR}/xrGame/stdafx.h>")
             set(xrgame_pch_owner ${tgt})

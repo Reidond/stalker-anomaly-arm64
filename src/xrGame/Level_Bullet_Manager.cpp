@@ -307,9 +307,11 @@ void CBulletManager::AddBullet(const Fvector& position,
 	{
 		if (SendHit)
 			Game().m_WeaponUsageStatistic->OnBullet_Fire(&bullet, cartridge);
+#ifndef XRGAME_NO_MULTIPLAYER
 		game_cl_mp* tmp_cl_game = smart_cast<game_cl_mp*>(&Game());
 		if (tmp_cl_game->get_reward_generator())
 			tmp_cl_game->get_reward_generator()->OnBullet_Fire(sender_id, sendersweapon_id, position, direction);
+#endif
 	}
 }
 

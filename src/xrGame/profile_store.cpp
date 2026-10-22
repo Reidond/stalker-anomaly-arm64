@@ -295,7 +295,11 @@ static u32 const actuality_update_time = 120;
 			!m_best_scores_store->is_sake_equal_to_file())
 		{
 			__time32_t current_time;
+#ifdef XR_PLATFORM_APPLE
+			current_time = (__time32_t)time(nullptr);
+#else
 			_time32(&current_time);
+#endif
 
 			__time32_t last_submit_time = static_cast<__time32_t>(
 				m_dsigned_reader.get_ltx().r_u32(

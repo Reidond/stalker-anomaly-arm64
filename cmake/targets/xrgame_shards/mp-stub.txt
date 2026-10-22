@@ -42,6 +42,10 @@ xrGame/configs_dump_verifyer.cpp
 xrGame/configs_dump_verifyer.h
 xrGame/configs_dumper.cpp
 xrGame/configs_dumper.h
+xrGame/cta_game_artefact.cpp
+xrGame/cta_game_artefact.h
+xrGame/cta_game_artefact_activation.cpp
+xrGame/cta_game_artefact_activation.h
 xrGame/double_shot_double_kill.cpp
 xrGame/double_shot_double_kill.h
 xrGame/event_conditions_collection.cpp
@@ -296,10 +300,14 @@ xrGame/ui/UIVotingCategory.cpp
 xrGame/ui/UIVotingCategory.h
 xrGame/UIAchivementsIndicator.cpp
 xrGame/UIAchivementsIndicator.h
+xrGame/UIGameAHunt.cpp
+xrGame/UIGameAHunt.h
 xrGame/UIGameCTA.cpp
 xrGame/UIGameCTA.h
 xrGame/UIGameDM.cpp
 xrGame/UIGameDM.h
+xrGame/UIGameMP.cpp
+xrGame/UIGameMP.h
 xrGame/UIGameTDM.cpp
 xrGame/UIGameTDM.h
 xrGame/UIPanelsClassFactory.cpp

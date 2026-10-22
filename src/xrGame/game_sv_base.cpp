@@ -844,6 +844,9 @@ void game_sv_GameState::OnEvent(NET_Packet& tNetPacket, u16 type, u32 time, Clie
 
 bool game_sv_GameState::CheckNewPlayer(xrClientData* CL)
 {
+#ifdef XRGAME_NO_MULTIPLAYER
+	return false; // no players join a multiplayer game in this build
+#else
 	xrGameSpyServer* gs_server = smart_cast<xrGameSpyServer*>(m_server);
 	R_ASSERT(gs_server);
 
@@ -884,6 +887,7 @@ bool game_sv_GameState::CheckNewPlayer(xrClientData* CL)
 		return false;
 	}
 	return true;
+#endif
 }
 
 void game_sv_GameState::OnSwitchPhase(u32 old_phase, u32 new_phase)

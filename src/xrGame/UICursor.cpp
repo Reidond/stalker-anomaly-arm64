@@ -1,5 +1,6 @@
 #include "stdafx.h"
 #include "uicursor.h"
+#include "xr_level_controller.h"
 
 #include "ui/UIStatic.h"
 #include "ui/UIBtnHint.h"
@@ -46,9 +47,14 @@ void CUICursor::InitInternal()
 	m_static->SetWndSize(sz);
 	m_static->SetStretchTexture(true);
 
+#ifdef XR_PLATFORM_APPLE
+	// The pointer is CInput's own (SDL relative motion, scaled to UI units while a dialog is up); there is no OS cursor to follow.
+	m_b_use_win_cursor = false;
+#else
 	u32 screen_size_x = GetSystemMetrics(SM_CXSCREEN);
 	u32 screen_size_y = GetSystemMetrics(SM_CYSCREEN);
 	m_b_use_win_cursor = (screen_size_y >= Device.dwHeight && screen_size_x >= Device.dwWidth);
+#endif
 }
 
 //--------------------------------------------------------------------
@@ -122,6 +128,14 @@ void CUICursor::UpdateCursorPosition(int _dx, int _dy)
 	}
 	clamp(vPos.x, 0.f, UI_BASE_WIDTH);
 	clamp(vPos.y, 0.f, UI_BASE_HEIGHT);
+}
+
+void CUICursor::OnVisibilityChanged()
+{
+#ifdef XR_PLATFORM_APPLE
+	// A visible cursor means a dialog is up: the controller layer switches to its Menu context.
+	xr_pad_ui_context(bVisible, vPos);
+#endif
 }
 
 void CUICursor::SetUICursorPosition(Fvector2 pos)

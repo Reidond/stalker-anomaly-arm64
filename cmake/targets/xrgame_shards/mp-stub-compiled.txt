@@ -2,4 +2,30 @@
 # mp-stub.txt are not). One path per line, relative to src/. Edited by the mp-stub shard; no other file needs to change.
 #   - apple_mp_stubs.cpp: the stand-ins for entry points that single-player code calls.
 #   - a multiplayer source goes here when single-player code turns out to need it (or move its symbols into the stubs).
+# The rest of this list are multiplayer leaf sources that single-player objects reference and that need nothing else from
+# the multiplayer code: file transfer, the MP dump helpers, the small MP windows the XML loader and message window create.
 xrGame/apple_mp_stubs.cpp
+xrGame/UIAchivementsIndicator.cpp
+xrGame/file_transfer.cpp
+xrGame/filereceiver_node.cpp
+xrGame/filetransfer_node.cpp
+xrGame/player_account.cpp
+xrGame/script_monster_enemy_info_script.cpp
+xrGame/script_monster_home_info_script.cpp
+xrGame/secure_messaging.cpp
+xrGame/shootingObject_dump_impl.cpp
+xrGame/weapon_ammo_dump_impl.cpp
+xrGame/weapon_dump_impl.cpp
+xrGame/ui/Restrictions.cpp
+xrGame/ui/ServerList.cpp
+xrGame/ui/UICDkey.cpp
+xrGame/ui/UIChatWnd.cpp
+xrGame/ui/UIDemoPlayControl.cpp
+xrGame/ui/UIGameLog.cpp
+xrGame/ui/UIMapInfo.cpp
+xrGame/ui/UIMapInfo_script.cpp
+xrGame/ui/UIMapList.cpp
+xrGame/ui/UIRankIndicator.cpp
+xrGame/ui/UITabButtonMP.cpp
+xrGame/ui/UIListItemServer.cpp
+xrGame/ui/UIPdaKillMessage.cpp

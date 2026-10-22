@@ -48,29 +48,33 @@ u32 time_continual(const CRenderDevice* self)
 	return (self->dwTimeContinual);
 }
 
+// luabind's def_readonly(D T::*) does not deduce through a base class (the members live in CRenderDevice's bases); MSVC did.
+template <class D, class B>
+static D CRenderDevice::* dev_member(D B::* member) { return member; }
+
 #pragma optimize("s",on)
 template<> void CScriptRenderDevice::script_register(lua_State* L)
 {
 	module(L)
 	[
 		class_<CRenderDevice>("render_device")
-		.def_readonly("width", &CRenderDevice::dwWidth)
-		.def_readonly("height", &CRenderDevice::dwHeight)
-		.def_readonly("time_delta", &CRenderDevice::dwTimeDelta)
-		.def_readonly("f_time_delta", &CRenderDevice::fTimeDelta)
-		.def_readonly("cam_pos", &CRenderDevice::vCameraPosition)
-		.def_readonly("cam_dir", &CRenderDevice::vCameraDirection)
-		.def_readonly("cam_top", &CRenderDevice::vCameraTop)
-		.def_readonly("cam_right", &CRenderDevice::vCameraRight)
+		.def_readonly("width", dev_member(&CRenderDevice::dwWidth))
+		.def_readonly("height", dev_member(&CRenderDevice::dwHeight))
+		.def_readonly("time_delta", dev_member(&CRenderDevice::dwTimeDelta))
+		.def_readonly("f_time_delta", dev_member(&CRenderDevice::fTimeDelta))
+		.def_readonly("cam_pos", dev_member(&CRenderDevice::vCameraPosition))
+		.def_readonly("cam_dir", dev_member(&CRenderDevice::vCameraDirection))
+		.def_readonly("cam_top", dev_member(&CRenderDevice::vCameraTop))
+		.def_readonly("cam_right", dev_member(&CRenderDevice::vCameraRight))
 		//			.def_readonly("view",					&CRenderDevice::mView)
 		//			.def_readonly("projection",				&CRenderDevice::mProject)
 		//			.def_readonly("full_transform",			&CRenderDevice::mFullTransform)
-		.def_readonly("fov", &CRenderDevice::fFOV)
-		.def_readonly("aspect_ratio", &CRenderDevice::fASPECT)
+		.def_readonly("fov", dev_member(&CRenderDevice::fFOV))
+		.def_readonly("aspect_ratio", dev_member(&CRenderDevice::fASPECT))
 		.def("time_global", &time_global)
 		.def("time_continual", &time_continual)
-		.def_readonly("precache_frame", &CRenderDevice::dwPrecacheFrame)
-		.def_readonly("frame", &CRenderDevice::dwFrame)
+		.def_readonly("precache_frame", dev_member(&CRenderDevice::dwPrecacheFrame))
+		.def_readonly("frame", dev_member(&CRenderDevice::dwFrame))
 		.def("is_paused", &is_device_paused)
 		.def("pause", &set_device_paused)
 		.def("pause_ex", &set_device_paused_ex),

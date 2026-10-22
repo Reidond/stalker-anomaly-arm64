@@ -228,6 +228,7 @@ void CGameObject::OnEvent(NET_Packet& P, u16 type)
 			SetHitInfo(Hitter, Weapon, HDS.bone(), HDS.p_in_bone_space, HDS.dir);
 			Hit(&HDS);
 			//---------------------------------------------------------------------------
+#ifndef XRGAME_NO_MULTIPLAYER
 			if (GameID() != eGameIDSingle)
 			{
 				Game().m_WeaponUsageStatistic->OnBullet_Check_Result(false);
@@ -235,6 +236,7 @@ void CGameObject::OnEvent(NET_Packet& P, u16 type)
 				if (mp_game->get_reward_generator())
 					mp_game->get_reward_generator()->OnBullet_Hit(Hitter, this, Weapon, HDS.boneID);
 			}
+#endif
 			//---------------------------------------------------------------------------
 		}
 		break;
@@ -885,7 +887,7 @@ script_attachment* CGameObject::get_attachment(LPCSTR name)
 {
 	if (m_script_attachments.size())
 	{
-		auto& att = m_script_attachments.find(name);
+		auto att = m_script_attachments.find(name);
 		if (att != m_script_attachments.end())
 			return att->second;
 	}

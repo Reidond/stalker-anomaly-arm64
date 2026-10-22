@@ -1103,7 +1103,7 @@ void CWeapon::net_Import(NET_Packet& P)
 	P.r_u8(wstate);
 
 	u8 Zoom;
-	P.r_u8((u8)Zoom);
+	P.r_u8(Zoom);
 
 	if (H_Parent() && H_Parent()->Remote())
 	{
@@ -1777,12 +1777,12 @@ float CWeapon::GetConditionMisfireProbability() const
             );
         
     }
-    if (!smart_cast<CActor*>(H_Parent()))
+    if (!smart_cast<const CActor*>(H_Parent()))
     {
         ::luabind::functor<float> funct;
         if (ai().script_engine().functor("xr_weapon_jam.GetConditionMisfireProbability", funct))
         {
-            auto gobj = smart_cast<CGameObject*>(H_Parent());
+            auto gobj = smart_cast<const CGameObject*>(H_Parent());
             result = funct(lua_game_object(), gobj ? gobj->lua_game_object() : nullptr, result);
         }
     }

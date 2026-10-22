@@ -98,11 +98,15 @@ typedef struct tagcomplex {
 
 typedef unsigned char  BYTE;
 typedef unsigned short WORD;
+#ifndef XR_PLATFORM_APPLE // the shim (Common/Platform.h) defines DWORD (32 bits) and HANDLE
 typedef unsigned long  DWORD;
+#endif
 typedef unsigned int   UINT;
 
 typedef DWORD          COLORREF;
+#ifndef XR_PLATFORM_APPLE
 typedef unsigned int   HANDLE;
+#endif
 typedef void*          HRGN;
 
 #ifndef BOOL
@@ -122,6 +126,7 @@ typedef void*          HRGN;
 #define _T
 #endif
 
+#ifndef XR_PLATFORM_APPLE // the shim defines RECT and POINT
 typedef struct tagRECT
 {
 	long    left;
@@ -135,6 +140,7 @@ typedef struct tagPOINT
 	long  x;
 	long  y;
 } POINT;
+#endif
 
 typedef struct tagRGBQUAD {
 	BYTE    rgbBlue;

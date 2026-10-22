@@ -892,6 +892,9 @@ void CWeaponMagazined::PlaySoundShot()
 
 void CWeaponMagazined::OnShot()
 {
+#ifdef XR_PLATFORM_APPLE
+	xr_pad_on_shot(this);
+#endif
 	// Shot Sound
 	PlaySoundShot();
 
@@ -929,6 +932,9 @@ void CWeaponMagazined::OnShot()
 
 void CWeaponMagazined::OnEmptyClick()
 {
+#ifdef XR_PLATFORM_APPLE
+	xr_pad_on_dry_fire(this);
+#endif
 	if (ParentIsActor())
 	{
 		if (bMisfire)
@@ -1254,7 +1260,7 @@ bool CWeaponMagazined::TryPlayAnimBore()
 void CWeaponMagazined::PlayAnimIdleSprint()
 {
 	iAmmoElapsed == 0 && HudAnimationExist("anm_idle_sprint_empty")
-		? PlayHUDMotion("anm_idle_sprint_empty", TRUE, NULL, GetState())
+		? (void)PlayHUDMotion("anm_idle_sprint_empty", TRUE, NULL, GetState())
 		: inherited::PlayAnimIdleSprint();
 }
 
@@ -1263,7 +1269,7 @@ void CWeaponMagazined::PlayAnimIdleMoving()
 	bool bAccelerated = isActorAccelerated(Actor()->MovingState(), IsZoomed());
 
 	iAmmoElapsed == 0 && HudAnimationExist("anm_idle_moving_empty")
-		? PlayHUDMotion("anm_idle_moving_empty", TRUE, NULL, GetState(), bAccelerated ? 1.f : .75f)
+		? (void)PlayHUDMotion("anm_idle_moving_empty", TRUE, NULL, GetState(), bAccelerated ? 1.f : .75f)
 		: inherited::PlayAnimIdleMoving();
 }
 

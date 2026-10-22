@@ -7,6 +7,7 @@
 ////////////////////////////////////////////////////////////////////////////
 
 #include "pch_script.h"
+#ifndef XR_PLATFORM_APPLE // Lua Studio backend (sdk/include/cs, loaded as a DLL) is Windows-only; USE_LUA_STUDIO is never defined
 #include "lua_studio.h"
 
 #define pstr			LPSTR
@@ -852,3 +853,4 @@ engine::engine() :
 	m_instance_count(0)
 {
 }
+#endif // XR_PLATFORM_APPLE

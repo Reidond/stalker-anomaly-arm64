@@ -318,6 +318,9 @@ CScriptStorage::~CScriptStorage()
 }
 
 extern int luaopen_lua_extensions(lua_State* L, bool IsDebug = false);
+#ifdef XR_PLATFORM_APPLE
+extern void lua_ext_set_native_path_hook(const char* (*hook)(const char*));
+#endif
 extern lua_CFunction luaopen_socket_core_init();
 extern void pdebug_init_init(lua_State* L);
 
@@ -445,6 +448,9 @@ void CScriptStorage::reinit()
 #endif //!USE_LUAJIT_ONE
 	bool isDebugEnabled = lua_debug;
 	luaopen_lua_extensions(lua(), isDebugEnabled);
+#ifdef XR_PLATFORM_APPLE
+	lua_ext_set_native_path_hook(xr_native_path); // lfs.*, io.open, ... take the engine's virtual paths
+#endif
 	disable_os_funcs(lua());
 
 	if (isDebugEnabled)
@@ -730,6 +736,20 @@ bool CScriptStorage::load_buffer(lua_State* L, LPCSTR caBuffer, size_t tSize, LP
 		LPSTR script = 0;
 		bool dynamic_allocation = false;
 
+#ifdef XR_PLATFORM_APPLE
+		// No SEH, and secondary threads have small stacks: only small scripts go on the stack.
+		if (total_size < 64 * 1024)
+			script = (LPSTR)_alloca(total_size);
+		else
+		{
+#ifdef DEBUG
+			script = (LPSTR)Memory.mem_alloc(total_size, "lua script file");
+#else //!DEBUG
+			script = (LPSTR)Memory.mem_alloc(total_size);
+#endif //-DEBUG
+			dynamic_allocation = true;
+		}
+#else // XR_PLATFORM_APPLE
 		__try
 		{
 			if (total_size < 768 * 1024)
@@ -755,6 +775,7 @@ bool CScriptStorage::load_buffer(lua_State* L, LPCSTR caBuffer, size_t tSize, LP
 #endif //#ifdef DEBUG
 			dynamic_allocation = true;
 		};
+#endif // XR_PLATFORM_APPLE
 
 		xr_strcpy(script, total_size, insert);
 		CopyMemory(script + str_len, caBuffer, u32(tSize));

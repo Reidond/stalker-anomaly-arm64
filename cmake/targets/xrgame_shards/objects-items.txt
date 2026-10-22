@@ -36,10 +36,6 @@ xrGame/character_rank.cpp
 xrGame/character_rank.h
 xrGame/character_reputation.cpp
 xrGame/character_reputation.h
-xrGame/cta_game_artefact.cpp
-xrGame/cta_game_artefact.h
-xrGame/cta_game_artefact_activation.cpp
-xrGame/cta_game_artefact_activation.h
 xrGame/CustomDetector.cpp
 xrGame/CustomDetector.h
 xrGame/CustomDevice.cpp

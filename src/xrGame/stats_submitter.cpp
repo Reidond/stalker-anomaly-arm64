@@ -342,7 +342,11 @@ namespace gamespy_profile
 	bool stats_submitter::create_award_inc_report()
 	{
 		__time32_t tmp_time = 0;
+#ifdef XR_PLATFORM_APPLE
+		tmp_time = (__time32_t)time(nullptr);
+#else
 		_time32(&tmp_time);
+#endif
 
 		//SCResult tmp_res = m_atlas_obj->ReportAddIntValue(
 		//	m_atlas_report,

@@ -133,6 +133,11 @@ CMAX_IMAGE_FORMATS = CXIMAGE_SUPPORT_BMP + CXIMAGE_SUPPORT_GIF + CXIMAGE_SUPPORT
 /////////////////////////////////////////////////////////////////////////////
 // CxImage class
 /////////////////////////////////////////////////////////////////////////////
+#ifdef XR_PLATFORM_APPLE
+// <arpa/inet.h> defines ntohs/ntohl as macros; CxImage declares members of those names
+#	undef ntohs
+#	undef ntohl
+#endif
 class DLL_EXP CxImage
 {
 //extensible information collector

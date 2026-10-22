@@ -394,3 +394,14 @@ public:
 	//-------------------------------------------------------------------------------------------------
 #include "game_cl_mp_messages_menu.h"
 };
+
+// game_cl_mp's RTTI is in the multiplayer sources, which an XRGAME_NO_MULTIPLAYER build leaves out: nothing there is a game_cl_mp.
+template <class T>
+inline game_cl_mp* mp_cl_game_cast(T* game)
+{
+#ifdef XRGAME_NO_MULTIPLAYER
+	return nullptr;
+#else
+	return smart_cast<game_cl_mp*>(game);
+#endif
+}

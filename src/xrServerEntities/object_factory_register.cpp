@@ -207,7 +207,7 @@ void CObjectFactory::register_classes()
 #ifndef NO_SINGLE
 	add<game_sv_Single>(CLSID_SV_GAME_SINGLE, "game_sv_single");
 #endif // #ifndef NO_SINGLE
-#ifndef	BENCHMARK_BUILD
+#if !defined(BENCHMARK_BUILD) && !defined(XRGAME_NO_MULTIPLAYER)
 	add<game_sv_Deathmatch>(CLSID_SV_GAME_DEATHMATCH, "game_sv_deathmatch");
 	add<game_sv_TeamDeathmatch>(CLSID_SV_GAME_TEAMDEATHMATCH, "game_sv_team_deathmatch");
 	add<game_sv_ArtefactHunt>(CLSID_SV_GAME_ARTEFACTHUNT, "game_sv_artefact_hunt");
@@ -217,7 +217,7 @@ void CObjectFactory::register_classes()
 #ifndef NO_SINGLE
 	add<game_cl_Single>(CLSID_CL_GAME_SINGLE, "game_cl_single");
 #endif // #ifndef NO_SINGLE
-#ifndef	BENCHMARK_BUILD
+#if !defined(BENCHMARK_BUILD) && !defined(XRGAME_NO_MULTIPLAYER)
 	add<game_cl_Deathmatch>(CLSID_CL_GAME_DEATHMATCH, "game_cl_deathmatch");
 	add<game_cl_TeamDeathmatch>(CLSID_CL_GAME_TEAMDEATHMATCH, "game_cl_team_deathmatch");
 	add<game_cl_ArtefactHunt>(CLSID_CL_GAME_ARTEFACTHUNT, "game_cl_artefact_hunt");
@@ -226,12 +226,16 @@ void CObjectFactory::register_classes()
 
 
 	add<CUIGameSP>(CLSID_GAME_UI_SINGLE, "game_ui_single");
+#ifndef XRGAME_NO_MULTIPLAYER
 	add<CUIGameDM>(CLSID_GAME_UI_DEATHMATCH, "game_ui_deathmatch");
 	add<CUIGameTDM>(CLSID_GAME_UI_TEAMDEATHMATCH, "game_ui_team_deathmatch");
 	add<CUIGameAHunt>(CLSID_GAME_UI_ARTEFACTHUNT, "game_ui_artefact_hunt");
 	add<CUIGameCTA>(CLSID_GAME_UI_CAPTURETHEARTEFACT, "game_ui_capture_the_artefact");
+#endif // XRGAME_NO_MULTIPLAYER
 
-#	ifndef NO_SINGLE
+#	ifdef XRGAME_NO_MULTIPLAYER
+	ADD(CActor, CSE_ALifeCreatureActor, CLSID_OBJECT_ACTOR, "actor");
+#	elif !defined(NO_SINGLE)
 	ADD_MP(CActor, CActorMP, CSE_ALifeCreatureActor, CSE_ActorMP, CLSID_OBJECT_ACTOR, "actor");
 #	else // #ifndef NO_SINGLE
 		ADD(CActorMP,CSE_ActorMP	,CLSID_OBJECT_ACTOR				,"actor");
@@ -298,7 +302,9 @@ void CObjectFactory::register_classes()
 	ADD(CGalantineArtefact, CSE_ALifeItemArtefact, CLSID_AF_GALANTINE, "art_galantine");
 	ADD(CGraviArtefact, CSE_ALifeItemArtefact, CLSID_AF_GRAVI, "art_gravi");
 	ADD(CGraviArtefact, CSE_ALifeItemArtefact, CLSID_ARTEFACT, "artefact");
+#ifndef XRGAME_NO_MULTIPLAYER
 	ADD(CtaGameArtefact, CSE_ALifeItemArtefact, CLSID_AF_CTA, "art_cta");
+#endif
 
 	//  [8/15/2006]
 	ADD(CWeaponMagazined, CSE_ALifeItemWeaponMagazined, CLSID_OBJECT_W_MAGAZINED, "wpn_wmagaz");

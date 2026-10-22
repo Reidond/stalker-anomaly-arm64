@@ -3,6 +3,9 @@
 
 #include "xfile.h"
 //#include <TCHAR.h>
+#if defined(XR_PLATFORM_APPLE) && !defined(_tfopen)
+#	define _tfopen fopen
+#endif
 
 class DLL_EXP CxIOFile : public CxFile
 	{

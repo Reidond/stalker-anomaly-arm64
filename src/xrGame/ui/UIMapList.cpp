@@ -74,7 +74,13 @@ void CUIMapList::StartDedicatedServer()
 	GetModuleFileName(NULL, ModuleFileName, sizeof(ModuleFileName));
 
 	char* ModuleName = NULL;
+#ifdef XR_PLATFORM_APPLE
+	xr_strcpy(g_sLaunchWorkingFolder, sizeof(g_sLaunchWorkingFolder), ModuleFileName);
+	ModuleName = strrchr(g_sLaunchWorkingFolder, '\\');
+	ModuleName = ModuleName ? ModuleName + 1 : g_sLaunchWorkingFolder;
+#else
 	GetFullPathName(ModuleFileName, sizeof(g_sLaunchWorkingFolder), g_sLaunchWorkingFolder, &ModuleName);
+#endif
 	//removing module name from WorkingDirectory that contain full path...
 	ModuleName[0] = 0;
 
@@ -148,7 +154,7 @@ void CUIMapList::OnListItemClicked()
 	m_pMapInfo->InitMap(M.map_name.c_str(), M.map_ver.c_str());
 }
 
-xr_token g_GameModes[];
+extern xr_token g_GameModes[];
 
 void CUIMapList::OnModeChange()
 {

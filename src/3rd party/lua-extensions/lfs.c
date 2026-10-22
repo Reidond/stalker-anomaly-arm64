@@ -107,11 +107,31 @@ typedef struct dir_data {
 #define LSTAT_FUNC lstat
 #endif
 
+#ifdef __APPLE__
+/*
+** Anomaly scripts build paths the engine's way: '\' separators and the virtual roots of the engine's file system
+** (getFS():update_path('$game_saves$', '')). The engine installs its translator (xr_native_path) here through
+** lua_ext_set_native_path_hook(); the same hook serves the io/os wrappers in script_additional_libs.cpp.
+*/
+const char *(*lfs_native_path_hook)(const char *) = NULL;
+
+static const char *lfs_checkpath (lua_State *L, int idx, size_t *len) {
+	const char *path = luaL_checklstring(L, idx, len);
+	if (lfs_native_path_hook) {
+		path = lfs_native_path_hook(path);
+		if (len) *len = strlen(path);
+	}
+	return path;
+}
+#else
+#define lfs_checkpath(L, idx, len) luaL_checklstring(L, idx, len)
+#endif
+
 /*
 ** This function changes the working (current) directory
 */
 static int change_dir (lua_State *L) {
-	const char *path = luaL_checkstring(L, 1);
+	const char *path = lfs_checkpath (L, 1, NULL);
 	if (chdir(path)) {
 		lua_pushnil (L);
 		lua_pushfstring (L,"Unable to change working directory to '%s'\n%s\n",
@@ -217,7 +237,7 @@ static int lfs_lock_dir(lua_State *L) {
   lfs_Lock *lock;
   char *ln;
   const char *lockfile = "/lockfile.lfs";
-  const char *path = luaL_checklstring(L, 1, &pathl);
+  const char *path = lfs_checkpath(L, 1, &pathl);
   ln = (char*)malloc(pathl + strlen(lockfile) + 1);
   if(!ln) { 
     lua_pushnil(L); lua_pushstring(L, strerror(errno)); return 2;
@@ -254,7 +274,7 @@ static int lfs_lock_dir(lua_State *L) {
   size_t pathl;
   char *ln;
   const char *lockfile = "/lockfile.lfs";
-  const char *path = luaL_checklstring(L, 1, &pathl);
+  const char *path = lfs_checkpath(L, 1, &pathl);
   lock = (lfs_Lock*)lua_newuserdata(L, sizeof(lfs_Lock));
   ln = (char*)malloc(pathl + strlen(lockfile) + 1);
   if(!ln) { 
@@ -364,7 +384,7 @@ static int file_unlock (lua_State *L) {
 
 
 static int make_dir (lua_State *L) {
-	const char *path = luaL_checkstring (L, 1);
+	const char *path = lfs_checkpath (L, 1, NULL);
 	int fail;
 #ifdef _WIN32
 	int oldmask = umask (0);
@@ -389,7 +409,7 @@ static int make_dir (lua_State *L) {
 ** @param #1 Directory path.
 */
 static int remove_dir (lua_State *L) {
-	const char *path = luaL_checkstring (L, 1);
+	const char *path = lfs_checkpath (L, 1, NULL);
 	int fail;
 
 	fail = rmdir (path);
@@ -473,7 +493,7 @@ static int dir_close (lua_State *L) {
 ** Factory of directory iterators
 */
 static int dir_iter_factory (lua_State *L) {
-	const char *path = luaL_checkstring (L, 1);
+	const char *path = lfs_checkpath (L, 1, NULL);
 	dir_data *d;
 	lua_pushcfunction (L, dir_iter);
 	d = (dir_data *) lua_newuserdata (L, sizeof(dir_data));
@@ -588,7 +608,7 @@ static const char *mode2string (mode_t mode) {
 ** Set access time and modification values for file
 */
 static int file_utime (lua_State *L) {
-	const char *file = luaL_checkstring (L, 1);
+	const char *file = lfs_checkpath (L, 1, NULL);
 	struct utimbuf utb, *buf;
 
 	if (lua_gettop (L) == 1) /* set to current date/time */
@@ -701,7 +721,7 @@ struct _stat_members members[] = {
 static int _file_info_ (lua_State *L, int (*st)(const char*, STAT_STRUCT*)) {
 	int i;
 	STAT_STRUCT info;
-	const char *file = luaL_checkstring (L, 1);
+	const char *file = lfs_checkpath (L, 1, NULL);
 
 	if (st(file, &info)) {
 		lua_pushnil (L);

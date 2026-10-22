@@ -798,3 +798,156 @@ void CCC_RegisterInput()
 	CMD1(CCC_BindConsoleCmd, "bind_console");
 	CMD1(CCC_UnBindConsoleCmd, "unbind_console");
 };
+
+#ifdef XR_PLATFORM_APPLE
+// ---- Controller layer (src/Platform/GameInput) -----------------------------------------------------------------
+
+#include <GameInput/GameInput.h>
+#include <GameInput/Feedback.h>
+#include "Actor.h"
+#include "ActorCondition.h"
+#include "Weapon.h"
+#include "WeaponMagazined.h"
+#include "UICursor.h"
+
+void xr_pad_install_hooks()
+{
+	if (!pInput)
+		return;
+	pInput->pad_hooks.cursor_jump = [](float ui_x, float ui_y)
+	{
+		Fvector2 pos;
+		pos.set(ui_x, ui_y);
+		GetUICursor().SetUICursorPosition(pos);
+	};
+	// The last controller was unplugged (or powered off): hold the game until one is back.
+	pInput->pad_hooks.connection = [](bool connected)
+	{
+		static bool paused_by_pad = false;
+		if (!connected)
+		{
+			// Another controller may still be connected (the registry has already promoted it): only the last one counts.
+			gameinput::GameInput* pad = pInput ? pInput->Pad() : nullptr;
+			if (pad && pad->devices().AnyConnected())
+				return;
+			Msg("! game controller disconnected, reconnect it to continue");
+			if (g_pGameLevel && !Device.Paused())
+			{
+				Device.Pause(TRUE, TRUE, TRUE, "gamepad_disconnected");
+				paused_by_pad = true;
+			}
+		}
+		else
+		{
+			Msg("* game controller connected");
+			if (paused_by_pad)
+			{
+				paused_by_pad = false;
+				Device.Pause(FALSE, TRUE, TRUE, "gamepad_disconnected");
+			}
+		}
+	};
+}
+
+void xr_pad_ui_context(bool ui, const Fvector2& cursor)
+{
+	if (!pInput)
+		return;
+	pInput->SetUiContext(ui);
+	if (gameinput::GameInput* pad = pInput->Pad())
+	{
+		pad->feedback().SetMenu(ui);
+		if (ui)
+			pad->SetCursorPosition(gameinput::Vec2(cursor.x, cursor.y));
+	}
+}
+
+static gameinput::GameInput* controlled_pad(CActor* actor)
+{
+	return (pInput && actor && actor == Level().CurrentControlEntity()) ? pInput->Pad() : nullptr;
+}
+
+static gameinput::WeaponClass pad_weapon_class(CWeapon* weapon)
+{
+	return weapon ? gameinput::ClassifyWeapon(weapon->cNameSect().c_str()) : gameinput::WeaponClass::None;
+}
+
+void xr_pad_update_actor(CActor* actor)
+{
+	gameinput::GameInput* pad = controlled_pad(actor);
+	if (!pad)
+		return;
+	gameinput::Feedback& fb = pad->feedback();
+	CActorCondition& cond = actor->conditions();
+	fb.SetHealth(cond.GetHealth());
+	fb.SetBleeding(cond.BleedingSpeed() > 0.01f);
+	fb.SetRadiation(cond.GetRadiation());
+	fb.SetAiming(actor->IsZoomAimingMode());
+
+	PIItem item = actor->inventory().ActiveItem();
+	CWeapon* weapon = item ? smart_cast<CWeapon*>(item) : nullptr;
+	if (!weapon)
+	{
+		fb.SetWeapon(gameinput::WeaponClass::None, false);
+		fb.SetWeaponStatus(false, false, false);
+		return;
+	}
+	CWeaponMagazined* magazined = smart_cast<CWeaponMagazined*>(weapon);
+	const bool automatic = magazined && magazined->GetCurrentFireMode() != 1 && magazined->GetCurrentFireMode() != 0;
+	fb.SetWeapon(pad_weapon_class(weapon), automatic);
+	fb.SetWeaponStatus(weapon->GetAmmoElapsed() == 0, weapon->IsMisfire(), weapon->GetState() == CWeapon::eReload);
+}
+
+void xr_pad_on_hit(int hit_type, float power)
+{
+	gameinput::GameInput* pad = controlled_pad(Actor());
+	if (!pad)
+		return;
+	gameinput::HitType type;
+	switch (hit_type)
+	{
+	case ALife::eHitTypeFireWound:
+	case ALife::eHitTypeWound:
+	case ALife::eHitTypeWound_2:
+		type = gameinput::HitType::Bullet;
+		break;
+	case ALife::eHitTypeStrike:
+		type = gameinput::HitType::Melee;
+		break;
+	case ALife::eHitTypeExplosion:
+		type = gameinput::HitType::Explosion;
+		break;
+	case ALife::eHitTypeBurn:
+	case ALife::eHitTypeLightBurn:
+		type = gameinput::HitType::Fire;
+		break;
+	case ALife::eHitTypeShock:
+		type = gameinput::HitType::Shock;
+		break;
+	case ALife::eHitTypeChemicalBurn:
+		type = gameinput::HitType::Chemical;
+		break;
+	case ALife::eHitTypeRadiation:
+		type = gameinput::HitType::Radiation;
+		break;
+	case ALife::eHitTypeTelepatic:
+		type = gameinput::HitType::Psy;
+		break;
+	default:
+		return;
+	}
+	pad->feedback().OnHit(type, power < 0.f ? 0.f : (power > 1.f ? 1.f : power)); // max health is 1.0
+}
+
+void xr_pad_on_shot(CWeapon* weapon)
+{
+	if (gameinput::GameInput* pad = controlled_pad(weapon ? smart_cast<CActor*>(weapon->H_Parent()) : nullptr))
+		pad->feedback().OnShot();
+}
+
+void xr_pad_on_dry_fire(CWeapon* weapon)
+{
+	if (gameinput::GameInput* pad = controlled_pad(weapon ? smart_cast<CActor*>(weapon->H_Parent()) : nullptr))
+		pad->feedback().OnDryFire();
+}
+#endif // XR_PLATFORM_APPLE

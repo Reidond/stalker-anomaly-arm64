@@ -1,6 +1,16 @@
 #include "StdAfx.h"
 #include "RegistryFuncs.h"
 
+#ifdef XR_PLATFORM_APPLE
+// There is no registry: nothing is ever found and writes are dropped. Only the multiplayer code (CD key, player name) reads it.
+bool ReadRegistry_StrValue(LPCSTR, char*) { return false; }
+void WriteRegistry_StrValue(LPCSTR, const char*) {}
+u32 const ReadRegistry_BinaryValue(LPCSTR, u8*, u32 const) { return 0; }
+void WriteRegistry_BinaryValue(LPCSTR, u8 const*, u32 const) {}
+void ReadRegistry_DWValue(LPCSTR, DWORD&) {}
+void WriteRegistry_DWValue(LPCSTR, const DWORD&) {}
+#else // XR_PLATFORM_APPLE
+
 #define REGISTRY_BASE	HKEY_LOCAL_MACHINE
 #define REGISTRY_PATH	"Software\\GSC Game World\\STALKER-Anomaly\\"
 
@@ -176,3 +186,4 @@ void WriteRegistry_BinaryValue(LPCSTR rKeyName, u8 const* buffer_src, u32 const 
 
 	RegCloseKey(hKey);
 }
+#endif // XR_PLATFORM_APPLE

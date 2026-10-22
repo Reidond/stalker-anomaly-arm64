@@ -12,6 +12,7 @@ class CUICursor : public pureRender,
 	bool m_b_use_win_cursor;
 	CUIStatic* m_static;
 	void InitInternal();
+	void OnVisibilityChanged();
 public:
 	CUICursor();
 	virtual ~CUICursor();
@@ -25,6 +26,6 @@ public:
 	virtual void OnScreenResolutionChanged();
 
 	bool IsVisible() { return bVisible; }
-	void Show() { bVisible = true; }
-	void Hide() { bVisible = false; }
+	void Show() { bVisible = true; OnVisibilityChanged(); }
+	void Hide() { bVisible = false; OnVisibilityChanged(); }
 };

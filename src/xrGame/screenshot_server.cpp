@@ -133,7 +133,7 @@ void clientdata_proxy::notify_admin(clientdata_event_t event_for_admin, char con
 
 void clientdata_proxy::save_proxy_screenshot()
 {
-	game_cl_mp* clgame = smart_cast<game_cl_mp*>(Level().game);
+	game_cl_mp* clgame = mp_cl_game_cast(Level().game);
 	if (!clgame)
 		return;
 
@@ -163,7 +163,7 @@ void clientdata_proxy::save_proxy_screenshot()
 
 void clientdata_proxy::save_proxy_config()
 {
-	game_cl_mp* clgame = smart_cast<game_cl_mp*>(Level().game);
+	game_cl_mp* clgame = mp_cl_game_cast(Level().game);
 	if (!clgame)
 		return;
 
@@ -226,7 +226,7 @@ void clientdata_proxy::download_screenshot_callback(file_transfer::receiving_sta
 			LPCSTR error_msg;
 			char bufforint[16];
 			STRCONCAT(error_msg, "download screenshot terminated by peer [",
-			          ultoa(m_chearer_id.value(), bufforint, 10), "]");
+			          _ultoa(m_chearer_id.value(), bufforint, 10), "]");
 			notify_admin(e_screenshot_error_notif, error_msg);
 		}
 		break;
@@ -302,7 +302,7 @@ void clientdata_proxy::download_config_callback(file_transfer::receiving_status_
 			LPCSTR error_msg;
 			char bufforint[16];
 			STRCONCAT(error_msg, "download config terminated by peer [",
-			          ultoa(m_chearer_id.value(), bufforint, 10), "]");
+			          _ultoa(m_chearer_id.value(), bufforint, 10), "]");
 			notify_admin(e_configs_error_notif, error_msg);
 		}
 		break;

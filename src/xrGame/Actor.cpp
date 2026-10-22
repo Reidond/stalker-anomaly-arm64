@@ -1,4 +1,5 @@
 #include "pch_script.h"
+#include "xr_level_controller.h"
 #include "Actor_Flags.h"
 #include "hudmanager.h"
 #ifdef DEBUG
@@ -558,6 +559,9 @@ void CActor::Hit(SHit* pHDS)
 	pHDS->aim_bullet = false;
 
 	SHit& HDS = *pHDS;
+#ifdef XR_PLATFORM_APPLE
+	xr_pad_on_hit(HDS.hit_type, HDS.power);
+#endif
 	if (HDS.hit_type < ALife::eHitTypeBurn || HDS.hit_type >= ALife::eHitTypeMax)
 	{
 		string256 err;
@@ -1127,6 +1131,9 @@ float CActor::currentFOV()
 
 void CActor::UpdateCL()
 {
+#ifdef XR_PLATFORM_APPLE
+	xr_pad_update_actor(this);
+#endif
 	if (g_Alive() && Level().CurrentViewEntity() == this)
 	{
 		if (CurrentGameUI() && (!CurrentGameUI()->TopInputReceiver() || (CurrentGameUI()->TopInputReceiver() && !CurrentGameUI()->TopInputReceiver()->StopAnyMove())) && !m_holder)
