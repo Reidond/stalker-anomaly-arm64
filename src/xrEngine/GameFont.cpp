@@ -113,7 +113,29 @@ IC bool candidate_better(const FontCandidate& a, const FontCandidate& b)
 	return a.authored > b.authored;
 }
 
-ENGINE_API LPCSTR GetFontTextureName(LPCSTR section)
+#ifdef XR_PLATFORM_APPLE
+ENGINE_API float ps_ui_text_scale = 1.0f;
+
+// The atlas ladder stops at the rungs a font has (most UI fonts have none above 1200), and glyphs are drawn at their atlas size, so
+// on a 2048 or 1964 pixel high screen the text is about 0.6 of the size it has on a 1080p PC (16 px of 2048 against 16 of 1080). A
+// font gets a multiplier that keeps the text as tall, relative to the screen, as at 1080 (an atlas authored for 2160 as at 2000):
+// fonts built for 1200 and below grow with the screen from 1080 on, those with a 2160 atlas hardly at all. Nothing changes below 1080.
+static float apple_text_scale(u32 authored)
+{
+	const float h = float(Device.dwHeight ? Device.dwHeight : 1);
+	const float ref = authored >= 2000 ? 2000.f : 1080.f;
+	float k = h / ref;
+	k = k < 1.f ? 1.f : (k > 3.f ? 3.f : k);
+	return k * ps_ui_text_scale;
+}
+#endif
+
+#ifdef XR_PLATFORM_APPLE
+// The UI fonts are created by CFontManager from the atlas name GetFontTextureName returned, so the rung that won is remembered by name.
+static xr_map<shared_str, u32> s_atlas_authored;
+#endif
+
+static LPCSTR GetFontTextureNameImpl(LPCSTR section, u32* authored_out)
 {
 	const u32 h = Device.dwHeight ? Device.dwHeight : 1;
 
@@ -150,13 +172,25 @@ ENGINE_API LPCSTR GetFontTextureName(LPCSTR section)
 		{
 			Msg("* [font] h=%u [%s] %s = %s (authored %u, %+.1f%%)", h, section, cands[best].key, tex,
 			    cands[best].authored, 100.f * (float(cands[best].authored) / float(h) - 1.f));
+			if (authored_out)
+				*authored_out = cands[best].authored;
+#ifdef XR_PLATFORM_APPLE
+			s_atlas_authored[tex] = cands[best].authored;
+#endif
 			return tex;
 		}
 		Msg("~[font] h=%u [%s] %s -> %s has no atlas, skipped", h, section, cands[best].key, tex);
 	}
 
 	Msg("~[font] h=%u [%s] no usable rung, forcing %s", h, section, s_legacy_rungs[LEGACY_DEFAULT_IDX].key);
+	if (authored_out)
+		*authored_out = s_legacy_rungs[LEGACY_DEFAULT_IDX].authored;
 	return pSettings->r_string(section, s_legacy_rungs[LEGACY_DEFAULT_IDX].key);
+}
+
+ENGINE_API LPCSTR GetFontTextureName(LPCSTR section)
+{
+	return GetFontTextureNameImpl(section, nullptr);
 }
 
 CGameFont::CGameFont(LPCSTR section, u32 flags)
@@ -303,7 +337,17 @@ void CGameFont::Initialize(LPCSTR cShader, LPCSTR cTextureName)
 		}
 	}
 
+#ifdef XR_PLATFORM_APPLE
+	{
+		// a device independent font (`size` relative to the screen height) is already as tall as the screen makes it
+		auto atlas = s_atlas_authored.find(cTextureName);
+		fTextScale = (uFlags & fsDeviceIndependent) ? 1.0f : apple_text_scale(atlas != s_atlas_authored.end() ? atlas->second : 1200);
+		Msg("* [font] %s: text scale %.2f%s", cTextureName, fTextScale, (uFlags & fsDeviceIndependent) ? " (device independent)" : "");
+	}
+	fCurrentHeight = fHeight * fTextScale;
+#else
 	fCurrentHeight = fHeight;
+#endif
 
 	CInifile::Destroy(ini);
 
@@ -529,5 +573,9 @@ void CGameFont::SetHeightI(float S)
 void CGameFont::SetHeight(float S)
 {
 	VERIFY(uFlags&fsDeviceIndependent);
+#ifdef XR_PLATFORM_APPLE
+	fCurrentHeight = S * fTextScale;
+#else
 	fCurrentHeight = S;
+#endif
 };

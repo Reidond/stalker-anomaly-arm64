@@ -6,6 +6,7 @@
 #include "xr_graphics_profile.h"
 #include "xr_ioconsole.h"
 #include "xr_ioc_cmd.h"
+#include "GameFont.h"
 
 #include <Platform/Apple/GraphicsProfile.h>
 #include <Platform/Apple/Shell.h>
@@ -180,6 +181,7 @@ void RegisterCommands()
     CMD1(CCC_GfxMode, "gfx_mode");
     CMD1(CCC_GfxFps, "gfx_fps");
     CMD1(CCC_GfxProfile, "gfx_profile");
+    CMD4(CCC_Float, "ui_text_scale", &ps_ui_text_scale, 0.75f, 1.5f); // the player's text size (GameFont.cpp), takes effect at the next vid_restart
 }
 
 bool LocksActive() { return Gfx::LocksActive(); }

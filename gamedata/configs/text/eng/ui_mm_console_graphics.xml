@@ -41,4 +41,10 @@
 	<string id="ui_mm_gfx_brightness_desc">
 		<text>Overall brightness of the picture.</text>
 	</string>
+	<string id="ui_mm_gfx_text_scale">
+		<text>Text size</text>
+	</string>
+	<string id="ui_mm_gfx_text_scale_desc">
+		<text>Size of the text in menus and on the HUD. The text follows the screen's height by itself; this makes it larger or smaller still. Applies when the video restarts.</text>
+	</string>
 </string_table>

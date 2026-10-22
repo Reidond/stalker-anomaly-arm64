@@ -1,0 +1,10 @@
+# standalone
+# The options menu by keyboard (Down three times, Return: Settings), for any window size: compares the text size of the UI between
+# render sizes (docs/ios-port/SETTINGS.md, "UI text size").
+1 console r_screenshot_mode png
+5 key Down
+6 key Down
+7 key Down
+8 key Return
+11 console screenshot options_keys
+13 quit
