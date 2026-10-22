@@ -185,7 +185,7 @@ bool CCarLights::findLight(u16 bone_id, SCarLight* & light)
 	SCarLight find_light;
 	find_light.bone_id = bone_id;
 	i = std::find_if(m_lights.begin(), e, SFindLightPredicate(&find_light));
-	light = *i;
+	light = (i != e) ? *i : NULL; // *end() reads past the vector
 	return i != e;
 }
 
