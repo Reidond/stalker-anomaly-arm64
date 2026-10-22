@@ -85,7 +85,7 @@ namespace luabind
 
 		inline int convert_lua_to_cpp(lua_State* L, by_value<int>, int index)
 		{
-			return (int)lua_tonumber(L, index);
+			return (int)static_cast<long long>(lua_tonumber(L, index));
 		}
 
 		inline int match_lua_to_cpp(lua_State* L, by_value<int>, int index)
@@ -282,13 +282,16 @@ namespace luabind { namespace detail
 				return -1;
 		}
 
+		// Integers go through long long: a double outside the target type's range is undefined behaviour to cast, and arm64 saturates it
+		// (a negative number becomes 0 as an unsigned type) where x86 wrapped it. Lua scripts pass colours as negative numbers
+		// (GetARGB returns an int with the alpha in the sign bit) to u32 parameters.
 		PRIMITIVE_CONVERTER(int)
 		{
 			if (lua_isnil(L, index))
 			{
 				return 0;
 			}
-			return static_cast<int>(lua_tonumber(L, index));
+			return static_cast<int>(static_cast<long long>(lua_tonumber(L, index)));
 		}
 
 		PRIMITIVE_MATCHER(int)
@@ -308,7 +311,7 @@ namespace luabind { namespace detail
 			{
 				return 0;
 			}
-			return static_cast<unsigned int>(lua_tonumber(L, index));
+			return static_cast<unsigned int>(static_cast<long long>(lua_tonumber(L, index)));
 		}
 		PRIMITIVE_MATCHER(unsigned int)
 		{
@@ -328,7 +331,7 @@ namespace luabind { namespace detail
 			{
 				return 0;
 			}
-			return static_cast<char>(lua_tonumber(L, index));
+			return static_cast<char>(static_cast<long long>(lua_tonumber(L, index)));
 		}
 		PRIMITIVE_MATCHER(char)
 		{
@@ -348,7 +351,7 @@ namespace luabind { namespace detail
 			{
 				return 0;
 			}
-			return static_cast<char>(lua_tonumber(L, index));
+			return static_cast<char>(static_cast<long long>(lua_tonumber(L, index)));
 		}
 		PRIMITIVE_MATCHER(signed char)
 		{
@@ -368,7 +371,7 @@ namespace luabind { namespace detail
 			{
 				return 0;
 			}
-			return static_cast<unsigned char>(lua_tonumber(L, index));
+			return static_cast<unsigned char>(static_cast<long long>(lua_tonumber(L, index)));
 		}
 		PRIMITIVE_MATCHER(unsigned char)
 		{
@@ -389,7 +392,7 @@ namespace luabind { namespace detail
 				return 0;
 			}
 
-			return static_cast<short>(lua_tonumber(L, index));
+			return static_cast<short>(static_cast<long long>(lua_tonumber(L, index)));
 		}
 		PRIMITIVE_MATCHER(short)
 		{
@@ -408,7 +411,7 @@ namespace luabind { namespace detail
 			{
 				return 0;
 			}
-			return static_cast<unsigned short>(lua_tonumber(L, index));
+			return static_cast<unsigned short>(static_cast<long long>(lua_tonumber(L, index)));
 		}
 		PRIMITIVE_MATCHER(unsigned short)
 		{
@@ -428,7 +431,7 @@ namespace luabind { namespace detail
 			{
 				return 0;
 			}
-			return static_cast<long>(lua_tonumber(L, index));
+			return static_cast<long>(static_cast<long long>(lua_tonumber(L, index)));
 		}
 		PRIMITIVE_MATCHER(long)
 		{
@@ -448,7 +451,7 @@ namespace luabind { namespace detail
 			{
 				return 0;
 			}
-			return static_cast<unsigned long>(lua_tonumber(L, index));
+			return static_cast<unsigned long>(static_cast<long long>(lua_tonumber(L, index)));
 		}
 		PRIMITIVE_MATCHER(unsigned long)
 		{
