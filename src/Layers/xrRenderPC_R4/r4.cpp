@@ -409,6 +409,21 @@ void CRender::create()
 	// HDR10
 	o.dx11_hdr10 = !!ps_r4_hdr10_on;
 
+#if defined(XR_PLATFORM_APPLE)
+	// Apple GPUs sample 1, 2 or 4 times, 8 only on some: a count the device refuses fails every multisampled render target
+	// and the renderer cannot start. Settings files from a Windows install may ask for 8x.
+	while (ps_r3_msaa && !o.dx11_hdr10)
+	{
+		UINT levels = 0;
+		if (SUCCEEDED(HW.pDevice->CheckMultisampleQualityLevels(DXGI_FORMAT_R16G16B16A16_FLOAT, 1u << ps_r3_msaa, &levels)) &&
+			levels)
+			break;
+		Msg("! Metal: %ux MSAA is not supported by this GPU; using %ux", 1u << ps_r3_msaa,
+		    ps_r3_msaa > 1 ? 1u << (ps_r3_msaa - 1) : 1u);
+		--ps_r3_msaa;
+	}
+#endif
+
 	//	MSAA option dependencies
 	o.dx10_msaa = ps_r3_msaa && !o.dx11_hdr10;
 	o.dx10_msaa_samples = o.dx11_hdr10 ? 1 : (1 << ps_r3_msaa);
@@ -506,6 +521,29 @@ void CRender::create()
 	o.ssfx_motionblur = FS.exist(fn, "$game_shaders$", "r3\\ssfx_motion_blur", ".ps") ? 1 : 0;
 	o.ssfx_motionvectors = FS.exist(fn, "$game_shaders$", "r3\\screenspace_mvectors", ".h") ? 1 : 0;
 	o.ssfx_glass = FS.exist(fn, "$game_shaders$", "r3\\ssfx_glass", ".ps") ? 1 : 0; 
+
+#if defined(XR_PLATFORM_APPLE)
+	{
+		// One line that says what the many "DX10: ... is missing. Replace with stub_default" lines below mean
+		string512 absent = "";
+		const struct { const char* name; int on; } features[] = {
+			{"core", o.ssfx_core}, {"rain", o.ssfx_rain}, {"blood", o.ssfx_blood}, {"branches", o.ssfx_branches},
+			{"hud raindrops", o.ssfx_hud_raindrops}, {"ssr", o.ssfx_ssr}, {"terrain", o.ssfx_terrain},
+			{"volumetric", o.ssfx_volumetric}, {"water", o.ssfx_water}, {"ao", o.ssfx_ao}, {"il", o.ssfx_il},
+			{"sss", o.ssfx_sss}, {"bloom", o.ssfx_bloom}, {"taa", o.ssfx_taa}, {"fog", o.ssfx_fog},
+			{"motion blur", o.ssfx_motionblur}, {"motion vectors", o.ssfx_motionvectors}, {"glass", o.ssfx_glass}};
+		for (const auto& f : features)
+			if (!f.on)
+			{
+				if (absent[0])
+					xr_strcat(absent, ", ");
+				xr_strcat(absent, f.name);
+			}
+		Msg("* Screen Space Shaders features switched off (their shader files are not installed): %s", absent[0] ? absent : "none");
+		Msg("* A shader file the blenders still name is replaced by stub_default (\"[missing, stub_default]\" in traces); the passes that "
+		    "use it are skipped with the feature");
+	}
+#endif
 
 	Msg("- Supports SSS UPDATE 23");
 	Msg("- SSS CORE INSTALLED %i", o.ssfx_core);

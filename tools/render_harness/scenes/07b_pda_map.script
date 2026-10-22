@@ -1,0 +1,8 @@
+# The PDA, map page (plain dialog, see 07_pda).
+1 console run_string xr_harness.env(12,0,"w_clear1")
+2 console g_3d_pda off
+26 key P
+28 console run_string xr_harness.pda("eptMap")
+30 console screenshot 07b_pda_map
+32 key Escape
+34 quit

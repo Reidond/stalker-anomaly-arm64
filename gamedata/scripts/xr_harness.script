@@ -1,0 +1,167 @@
+-- Render test harness helpers (tools/render_harness). Test-only: nothing calls these unless a --script line does,
+-- e.g. `10 console run_string xr_harness.tp(-200,-20,-150,90)`. Needs the -dbg engine flag for run_string.
+
+local function log(fmt, ...)
+	printf("%s", "HARNESS " .. string.format(fmt, ...))
+	exec_console_cmd("flush") -- the engine log is buffered and a scripted run can be killed on the way out
+end
+
+-- prints where the player is and the Cordon's named places
+function probe()
+	local p = db.actor:position()
+	log("actor %.1f %.1f %.1f lvid=%d gvid=%d level=%s time=%02d:%02d weather=%s",
+		p.x, p.y, p.z, db.actor:level_vertex_id(), db.actor:game_vertex_id(), level.name(),
+		level.get_time_hours(), level.get_time_minutes(), level.get_weather())
+end
+
+function places()
+	local n = 0
+	for name, smart in pairs(sim_board.get_sim_board().smarts_by_names) do
+		local o = alife_object(smart.id)
+		if o and o.position and (string.find(name, "esc_") or string.find(name, "trader")) then
+			log("smart %s %.1f %.1f %.1f", name, o.position.x, o.position.y, o.position.z)
+			n = n + 1
+		end
+	end
+	for _, story in ipairs({"esc_m_trader", "esc_wolf", "esc_fox", "esc_lis"}) do
+		local id = get_story_object_id(story)
+		local o = id and alife_object(id)
+		if o then
+			log("story %s %.1f %.1f %.1f", story, o.position.x, o.position.y, o.position.z)
+		end
+	end
+end
+
+-- teleports the player; yaw in degrees (0 = +z)
+function tp(x, y, z, yaw)
+	db.actor:set_actor_position(vector():set(x, y, z))
+	if yaw then
+		db.actor:set_actor_direction(math.rad(yaw))
+	end
+	log("tp %.1f %.1f %.1f yaw=%s", x, y, z, tostring(yaw))
+end
+
+-- next to a story object (the trader sits in the Cordon bunker)
+function tp_story(story, yaw)
+	local id = get_story_object_id(story)
+	local o = id and alife_object(id)
+	if not o then
+		log("no story object %s", story)
+		return
+	end
+	tp(o.position.x, o.position.y + 0.3, o.position.z, yaw)
+end
+
+-- sets the game clock to hh:mm and applies the weather for that time at once
+function time(hh, mm)
+	local now = level.get_time_hours() * 60 + level.get_time_minutes()
+	local want = hh * 60 + (mm or 0)
+	local delta = (want - now) % (24 * 60)
+	level.change_game_time(0, math.floor(delta / 60), delta % 60)
+	level_weathers.get_weather_manager():forced_weather_change()
+	log("time now %02d:%02d", level.get_time_hours(), level.get_time_minutes())
+end
+
+-- a weather preset by file name (w_clear1, w_rain2, w_foggy1, ...)
+function weather(name)
+	level.set_weather(name, true)
+	log("weather %s", name)
+end
+
+-- practically stops the clock so repeated screenshots show the same sky (set the time first, then the weather)
+function freeze()
+	level.set_time_factor(0.0001)
+	log("frozen factor=%.4f", level.get_time_factor())
+end
+
+-- where the clock and the weather are (the environment follows the game time)
+function status()
+	log("status time=%02d:%02d weather=%s weight=%.2f rain=%.2f factor=%.4f sun=%s",
+		level.get_time_hours(), level.get_time_minutes(), level.get_weather(), level.get_weather_weight(),
+		level.rain_factor(), level.get_time_factor(), tostring(level.is_sun_visible and level.is_sun_visible() or "?"))
+end
+
+-- the distance the crosshair ray reports (the engine's static-geometry ray query); ~0 or huge means the query misses
+function ray()
+	log("ray target_dist=%.2f", level.get_target_dist())
+end
+
+-- static-geometry ray queries around the player, like the rain drops do: from above straight down and tilted, and from the
+-- player straight up. A drop whose query misses the roof falls through it.
+function rays()
+	local p = db.actor:position()
+	local function pick(from, dir, range)
+		local r = ray_pick(from, dir, range, rq_target.rqtStatic, nil)
+		if r:query() then return r:get_distance() end
+		return -1
+	end
+	local down = vector():set(0, -1, 0)
+	local tilt = vector():set(0.17, -0.985, 0.0)
+	local tilt2 = vector():set(-0.12, -0.985, 0.12)
+	local up = vector():set(0, 1, 0)
+	log("rays player y=%.2f up=%.2f", p.y, pick(vector():set(p.x, p.y + 1.5, p.z), up, 60))
+	for _, h in ipairs({6, 20, 40}) do
+		local from = vector():set(p.x, p.y + h, p.z)
+		log("rays from +%d: down=%.2f tilt=%.2f tilt2=%.2f", h, pick(from, down, 80), pick(from, tilt, 80), pick(from, tilt2, 80))
+	end
+end
+
+-- sets the clock and the weather in one go: time first, then the weather (changing the time makes the weather manager pick a new
+-- weather), and keeps the manager from choosing another one while a scene is shot
+function env(hh, mm, name)
+	local now = level.get_time_hours() * 60 + level.get_time_minutes()
+	local want = hh * 60 + (mm or 0)
+	local delta = (want - now) % (24 * 60)
+	level.change_game_time(0, math.floor(delta / 60), delta % 60)
+	level.set_weather(name, true)
+	local wm = level_weathers.get_weather_manager()
+	if wm then
+		wm.update = function() end
+	end
+	safe()
+	status()
+end
+
+-- keeps the player alive and clean (teleporting into a camp or an anomaly field would end the shot in a death screen)
+local safe_registered = false
+local function keep_safe()
+	local a = db.actor
+	if a then
+		a:set_health_ex(1)
+		pcall(function() a.radiation = 0 end)
+		pcall(function() a.bleeding = 0 end)
+	end
+end
+
+function safe()
+	if not safe_registered then
+		safe_registered = true
+		RegisterScriptCallback("actor_on_update", keep_safe)
+		-- a bite or a bullet would put the blood overlay on the shot
+		RegisterScriptCallback("actor_on_before_hit", function(s_hit, bone_id)
+			s_hit.power = 0
+		end)
+	end
+	keep_safe()
+	log("safe")
+end
+
+-- opens the PDA on a page ("eptMap", "eptTasks", "eptNPC", ...) without the item's raise animation (the key P plays that first)
+function pda(tab)
+	local m = ActorMenu.get_pda_menu()
+	m:ShowDialog(true)
+	m:SetActiveSubdialog(tab or "eptTasks")
+	log("pda %s", tab or "eptTasks")
+end
+
+-- the player's flashlight on (the torch key is handled by Lua scripts that need engine exports this port lacks)
+function torch(on)
+	local t = db.actor:object("device_torch")
+	if not t then
+		alife_create_item("device_torch", db.actor)
+		log("torch created, enable it with another call")
+		return
+	end
+	t:enable_torch(on ~= false)
+	log("torch %s", tostring(t:torch_enabled()))
+end

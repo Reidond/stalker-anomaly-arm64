@@ -179,6 +179,32 @@ int main()
         if (ps) ps->Release();
     }
 
+    printf("[4] pixel inputs narrower or wider than the vertex output\n");
+    {
+        const std::string msl =
+            "#include <metal_stdlib>\nusing namespace metal;\n"
+            "struct main0_out\n{\n    float4 o0 [[color(0)]];\n};\n\n"
+            "struct main0_in\n{\n    float2 v0 [[user(locn0)]];\n    float2 v1 [[user(locn2)]];\n    float4 v2 [[user(locn3)]];\n};\n\n"
+            "fragment main0_out main0(main0_in in [[stage_in]], float4 gl_FragCoord [[position]])\n{\n"
+            "    main0_out out = {};\n    out.o0 = float4(in.v0, in.v1) + in.v2 * in.v1.x;\n    return out;\n}\n";
+        const auto vars = mtl_d3d11::ParseInterpolants(msl, "main0_in");
+        mtl_d3d11::Interpolant wider{"float3", "o1", 2}, narrower{"float2", "o2", 3};
+        const std::string patched = mtl_d3d11::AdaptFragmentInputs(msl, {{vars[1], wider}, {vars[2], narrower}});
+        check(patched.find("float3 v1_vs [[user(locn2)]]") != std::string::npos &&
+                  patched.find("float2 v1_adapted = in.v1_vs.xy;") != std::string::npos &&
+                  patched.find("float4 v2_adapted = float4(in.v2_vs, 0, 0);") != std::string::npos &&
+                  patched.find("in.v1.x") == std::string::npos && patched.find("v1_adapted.x") != std::string::npos,
+              "a narrower pixel input is swizzled, a wider one is zero-extended");
+        ID3D11PixelShader* ps = nullptr;
+        std::vector<uint8_t> c = pixelContainer(patched);
+        check(SUCCEEDED(dev->CreatePixelShader(c.data(), c.size(), nullptr, &ps)), "adapted MSL compiles");
+        if (ps) ps->Release();
+        check(mtl_d3d11::AdaptFragmentInputs(msl, {{vars[0], {"float4", "o0", 0}}}).find("float2 v0_adapted = in.v0_vs.xy;") !=
+                  std::string::npos,
+              "float4 vertex output, float2 pixel input");
+        check(mtl_d3d11::AdaptFragmentInputs(msl, {{vars[0], {"uint2", "o0", 0}}}) == msl, "another base type is left alone");
+    }
+
     ctx->Release();
     dev->Release();
     printf("\n%s\n", g_failed ? "FAILED" : "all checks passed");

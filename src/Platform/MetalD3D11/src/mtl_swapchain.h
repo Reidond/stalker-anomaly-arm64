@@ -49,10 +49,15 @@ private:
     DXGI_SWAP_CHAIN_DESC1 desc1_ = {};
     MTLPixelFormat pixelFormat_ = MTLPixelFormatBGRA8Unorm;
     bool captureRequested_ = false;
-    std::mutex captureMutex_;
-    std::condition_variable captureCv_;
-    bool captureReady_ = false;
-    CaptureResult capture_;
+    // The blit's completion handler runs on a Metal thread, possibly after the swap chain is gone: it owns the state
+    struct CaptureState
+    {
+        std::mutex mutex;
+        std::condition_variable cv;
+        bool ready = false;
+        CaptureResult result;
+    };
+    std::shared_ptr<CaptureState> capture_ = std::make_shared<CaptureState>();
 };
 
 HRESULT CreateFactory(MtlREFIID riid, void** ppFactory);

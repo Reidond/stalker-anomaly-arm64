@@ -165,14 +165,24 @@ Engine assumptions (cbuffer index equals slot, original HLSL names, HLSL packing
     `ResizeBuffers`, HDR.
 12. **Threading.** The context is single-threaded, like D3D. Resource creation is safe from other threads except a
     `DEFAULT`+`RENDER_TARGET`/`UAV` texture created with initial data, which uses the context's upload path.
-13. **Pixel inputs the vertex shader never writes.** D3D reads zero, Metal refuses the pipeline. `Context::fragmentFunctionFor`
-    compares the `[[user(locnN)]]` interpolants of the two MSL sources (`ParseInterpolants`) and, on a mismatch, builds the
-    pixel function from MSL with those inputs as zero locals (`PatchFragmentInputs`), cached per vertex/pixel pair. The stock set
-    has no such pair with the default settings; `tools/r4_shader_warmup` and `metal_d3d11_headless_test` exercise the patch.
+13. **Pixel inputs the vertex shader never writes, or reads with another width.** D3D reads zero for the first and links by
+    semantic and component for the second; Metal refuses the pipeline in both cases. `Context::fragmentFunctionFor` compares the
+    `[[user(locnN)]]` interpolants of the two MSL sources (`ParseInterpolants`) and builds the pixel function from MSL with the
+    unwritten inputs as zero locals (`PatchFragmentInputs`) and the inputs of another width declared with the vertex shader's type
+    and a swizzled or zero-extended local (`AdaptFragmentInputs`), cached per vertex/pixel pair. The stock set has one
+    width mismatch (`waterd`, the water distortion pass) and no unwritten input with the default settings;
+    `tools/r4_shader_warmup` and `metal_d3d11_headless_test` exercise both patches. A pipeline that still fails is logged with
+    both shader names.
 14. **Gamma ramps.** `IDXGIOutput::SetGammaControl` is accepted and ignored (0 control points); R4's gamma slider does nothing
     until a shader pass applies it.
 15. **Windows-isms outside D3D11** (D3D9 enums/structures, D3DX9 math, `DWORD`, `HWND` plumbing) are not in this library; see
     D3D11-SURFACE.md section 7.
+16. **Debug aids.** `mtl_d3d11::TraceDraws` logs the next n draws (shader names, targets, state, topology, bound textures),
+    `DebugReadTexture` reads any texture or target back (crop, BC1/BC3 decode, depth/stencil), resources carry their D3D debug
+    names as Metal labels, and `GetRenderStats` / the app's 10-second `metal:` line report GPU and CPU time per frame, draws, passes
+    and texture, render target and buffer memory. Used by `tools/render_harness` (RENDER-QA.md).
+17. **Screenshot capture** is a blit in the Present command buffer into a shared buffer with 256-byte aligned rows; its state is
+    owned by the completion handler (`shared_ptr`), so it may outlive the swap chain, and a failed blit is logged, not published.
 
 ## Integration steps for R4
 

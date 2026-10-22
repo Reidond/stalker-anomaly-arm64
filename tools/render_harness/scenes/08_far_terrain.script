@@ -1,0 +1,11 @@
+# Far landscape (beyond the 240 m terrain LOD): four views from 35 m above the Cordon start, clear noon.
+1 console run_string xr_harness.env(12,0,"w_clear1")
+4 console run_string xr_harness.tp(-2.8,38,82.7,0)
+5 console screenshot 08_far_a
+7 console run_string xr_harness.tp(-2.8,38,82.7,90)
+8 console screenshot 08_far_b
+10 console run_string xr_harness.tp(-2.8,38,82.7,180)
+11 console screenshot 08_far_c
+13 console run_string xr_harness.tp(-2.8,38,82.7,270)
+14 console screenshot 08_far_d
+16 quit

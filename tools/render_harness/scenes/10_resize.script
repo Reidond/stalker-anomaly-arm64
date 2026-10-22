@@ -1,0 +1,16 @@
+# Window resize and screen mode changes at run time: each change resets the device (swap chain, render targets) and must neither crash nor leave stale content.
+1 console run_string xr_harness.env(12,0,"w_clear1")
+2 console run_string xr_harness.tp(-2.8,2.8,82.7,200)
+5 console screenshot 10_a_start
+7 console vid_mode 1024x600
+11 console screenshot 10_b_1024x600
+13 console vid_mode 1920x1080
+17 console screenshot 10_c_1920x1080
+19 console rs_screenmode borderless
+23 console screenshot 10_d_borderless
+25 console rs_screenmode fullscreen
+29 console screenshot 10_e_fullscreen
+31 console rs_screenmode windowed
+33 console vid_mode 1280x720
+37 console screenshot 10_f_back
+39 quit

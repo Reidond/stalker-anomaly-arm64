@@ -149,6 +149,112 @@ std::string PatchFragmentInputs(const std::string& msl, const std::vector<Interp
 
 namespace
 {
+// "float3" -> base "float", width 3; "float" -> width 1; false for anything else (matrices, structs)
+bool vectorType(const std::string& t, std::string* base, int* width)
+{
+    if (t.empty())
+        return false;
+    const char last = t.back();
+    if (last >= '2' && last <= '4')
+    {
+        *base = t.substr(0, t.size() - 1);
+        *width = last - '0';
+    }
+    else
+    {
+        *base = t;
+        *width = 1;
+    }
+    return *base == "float" || *base == "half" || *base == "int" || *base == "uint" || *base == "short" || *base == "ushort";
+}
+} // namespace
+
+std::string AdaptFragmentInputs(const std::string& msl, const std::vector<InterpolantPair>& pairs)
+{
+    size_t open, close;
+    if (pairs.empty() || !structBlock(msl, "main0_in", &open, &close))
+        return msl;
+    struct Fix
+    {
+        InterpolantPair p;
+        std::string expr;
+    };
+    std::vector<Fix> fixes;
+    for (const InterpolantPair& p : pairs)
+    {
+        std::string pb, vb;
+        int pw = 0, vw = 0;
+        if (!vectorType(p.pixel.type, &pb, &pw) || !vectorType(p.vertex.type, &vb, &vw) || pb != vb || pw == vw)
+            continue;
+        static const char* swz[] = {"", ".x", ".xy", ".xyz", ""};
+        const std::string src = "in." + p.pixel.name + "_vs";
+        std::string expr;
+        if (vw > pw)
+            expr = src + swz[pw];
+        else
+        {
+            expr = p.pixel.type + "(" + src;
+            for (int i = vw; i < pw; ++i)
+                expr += ", 0";
+            expr += ")";
+        }
+        fixes.push_back({p, expr});
+    }
+    if (fixes.empty())
+        return msl;
+    // 1. the struct members get the vertex shader's type and a new name
+    std::string structText = "{\n";
+    size_t pos = open + 1;
+    while (pos < close)
+    {
+        size_t eol = msl.find('\n', pos);
+        if (eol == std::string::npos || eol > close)
+            eol = close;
+        std::string line = msl.substr(pos, eol - pos);
+        Interpolant v;
+        if (parseMember(line, &v))
+            for (const Fix& f : fixes)
+                if (f.p.pixel.location == v.location && f.p.pixel.name == v.name)
+                    line = "    " + f.p.vertex.type + " " + v.name + "_vs [[user(locn" + std::to_string(v.location) + ")]];";
+        if (line.find_first_not_of(" \t\r") != std::string::npos)
+            structText += line + "\n";
+        pos = eol + 1;
+    }
+    std::string out = msl.substr(0, open) + structText + msl.substr(close);
+    // 2. locals of the original type and name, 3. in.<name> -> <name>_adapted
+    const size_t fn = out.find("main0(", open);
+    const size_t body = fn == std::string::npos ? std::string::npos : out.find('{', fn);
+    if (body == std::string::npos)
+        return msl;
+    std::string locals;
+    for (const Fix& f : fixes)
+        locals += "\n    " + f.p.pixel.type + " " + f.p.pixel.name + "_adapted = " + f.expr + ";";
+    std::string head = out.substr(0, body + 1) + locals;
+    std::string tail = out.substr(body + 1);
+    for (const Fix& f : fixes)
+    {
+        const std::string needle = "in." + f.p.pixel.name;
+        size_t at = 0;
+        while ((at = tail.find(needle, at)) != std::string::npos)
+        {
+            const size_t after = at + needle.size();
+            const bool boundaryBefore = at == 0 || !(isalnum(uint8_t(tail[at - 1])) || tail[at - 1] == '_');
+            const bool boundaryAfter = after >= tail.size() || !(isalnum(uint8_t(tail[after])) || tail[after] == '_');
+            if (boundaryBefore && boundaryAfter)
+            {
+                tail.replace(at, needle.size(), f.p.pixel.name + "_adapted");
+                at += f.p.pixel.name.size() + 8;
+            }
+            else
+                at = after;
+        }
+    }
+    // the locals read "in.<name>_vs", which the loop above must not have rewritten: it matches whole identifiers only
+    return head + tail;
+}
+
+namespace
+{
 constexpr uint32_t kMagic = 'XMSL';
 constexpr uint32_t kVersion = 1;
 

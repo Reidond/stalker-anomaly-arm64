@@ -74,6 +74,10 @@ ENGINE_API void HandleEvent(const SDL_Event& event);
 // `quit`, ...). Main thread, after Init() returned Ok.
 ENGINE_API void ExecuteConsole(const char* command);
 
+// True while a level is loaded and playing: the loading screen is gone and the level is ready (scripted runs wait for it).
+// With `level_name`, only that level counts (a new game loads a start level first and changes level from a script).
+ENGINE_API bool IsLevelReady(const char* level_name = nullptr);
+
 // The engine window (an SDL_Window*, also Device.m_hWnd) and its CAMetalLayer, for tools that draw before the renderer
 // exists. MetalLayer() registers the layer with the D3D11 shim under the window handle, as the renderer expects.
 ENGINE_API void* WindowHandle();

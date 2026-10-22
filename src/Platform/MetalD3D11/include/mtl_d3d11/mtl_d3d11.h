@@ -12,6 +12,7 @@
 #pragma once
 
 #include <cstdint>
+#include <string>
 #include <vector>
 
 #include "d3d11shader_metal.h"
@@ -74,6 +75,27 @@ bool PollCapture(IDXGISwapChain1* pSwapChain, CaptureResult* out);
 // Encodes a capture as JPEG (format 0) or PNG (format 1) with ImageIO.
 bool EncodeCapture(const CaptureResult& image, int format, std::vector<uint8_t>* out);
 
+// Debug aid: the contents of mip 0 / slice 0 of a (non-multisampled) texture as an 8-bit image, to look at intermediate
+// render targets: float colour, signed normals, depth, stencil. Flushes the context first. Colour: RGB as they are;
+// Signed: [-1,1] -> [0,1]; Channel: one channel as grey between lo and hi (lo == hi: the texture's own min and max).
+// Depth/stencil textures: Channel 0 is the depth, `stencil` reads the stencil plane (values 0..255).
+struct DebugReadOptions
+{
+    enum Mode { Colour, Signed, Channel } mode = Colour;
+    int channel = 0;
+    bool stencil = false;
+    float lo = 0, hi = 0;
+    uint32_t cropX = 0, cropY = 0, cropW = 0, cropH = 0; // cropW == 0: the whole texture
+};
+struct DebugImage
+{
+    uint32_t width = 0, height = 0;
+    std::vector<uint8_t> rgba;
+    std::string format;
+    float minValue = 0, maxValue = 0, mean = 0; // of the channels shown
+};
+bool DebugReadTexture(ID3D11DeviceContext* pContext, ID3D11Resource* pResource, const DebugReadOptions& options, DebugImage* out);
+
 struct Stats
 {
     uint64_t commandBuffers = 0;
@@ -92,11 +114,20 @@ struct Stats
     uint64_t materializedClears = 0; // clears that needed their own empty pass
     uint64_t ringBytesUsed = 0;      // this frame
     uint64_t textureBytes = 0;       // live texture memory (best effort)
+    uint64_t renderTargetBytes = 0;  // the part of it that is render target, depth or UAV
     uint64_t bufferBytes = 0;
     uint64_t deviceAllocatedBytes = 0; // MTLDevice.currentAllocatedSize
+    uint64_t frames = 0;               // Present calls
+    double gpuSeconds = 0;             // sum of (GPUEndTime - GPUStartTime) over all command buffers
+    double blockedSeconds = 0;         // CPU time spent waiting for the GPU (frame throttle, ring reuse, read-backs)
 };
 void GetStats(ID3D11DeviceContext* pContext, Stats* out);
+// The same for the most recent device (what an app that does not hold the context wants); false before a device exists.
+bool GetGlobalStats(Stats* out);
 void ResetFrameStats(ID3D11DeviceContext* pContext);
+// Debug: logs the next `count` draws with shader names, render targets and fixed-function state.
+void TraceDraws(ID3D11DeviceContext* pContext, int count);
+
 
 // Native handles for tools and tests. Return unretained id<MTLTexture>/id<MTLBuffer>/id<MTLDevice>.
 void* GetNativeDevice(ID3D11Device* pDevice);

@@ -125,6 +125,20 @@ int main()
     CHECK(ri.ok && ri.msl.find("fragment") != std::string::npos);
     CHECK(ri.reflection.constant_buffers.size() == k.reflection.constant_buffers.size());
 
+    // ---- FXC lets an entry parameter reuse a semantic of a struct member of a different width (models_lfo_light_dot_weapons.ps
+    // with a static sun: p_flat.tcdh is float4, `float2 tc0 : TEXCOORD0` repeats it); vkd3d-shader reports E5013 without the hook
+    Result alias = translate("struct p_flat { float4 tcdh : TEXCOORD0; float3 N : TEXCOORD2; };\n"
+                             "float4 main(p_flat I, float4 pos2d : SV_Position, float2 tc0 : TEXCOORD0) : SV_Target\n"
+                             "{ return float4(tc0, I.N.x, pos2d.x); }",
+                             "alias.ps", macros, o, nullptr);
+    if (!alias.ok)
+        fprintf(stderr, "log: %s\n", alias.log.c_str());
+    CHECK(alias.ok);
+    bool sawAlias = false;
+    for (const std::string& h : alias.applied_hooks)
+        sawAlias |= h == "duplicate-input-semantic-alias";
+    CHECK(sawAlias);
+
     // ---- failure paths
     Result bad = translate("float4 main() : SV_Target { return undefined_identifier; }", "bad.ps", macros, o, nullptr);
     CHECK(!bad.ok && bad.category == Category::FrontendError && !bad.log.empty());

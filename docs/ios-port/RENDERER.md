@@ -112,6 +112,8 @@ one log line (`! Metal: gs_5_0 shader skipped (no geometry stage on Metal)`, at 
 
 ## Switched off or changed on Apple
 
+What was checked per option, and the cost of each, is in [RENDER-QA.md](RENDER-QA.md).
+
 | Feature | Why | How |
 |---|---|---|
 | 3D fluid simulation (`FluidManager`, volumetric smoke volumes) | needs geometry shaders (`fluid_array*.gs`) and layered 3D render targets | `CRender::create` sets `o.volumetricfog = FALSE` with a log line; `Load3DFluid` and `FluidManager.Initialize` already return early on it |
@@ -121,15 +123,18 @@ one log line (`! Metal: gs_5_0 shader skipped (no geometry stage on Metal)`, at 
 | Multi-monitor `vid_monitor` switch | one display | returns false |
 | TBB | not ported | GCD |
 | Gamma ramp (`SetGammaControl`) | no equivalent on `CAMetalLayer` | accepted and ignored |
-| MSAA, HDR10 | off by default, not exercised | unchanged code paths; the shim implements resolve and the 10-bit layer but nothing here tests them |
+| MSAA | 2x and 4x work; the GPU refuses 8x | `r3_msaa` is lowered until `CheckMultisampleQualityLevels` accepts it, with a log line (RENDER-QA.md) |
+| HDR10 | off by default, not exercised | unchanged code paths; the shim implements the 10-bit layer but nothing here tests it |
+| Screen Space Shaders pack | its 34 shader files are not in the game data | the features are off; one log line lists them; the far terrain falls back to the near terrain's shader (RENDER-QA.md) |
 
 ## Shim gaps closed in this change
 
 Against what R4 calls (see [D3D11-SURFACE.md](D3D11-SURFACE.md)); the rest of METAL-SHIM.md's list is still open.
 
 * Pixel inputs the vertex shader never writes: the pixel function is rebuilt from MSL with those inputs as zero locals
-  (`Context::fragmentFunctionFor`). With default settings no stock pair needs it; the patching is covered by the warm-up tool and
-  `metal_d3d11_headless_test` on real and synthetic MSL.
+  (`Context::fragmentFunctionFor`); a pixel input of another width than the vertex output at the same location (`waterd`: FOG packed
+  next to TEXCOORD2) is rebuilt with the vertex shader's type and a swizzled or zero-extended local (`AdaptFragmentInputs`). Covered
+  by the warm-up tool and `metal_d3d11_headless_test` on real and synthetic MSL.
 * Screenshots: `D3DX11SaveTextureToMemory/File` encode JPG, PNG, TIFF and GIF through ImageIO (R4's `screenshot` token 0/1).
 * `D3DX11LoadTextureFromTexture` between different sizes (savegame and level thumbnails) filters on the CPU.
 * `D3D11_SRV_DIMENSION` is the `d3dcommon.h` enum, `LPD3DBLOB` / `LPD3D10BLOB` exist.

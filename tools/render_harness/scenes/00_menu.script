@@ -1,0 +1,5 @@
+# standalone
+# The main menu.
+1 console r_screenshot_mode png
+6 console screenshot 00_menu
+9 quit

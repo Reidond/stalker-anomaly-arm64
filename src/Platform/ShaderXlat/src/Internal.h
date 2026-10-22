@@ -25,6 +25,7 @@ struct FrontendOutput
 {
     std::vector<uint32_t> spirv;
     std::string log;
+    bool aliasedSemantics = false; // the duplicate-input-semantic hook was needed (see aliasDuplicateInputSemantics)
     // D3D-style reflection read from the DXBC (names, registers, cbuffer layouts, signatures).
     // msl_index fields and sampler/texture analysis are filled in later by crossCompile().
     Reflection d3d;
@@ -38,6 +39,10 @@ bool parseRdef(const uint8_t* data, size_t size, Reflection& out, std::string& e
 
 // FXC-compat source hooks. Rewrites `text` in place and appends the names of the hooks that fired.
 void applyFxcCompat(std::string& text, const std::string& path, std::vector<std::string>& applied);
+
+// Preprocessed HLSL only: drops entry-point parameters whose semantic duplicates a (wider) member of a struct parameter and
+// defines them from that member. FXC accepts the duplicate, vkd3d-shader stops with E5013. True if it changed the text.
+bool aliasDuplicateInputSemantics(std::string& text, const std::string& entry);
 
 // SPIR-V -> MSL plus the SPIRV-Cross derived parts of the reflection. `result.reflection` must
 // already hold the frontend's D3D reflection.

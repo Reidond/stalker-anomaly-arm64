@@ -135,6 +135,14 @@ back to `stub_default.vs`. The full list is the "Engine-requested
 names" section of the `shader_batch` summary. **Action: provide the loose `gamedata/shaders/r3/ssfx_*`
 files (and the `.s` scripts) from the working Windows install so they can be swept too.**
 
+**What a start does without them (M2 build).** `CResourceManager::_CreatePS/_CreateVS` in this tree replaces a missing file with
+`stub_default` (a textured quad shader that writes one colour target) and logs `DX10: ... is missing. Replace with stub_default`.
+A normal start requests 34 such files: `ssfx_*.ps` x 31, `ssfx_sky_mv.vs`, `heatvision.ps` and `deffer_terrain_low_flat.ps`.
+`CRender::create` decides each `o.ssfx_*` feature from the existence of its main file, so with the pack absent every SSFX feature is
+off and its passes never draw the stand-in; one log line (`Screen Space Shaders features switched off ...`) lists them. The
+stand-ins carry `[missing, stub_default]` in their name, so `mtl_trace` shows if one is ever drawn. The one that was
+(`deffer_terrain_low_flat.ps`, the terrain beyond 240 m) now falls back to the near terrain's shader in `Blender_BmmD`.
+
 ## Runtime cost
 
 Single thread, Release, `--no-validate`, per translated shader (HLSL to MSL + reflection):

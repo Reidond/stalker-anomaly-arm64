@@ -150,6 +150,17 @@ public:
 	CRT* _CreateRT(LPCSTR Name, u32 w, u32 h, D3DFORMAT f, u32 SampleCount = 1);
 #endif
 	void _DeleteRT(const CRT* RT);
+	// debugging: the render target registered under that name, or null (no creation)
+	CTexture* DebugFindTexture(LPCSTR Name)
+	{
+		map_TextureIt it = m_textures.find(Name);
+		return it == m_textures.end() ? nullptr : it->second;
+	}
+	CRT* DebugFindRT(LPCSTR Name)
+	{
+		map_RTIt it = m_rtargets.find(Name);
+		return it == m_rtargets.end() ? nullptr : it->second;
+	}
 
 	//	DX10 cut CRTC*							_CreateRTC			(LPCSTR Name, u32 size,	D3DFORMAT f);
 	//	DX10 cut void							_DeleteRTC			(const CRTC*	RT	);

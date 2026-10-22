@@ -554,7 +554,11 @@ public:
     id<MTLCommandQueue> queue = nil;
     Context* context = nullptr; // immediate context (not ref-counted by the device)
     std::atomic<uint64_t> nextShaderId{1};
+    std::atomic<uint64_t> gpuNanos{0};      // GPU time of all completed command buffers
+    std::atomic<uint64_t> blockedNanos{0};  // CPU time spent in waitForSerial
+    std::atomic<uint64_t> frameCount{0};
     std::atomic<uint64_t> textureBytes{0};
+    std::atomic<uint64_t> renderTargetBytes{0}; // the part of textureBytes that is render target, depth or UAV
     std::atomic<uint64_t> bufferBytes{0};
     bool supportsBC = false;
     bool supportsDepth24Stencil8 = false;
@@ -583,6 +587,7 @@ private:
 };
 
 // Back-buffer wrapper for swap chains: a Texture2D whose current() resolves the drawable.
+Device* LatestDevice();
 Texture2D* NewBackBuffer(Device* dev, SwapChain* sc, UINT w, UINT h, DXGI_FORMAT fmt, MTLPixelFormat mtlFmt);
 
 } // namespace mtl_d3d11

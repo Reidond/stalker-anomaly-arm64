@@ -1,0 +1,8 @@
+# Night, clear sky, flashlight on, in the Rookie village.
+1 console run_string xr_harness.env(0,30,"w_clear2")
+3 console run_string xr_harness.tp(-215,-8.5,-40.6,0)
+24 console run_string xr_harness.torch(true)
+26 console run_string xr_harness.torch(true)
+29 console run_string xr_harness.status()
+30 console screenshot 04_night_flashlight
+32 quit

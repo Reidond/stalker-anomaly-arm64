@@ -24,6 +24,9 @@
 //   <t> move <x> <y>                mouse pointer, window points
 //   <t> relmove <dx> <dy>           relative mouse motion
 //   <t> click <x> <y> [button]      move, press and release (1 left, 2 middle, 3 right)
+//   <t> waitlevel [seconds [level]] hold the timeline until a level (that one, if named) is loaded and playing (default
+//                                   limit 240 s); the steps after it run with t counted from that moment, so a scene can
+//                                   follow a load of any length
 //   <t> log <text...>               a line in the shell log
 //   <t> quit                        leave the app
 
@@ -33,6 +36,8 @@
 
 #include <Platform/Apple/Launcher.h>
 #include <Platform/Apple/Shell.h>
+
+#include <mtl_d3d11/mtl_stats.h>
 
 #include "Unattended.h"
 #include "xrEngine/xr_engine_app.h"
@@ -79,6 +84,10 @@ struct App
     std::vector<ScriptStep> script;
     size_t script_next = 0;
     std::vector<ScriptStep> pending_releases;
+    mtl_d3d11::RenderStats last_stats; // at the end of the previous 10 s window
+    bool waiting_level = false; // a `waitlevel` step is holding the timeline
+    double wait_started_s = 0, wait_limit_s = 0, wait_step_at = 0;
+    std::string wait_level_name;
 
     bool unattended = false;
     bool show_window = false; // --show-window: unattended, but with a (background) window instead of offscreen rendering
@@ -209,7 +218,19 @@ void PushButton(int button, bool down, float x, float y)
 // Runs the steps that are due. Returns false once the script asked to quit.
 bool RunScript(App& app)
 {
-    const double now = double(SDL_GetTicksNS() - app.engine_start_ns) * 1e-9;
+    double now = double(SDL_GetTicksNS() - app.engine_start_ns) * 1e-9;
+    if (app.waiting_level)
+    {
+        const bool timed_out = now - app.wait_started_s > app.wait_limit_s;
+        if (!xr_engine::IsLevelReady(app.wait_level_name.c_str()) && !timed_out)
+            return true;
+        AppleShell::Log("anomaly: script: %s after %.1f s", timed_out ? "waitlevel timed out" : "level ready",
+            now - app.wait_started_s);
+        // later steps count from here: t of the waitlevel step is "now"
+        app.engine_start_ns = SDL_GetTicksNS() - Uint64(app.wait_step_at * 1e9);
+        app.waiting_level = false;
+        now = app.wait_step_at;
+    }
     for (size_t i = 0; i < app.pending_releases.size();)
     {
         if (now >= app.pending_releases[i].release_at)
@@ -263,6 +284,18 @@ bool RunScript(App& app)
             PushMotion(app, x, y);
             PushButton(button, true, x, y);
             PushButton(button, false, x, y);
+        }
+        else if (step.command == "waitlevel")
+        {
+            app.waiting_level = true;
+            app.wait_started_s = now;
+            app.wait_step_at = step.at;
+            std::istringstream words(step.args);
+            double limit = 0;
+            app.wait_level_name.clear();
+            words >> limit >> app.wait_level_name;
+            app.wait_limit_s = limit > 0 ? limit : 240.0;
+            return true;
         }
         else if (step.command == "log")
             AppleShell::Log("anomaly: script: %s", step.args.c_str());
@@ -414,6 +447,13 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char** argv)
     const bool data_ok = AppleShell::ValidateGameData(paths.data_root).state == AppleShell::DataState::Ok;
     if (data_ok && !want_launcher)
         return StartEngine(*app) ? SDL_APP_CONTINUE : SDL_APP_FAILURE;
+    if (app->unattended)
+    {
+        // nobody is there to read a launcher: fail instead of waiting for a click
+        AppleShell::Log("anomaly: unattended: the game data at %s is not usable, not showing the launcher", paths.data_root.c_str());
+        fprintf(stderr, "anomaly: unattended: the game data at %s is not usable\n", paths.data_root.c_str());
+        return SDL_APP_FAILURE;
+    }
     return OpenLauncher(*app) ? SDL_APP_CONTINUE : SDL_APP_FAILURE;
 }
 
@@ -433,6 +473,25 @@ SDL_AppResult SDL_AppIterate(void* appstate)
         {
             AppleShell::Log("anomaly: %.1f fps (%u frames in %.1f s)", app->fps_frames * 1e9 / double(now_ns - app->fps_window_ns),
                 app->fps_frames, double(now_ns - app->fps_window_ns) * 1e-9);
+            // what the renderer cost over the same window: GPU time per frame, CPU time per frame (wall time minus the time
+            // blocked on the GPU), draws and passes per frame, and the Metal memory
+            mtl_d3d11::RenderStats st;
+            if (mtl_d3d11::GetRenderStats(&st))
+            {
+                const double wall = double(now_ns - app->fps_window_ns) * 1e-9;
+                const double frames = double(st.frames - app->last_stats.frames);
+                if (frames > 0)
+                    AppleShell::Log(
+                        "anomaly: metal: gpu %.2f ms/frame, cpu %.2f ms/frame (blocked %.2f), %.0f draws, %.1f passes/frame; "
+                        "textures %.0f MB (render targets %.0f MB), buffers %.0f MB, allocated %.0f MB",
+                        (st.gpuSeconds - app->last_stats.gpuSeconds) * 1e3 / frames,
+                        (wall - (st.blockedSeconds - app->last_stats.blockedSeconds)) * 1e3 / frames,
+                        (st.blockedSeconds - app->last_stats.blockedSeconds) * 1e3 / frames,
+                        double(st.draws - app->last_stats.draws) / frames,
+                        double(st.renderPasses - app->last_stats.renderPasses) / frames, st.textureBytes / 1048576.0,
+                        st.renderTargetBytes / 1048576.0, st.bufferBytes / 1048576.0, st.deviceAllocatedBytes / 1048576.0);
+                app->last_stats = st;
+            }
             app->fps_window_ns = now_ns;
             app->fps_frames = 0;
         }

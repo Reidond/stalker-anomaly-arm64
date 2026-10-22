@@ -1,0 +1,6 @@
+# Inside the Cordon bunker (Sidorovich's trader room), raining outside: nothing of the rain may show indoors.
+1 console run_string xr_harness.env(14,0,"w_rain2")
+3 console run_string xr_harness.tp_story("esc_m_trader",90)
+29 console run_string xr_harness.status()
+30 console screenshot 03_bunker
+32 quit

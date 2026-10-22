@@ -1,6 +1,7 @@
 // ID3D11DeviceContext on Metal: state tracking, lazy render passes, draws, copies, queries.
 #import "mtl_context.h"
 #import "mtl_swapchain.h"
+#include <mtl_d3d11/mtl_stats.h>
 
 #include <algorithm>
 #include <cmath>
@@ -225,6 +226,8 @@ void Context::commit(bool wait)
     [cb_ addCompletedHandler:^(id<MTLCommandBuffer> b) {
         if (b.error)
             Log("command buffer %llu failed: %s", (unsigned long long)s, b.error.localizedDescription.UTF8String);
+        if (b.GPUEndTime > b.GPUStartTime && b.GPUStartTime > 0)
+            d->gpuNanos += uint64_t((b.GPUEndTime - b.GPUStartTime) * 1e9);
         self->harvestQueries(s);
         d->noteCompleted(s);
     }];
@@ -325,6 +328,7 @@ void Context::present(id<CAMetalDrawable> drawable, void (^preCommit)(id<MTLComm
     if (drawable)
         [cb_ presentDrawable:drawable];
     commit(false);
+    ++dev_->frameCount;
     endFrame();
 }
 
@@ -882,34 +886,39 @@ id<MTLFunction> Context::fragmentFunctionFor(VertexShader* vs, PixelShader* ps)
         return it->second;
 
     std::vector<Interpolant> missing;
+    std::vector<InterpolantPair> mismatched;
     for (const Interpolant& in : ps->interpolants)
     {
-        bool written = false;
+        const Interpolant* written = nullptr;
         for (const Interpolant& out : vs->interpolants)
             if (out.location == in.location)
             {
-                written = true;
+                written = &out;
                 break;
             }
         if (!written)
             missing.push_back(in);
+        else if (written->type != in.type)
+            mismatched.push_back({in, *written});
     }
     id<MTLFunction> fn = ps->fn;
-    if (!missing.empty())
+    if (!missing.empty() || !mismatched.empty())
     {
         NSError* err = nil;
-        NSString* src = [NSString stringWithUTF8String:PatchFragmentInputs(ps->msl, missing).c_str()];
+        std::string text = AdaptFragmentInputs(ps->msl, mismatched);
+        text = PatchFragmentInputs(text, missing);
+        NSString* src = [NSString stringWithUTF8String:text.c_str()];
         id<MTLLibrary> lib = dev_->newLibraryFromMsl(src, &err);
         id<MTLFunction> patched = lib ? [lib newFunctionWithName:[NSString stringWithUTF8String:ps->refl.entryPoint.c_str()]] : nil;
         if (patched)
         {
             fn = patched;
-            Log("pixel shader %llu reads %zu interpolant(s) vertex shader %llu does not write (first: location %u); zero-filled",
-                (unsigned long long)ps->id, missing.size(), (unsigned long long)vs->id, missing[0].location);
+            Log("pixel shader %s: %zu interpolant(s) that vertex shader %s does not write are zero-filled, %zu of another width adapted",
+                ps->debugName.c_str(), missing.size(), vs->debugName.c_str(), mismatched.size());
         }
         else
-            Log("pixel shader %llu: patching %zu unwritten input(s) failed: %s", (unsigned long long)ps->id, missing.size(),
-                err ? err.localizedDescription.UTF8String : "?");
+            Log("pixel shader %s: patching %zu unwritten and %zu mismatched input(s) failed: %s", ps->debugName.c_str(), missing.size(),
+                mismatched.size(), err ? err.localizedDescription.UTF8String : "?");
     }
     fragmentVariants_.emplace(key, fn);
     return fn;
@@ -961,7 +970,8 @@ id<MTLRenderPipelineState> Context::pipeline(MTLPrimitiveTopologyClass cls)
     }
 
     MTLRenderPipelineDescriptor* d = [MTLRenderPipelineDescriptor new];
-    d.label = [NSString stringWithFormat:@"vs%llu ps%llu", (unsigned long long)k.vs, (unsigned long long)k.ps];
+    d.label = [NSString stringWithFormat:@"vs%llu %s, ps%llu %s", (unsigned long long)k.vs, vs_->debugName.c_str(),
+                                         (unsigned long long)k.ps, ps_ ? ps_->debugName.c_str() : "-"];
     d.vertexFunction = vs_->fn;
     d.fragmentFunction = ps_ ? fragmentFunctionFor(vs_.get(), ps_.get()) : nil;
     d.rasterSampleCount = pass_.samples;
@@ -1287,7 +1297,67 @@ bool Context::prepareDraw(bool, D3D11_PRIMITIVE_TOPOLOGY* topo)
     if (ps_)
         bindRenderStage(1, ps_->refl, bind_[1]);
     ++pass_.draws;
+    if (traceDraws_ > 0)
+        traceDraw();
     return true;
+}
+
+static const char* nameOf(TextureCore* t)
+{
+    if (t->isBackBuffer)
+        return "backbuffer";
+    return t->tex && t->tex.label ? t->tex.label.UTF8String : "?";
+}
+
+void Context::traceDraw()
+{
+    --traceDraws_;
+    std::string rts;
+    for (int i = 0; i < 8; ++i)
+        if (RenderTargetView* v = rtv_[i].get())
+        {
+            char b[160];
+            snprintf(b, sizeof b, " rt%d=%s(%ux%u fmt %u)", i, nameOf(v->tex), v->tex->width, v->tex->height, unsigned(v->format));
+            rts += b;
+        }
+    std::string z = "none";
+    if (DepthStencilView* d = dsv_.get())
+    {
+        char zb[96];
+        snprintf(zb, sizeof zb, "%s@%p(%ux%u s%u)", nameOf(d->tex), (__bridge void*)d->tex->tex, d->tex->width, d->tex->height,
+                 d->tex->samples);
+        z = zb;
+    }
+    char ds[200] = "default";
+    if (dss_)
+    {
+        const D3D11_DEPTH_STENCIL_DESC& s = dss_->desc;
+        snprintf(ds, sizeof ds, "z%d/w%d/f%d st%d(f%d r%u m%02x)", s.DepthEnable, int(s.DepthWriteMask), int(s.DepthFunc),
+                 s.StencilEnable, int(s.FrontFace.StencilFunc), stencilRef_, s.StencilReadMask);
+    }
+    char bl[120] = "default";
+    if (blend_)
+    {
+        const D3D11_RENDER_TARGET_BLEND_DESC& r = blend_->desc.RenderTarget[0];
+        snprintf(bl, sizeof bl, "%d src%d dst%d op%d wr%x", r.BlendEnable, int(r.SrcBlend), int(r.DestBlend), int(r.BlendOp),
+                 r.RenderTargetWriteMask);
+    }
+    std::string tex;
+    if (ps_)
+        for (const ResourceBinding& rb : ps_->refl.resources)
+            if (rb.type == D3D_SIT_TEXTURE && rb.d3dSlot < D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT)
+            {
+                ShaderResourceView* v = bind_[1].srv[rb.d3dSlot].get();
+                const char* n = !v ? "-" : (v->buffer ? "buffer" : (v->core ? (sameAsAttachment(v->core) ? "ATTACHED" : nameOf(static_cast<TextureCore*>(v->core))) : "?"));
+                tex += std::string(" t") + std::to_string(rb.d3dSlot) + "=" + n;
+            }
+    char sc[96] = "";
+    if (rs_ && rs_->desc.ScissorEnable)
+        snprintf(sc, sizeof sc, " scissor(%d,%d,%d,%d)%s", int(scissor_.left), int(scissor_.top), int(scissor_.right),
+                 int(scissor_.bottom), scissorSet_ ? "" : "[unset]");
+    Log("trace draw: vs=%s ps=%s topo %d |%s| zs=%s %s | blend %s | cull %d | vp %.0fx%.0f z %.2f-%.2f%s |%s", vs_->debugName.c_str(),
+        ps_ ? ps_->debugName.c_str() : "-", int(topology_), rts.c_str(), z.c_str(), ds, bl, rs_ ? int(rs_->desc.CullMode) : 3, viewport_.Width,
+        viewport_.Height, viewport_.MinDepth, viewport_.MaxDepth, sc, tex.c_str());
 }
 
 void Context::Draw(UINT count, UINT start) { DrawInstanced(count, 1, start, 0); }
@@ -1974,9 +2044,46 @@ void GetStats(ID3D11DeviceContext* pContext, Stats* out)
 {
     Context* c = static_cast<Context*>(static_cast<ID3D11DeviceContext1*>(pContext));
     *out = c->stats;
-    out->textureBytes = c->device()->textureBytes;
-    out->bufferBytes = c->device()->bufferBytes;
-    out->deviceAllocatedBytes = c->device()->mtl.currentAllocatedSize;
+    Device* d = c->device();
+    out->textureBytes = d->textureBytes;
+    out->renderTargetBytes = d->renderTargetBytes;
+    out->bufferBytes = d->bufferBytes;
+    out->deviceAllocatedBytes = d->mtl.currentAllocatedSize;
+    out->frames = d->frameCount;
+    out->gpuSeconds = double(d->gpuNanos.load()) * 1e-9;
+    out->blockedSeconds = double(d->blockedNanos.load()) * 1e-9;
+}
+
+bool GetRenderStats(RenderStats* out)
+{
+    Stats s;
+    if (!GetGlobalStats(&s))
+        return false;
+    out->frames = s.frames;
+    out->draws = s.draws;
+    out->renderPasses = s.renderPasses;
+    out->commandBuffers = s.commandBuffers;
+    out->gpuSeconds = s.gpuSeconds;
+    out->blockedSeconds = s.blockedSeconds;
+    out->textureBytes = s.textureBytes;
+    out->renderTargetBytes = s.renderTargetBytes;
+    out->bufferBytes = s.bufferBytes;
+    out->deviceAllocatedBytes = s.deviceAllocatedBytes;
+    return true;
+}
+
+bool GetGlobalStats(Stats* out)
+{
+    Device* d = LatestDevice();
+    if (!d || !d->context)
+        return false;
+    GetStats(static_cast<ID3D11DeviceContext*>(static_cast<ID3D11DeviceContext1*>(d->context)), out);
+    return true;
+}
+
+void TraceDraws(ID3D11DeviceContext* pContext, int count)
+{
+    static_cast<Context*>(static_cast<ID3D11DeviceContext1*>(pContext))->traceDraws(count);
 }
 
 void ResetFrameStats(ID3D11DeviceContext* pContext)

@@ -55,6 +55,9 @@ void dxApplicationRender::KillHW()
 }
 
 u32 calc_progress_color(u32, u32, int, int);
+#if defined(XR_PLATFORM_APPLE)
+void AppleLoadScreenshot(int stage, int max_stage); // load_shots (r__screenshot.cpp)
+#endif
 extern bool use_reshade;
 extern void render_reshade_effects();
 
@@ -76,6 +79,10 @@ void dxApplicationRender::load_draw_internal(CApplication& owner)
 
 	if (use_reshade)
 		render_reshade_effects();
+
+#if defined(XR_PLATFORM_APPLE)
+	AppleLoadScreenshot(owner.load_stage, owner.max_load_stage);
+#endif
 
 	if (!sh_progress)
 	{

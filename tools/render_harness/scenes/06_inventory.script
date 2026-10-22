@@ -1,0 +1,6 @@
+# The inventory window.
+1 console run_string xr_harness.env(12,0,"w_clear1")
+26 key I
+30 console screenshot 06_inventory
+32 key Escape
+34 quit

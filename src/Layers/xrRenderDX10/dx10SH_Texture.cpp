@@ -1,4 +1,7 @@
 #include "stdafx.h"
+#if defined(XR_PLATFORM_APPLE)
+# include <mtl_d3d11/mtl_d3d11.h>
+#endif
 #pragma hdrstop
 
 #include "../xrRender/ResourceManager.h"
@@ -70,6 +73,10 @@ void CTexture::surface_set(ID3DBaseTexture* surf)
 
 	if (pSurface)
 	{
+#if defined(XR_PLATFORM_APPLE)
+		if (cName.size())
+			mtl_d3d11::SetDebugName(pSurface, cName.c_str()); // the draw trace and GPU captures show the texture's name
+#endif
 		desc_update();
 
 		D3D_RESOURCE_DIMENSION type;

@@ -1,4 +1,11 @@
 #include "stdafx.h"
+
+#if defined(XR_PLATFORM_APPLE)
+void AppleRTDumpHook(const char* stage); // rt_dump (r__screenshot.cpp)
+# define RT_DUMP_HOOK(stage) AppleRTDumpHook(stage)
+#else
+# define RT_DUMP_HOOK(stage) ((void)0)
+#endif
 #include "../../xrEngine/igame_persistent.h"
 #include "../xrRender/FBasicVisual.h"
 #include "../../xrEngine/customhud.h"
@@ -496,6 +503,8 @@ void CRender::Render()
 		Wallmarks->Render(); // wallmarks has priority as normal geometry
 	}
 
+	RT_DUMP_HOOK("gbuffer");
+
 	// Update incremental shadowmap-visibility solver
 	{
 		PIX_EVENT(DEFER_FLUSH_OCCLUSION);
@@ -642,6 +651,8 @@ void CRender::Render()
 		if (RImplementation.o.ssfx_volumetric)
 			Target->phase_ssfx_volumetric_blur();
 	}
+
+	RT_DUMP_HOOK("lit");
 
 	// Postprocess
 	{

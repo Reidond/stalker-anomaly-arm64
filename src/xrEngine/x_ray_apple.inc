@@ -16,6 +16,7 @@
 
 extern BOOL DllMainXrPhysics(HANDLE hModule, DWORD ul_reason_for_call, LPVOID lpReserved);
 extern bool ignore_verify;
+extern ENGINE_API BOOL g_appLoaded;
 
 namespace
 {
@@ -255,6 +256,13 @@ void HandleEvent(const SDL_Event& event)
 {
 	if (g_app.core_ready)
 		xr_window::DispatchEvent(event);
+}
+
+bool IsLevelReady(const char* level_name)
+{
+	if (!g_app.running || !g_appLoaded || !g_pGameLevel || !g_pGameLevel->bReady)
+		return false;
+	return !level_name || !*level_name || g_pGameLevel->name() == level_name;
 }
 
 void ExecuteConsole(const char* command)

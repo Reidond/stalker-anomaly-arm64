@@ -1,0 +1,13 @@
+# Common start of the scenes: load the base save and wait until the level plays. The scene's own times count from the
+# level being ready, plus 16 s (the runner shifts them), because the loading screen ("Press any key to continue") only
+# takes a key a little after the level is ready.
+1 console r_screenshot_mode png
+2 console start server(h_cordon/single/alife/load) client(localhost)
+3 waitlevel 300 l01_escape
+3.5 console ai_ignore_actor on
+5 key Left Shift
+7 key Left Shift
+9 key Left Shift
+11 key Left Shift
+13 key Left Shift
+15 key Left Shift

@@ -1,0 +1,6 @@
+# Outdoors in heavy rain (9:00, w_rain3).
+1 console run_string xr_harness.env(9,0,"w_rain3")
+3 console run_string xr_harness.tp(-2.8,2.8,82.7,200)
+29 console run_string xr_harness.status()
+30 console screenshot 05_rain
+32 quit

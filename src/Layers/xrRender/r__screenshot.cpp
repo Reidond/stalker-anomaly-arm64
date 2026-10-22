@@ -42,9 +42,161 @@ void AppleQueueScreenshot(LPCSTR name, int delay)
 	}
 	g_apple_shot.queued = true;
 	g_apple_shot.delay = delay < 0 ? 0 : delay;
+	Msg("* screenshot: queued '%s', %d frames ahead", name ? name : "", g_apple_shot.delay);
 	g_apple_shot.name[0] = 0;
 	if (name && name[0])
 		xr_strcpy(g_apple_shot.name, sizeof(g_apple_shot.name), name);
+}
+
+// ---- load_shots: the loading screen while a level loads ----------------------------------------------------------------
+// load_shots <prefix>: a screenshot (<prefix>_<n>.png) of every loading-screen frame that shows a new load stage; "" switches it off.
+// The load blocks the main loop for many seconds, so a script step cannot ask for these.
+namespace
+{
+string64 g_load_shots = "";
+int g_load_shots_last = -1;
+int g_load_shots_count = 0;
+} // namespace
+
+void AppleSetLoadShots(LPCSTR prefix)
+{
+	xr_strcpy(g_load_shots, prefix ? prefix : "");
+	g_load_shots_last = -1;
+	g_load_shots_count = 0;
+}
+
+void AppleLoadScreenshot(int stage, int max_stage)
+{
+	if (!g_load_shots[0] || stage == g_load_shots_last)
+		return;
+	// the previous capture reads back for a frame or two: try this stage again at the next loading frame instead of skipping it
+	if (g_apple_shot.queued || g_apple_shot.armed)
+		return;
+	g_load_shots_last = stage;
+	string_path name;
+	xr_sprintf(name, "%s_%02d_stage%d_of_%d", g_load_shots, g_load_shots_count++, stage, max_stage);
+	AppleQueueScreenshot(name, 0);
+}
+
+// ---- rt_dump: look at intermediate render targets -------------------------------------------------------------------
+// rt_dump <target> <file> [stage] [mode] [lo hi]
+//   target: a render target name ($user$accum, $user$position, ...), `depth` (the scene depth-stencil), `smap` (the shadow map)
+//   stage:  where in the frame: gbuffer (after the G-buffer and wallmarks), rain_patch, rain_end (inside the wet-surface layer),
+//           lit (before the post-process), frame_end (default)
+//   mode:   c = RGB (default), s = signed RGB, r/g/b/a = one channel as grey, d = depth, st = stencil; lo hi = the range for grey
+// The image goes to $screenshots$\<file>.png (8 bit); the log line has the format, size, min, max and mean.
+namespace
+{
+struct RTDump
+{
+	bool pending = false;
+	string64 target = "";
+	string64 file = "";
+	string32 stage = "frame_end";
+	string32 mode = "c";
+	float lo = 0, hi = 0;
+	u32 crop[4] = {0, 0, 0, 0};
+} g_rt_dump;
+} // namespace
+
+void AppleQueueRTDump(LPCSTR target, LPCSTR file, LPCSTR stage, LPCSTR mode, float lo, float hi, const u32* crop)
+{
+	for (int i = 0; i < 4; ++i)
+		g_rt_dump.crop[i] = crop ? crop[i] : 0;
+	xr_strcpy(g_rt_dump.target, target);
+	xr_strcpy(g_rt_dump.file, file);
+	xr_strcpy(g_rt_dump.stage, stage && *stage ? stage : "frame_end");
+	xr_strcpy(g_rt_dump.mode, mode && *mode ? mode : "c");
+	g_rt_dump.lo = lo;
+	g_rt_dump.hi = hi;
+	g_rt_dump.pending = true;
+	Msg("* rt_dump: '%s' at %s (%s) queued", target, g_rt_dump.stage, g_rt_dump.mode);
+}
+
+void AppleRTDumpHook(const char* stage)
+{
+	if (!g_rt_dump.pending || xr_strcmp(stage, g_rt_dump.stage))
+		return;
+	g_rt_dump.pending = false;
+
+	ID3DResource* res = nullptr;
+	bool release = false;
+	if (!xr_strcmp(g_rt_dump.target, "depth"))
+	{
+		if (HW.pBaseZB)
+		{
+			HW.pBaseZB->GetResource(&res);
+			release = true;
+		}
+	}
+	else if (!xr_strcmp(g_rt_dump.target, "smap"))
+		res = RImplementation.Target->rt_smap_depth ? RImplementation.Target->rt_smap_depth->pSurface : nullptr;
+	else if (!strncmp(g_rt_dump.target, "tex:", 4))
+	{
+		// a loaded texture by its engine name (tex:ui\\ui_icon_equipment)
+		if (CTexture* t = dxRenderDeviceRender::Instance().Resources->DebugFindTexture(g_rt_dump.target + 4))
+			res = t->surface_get();
+	}
+	else if (CRT* rt = dxRenderDeviceRender::Instance().Resources->DebugFindRT(g_rt_dump.target))
+		res = rt->pSurface;
+	if (!res)
+	{
+		// a texture that is not loaded yet (a loading-screen texture, asked for before the load): look again at the next frames
+		static int s_retries = 0;
+		if (!strncmp(g_rt_dump.target, "tex:", 4) && s_retries++ < 3000)
+		{
+			g_rt_dump.pending = true;
+			return;
+		}
+		s_retries = 0;
+		Msg("! rt_dump: no render target '%s'", g_rt_dump.target);
+		return;
+	}
+
+	mtl_d3d11::DebugReadOptions opt;
+	const char* m = g_rt_dump.mode;
+	opt.lo = g_rt_dump.lo;
+	opt.hi = g_rt_dump.hi;
+	opt.cropX = g_rt_dump.crop[0];
+	opt.cropY = g_rt_dump.crop[1];
+	opt.cropW = g_rt_dump.crop[2];
+	opt.cropH = g_rt_dump.crop[3];
+	if (!xr_strcmp(m, "s"))
+		opt.mode = mtl_d3d11::DebugReadOptions::Signed;
+	else if (!xr_strcmp(m, "c"))
+		opt.mode = mtl_d3d11::DebugReadOptions::Colour;
+	else
+	{
+		opt.mode = mtl_d3d11::DebugReadOptions::Channel;
+		if (!xr_strcmp(m, "g")) opt.channel = 1;
+		else if (!xr_strcmp(m, "b")) opt.channel = 2;
+		else if (!xr_strcmp(m, "a")) opt.channel = 3;
+		else if (!xr_strcmp(m, "st")) opt.stencil = true;
+	}
+	mtl_d3d11::DebugImage img;
+	if (!mtl_d3d11::DebugReadTexture(HW.pContext, res, opt, &img))
+		Msg("! rt_dump: cannot read '%s'", g_rt_dump.target);
+	else
+	{
+		mtl_d3d11::CaptureResult cap;
+		cap.width = img.width;
+		cap.height = img.height;
+		cap.rgba = std::move(img.rgba);
+		std::vector<uint8_t> png;
+		string_path name;
+		xr_sprintf(name, sizeof(name), "%s.png", g_rt_dump.file);
+		if (mtl_d3d11::EncodeCapture(cap, 1, &png))
+			if (IWriter* fs = FS.w_open("$screenshots$", name))
+			{
+				fs->w(png.data(), (u32)png.size());
+				FS.w_close(fs);
+			}
+		Msg("* rt_dump: %s '%s' %ux%u %s min %.4f max %.4f mean %.4f", name, g_rt_dump.target, img.width, img.height,
+		    img.format.c_str(), img.minValue, img.maxValue, img.mean);
+	}
+	FlushLog(); // scripted runs are sometimes killed on the way out, and the engine log is buffered
+	if (release)
+		_RELEASE(res);
 }
 
 void AppleScreenshotBeforePresent()
@@ -99,6 +251,7 @@ void AppleScreenshotAfterPresent()
 		fs->w(encoded.data(), (u32)encoded.size());
 		FS.w_close(fs);
 		Msg("* screenshot: %s (%ux%u, %u KB)", buf, shot.width, shot.height, (u32)(encoded.size() / 1024));
+		FlushLog();
 	}
 	else
 		Msg("! screenshot: cannot write %s", buf);
