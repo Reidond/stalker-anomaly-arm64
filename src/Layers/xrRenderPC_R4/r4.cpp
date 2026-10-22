@@ -409,6 +409,21 @@ void CRender::create()
 	// HDR10
 	o.dx11_hdr10 = !!ps_r4_hdr10_on;
 
+#if defined(XR_PLATFORM_APPLE)
+	// Apple GPUs sample 1, 2 or 4 times, 8 only on some: a count the device refuses fails every multisampled render target
+	// and the renderer cannot start. Settings files from a Windows install may ask for 8x.
+	while (ps_r3_msaa && !o.dx11_hdr10)
+	{
+		UINT levels = 0;
+		if (SUCCEEDED(HW.pDevice->CheckMultisampleQualityLevels(DXGI_FORMAT_R16G16B16A16_FLOAT, 1u << ps_r3_msaa, &levels)) &&
+			levels)
+			break;
+		Msg("! Metal: %ux MSAA is not supported by this GPU; using %ux", 1u << ps_r3_msaa,
+		    ps_r3_msaa > 1 ? 1u << (ps_r3_msaa - 1) : 1u);
+		--ps_r3_msaa;
+	}
+#endif
+
 	//	MSAA option dependencies
 	o.dx10_msaa = ps_r3_msaa && !o.dx11_hdr10;
 	o.dx10_msaa_samples = o.dx11_hdr10 ? 1 : (1 << ps_r3_msaa);
