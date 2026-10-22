@@ -151,6 +151,11 @@ public:
 #endif
 	void _DeleteRT(const CRT* RT);
 	// debugging: the render target registered under that name, or null (no creation)
+	CTexture* DebugFindTexture(LPCSTR Name)
+	{
+		map_TextureIt it = m_textures.find(Name);
+		return it == m_textures.end() ? nullptr : it->second;
+	}
 	CRT* DebugFindRT(LPCSTR Name)
 	{
 		map_RTIt it = m_rtargets.find(Name);

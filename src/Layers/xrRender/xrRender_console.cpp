@@ -689,7 +689,7 @@ public:
 #if defined(XR_PLATFORM_APPLE)
 #include <mtl_d3d11/mtl_d3d11.h>
 void AppleQueueScreenshot(LPCSTR name, int delay);
-void AppleQueueRTDump(LPCSTR target, LPCSTR file, LPCSTR stage, LPCSTR mode, float lo, float hi);
+void AppleQueueRTDump(LPCSTR target, LPCSTR file, LPCSTR stage, LPCSTR mode, float lo, float hi, const u32* crop);
 
 // mtl_trace <draws>: logs the next draws with shader names, render targets and fixed-function state (Metal shim)
 class CCC_MtlTrace : public IConsole_Command
@@ -713,13 +713,15 @@ public:
 	{
 		string64 target = "", file = "", stage = "", mode = "";
 		float lo = 0, hi = 0;
-		int n = sscanf(args, "%63s %63s %31s %31s %f %f", target, file, stage, mode, &lo, &hi);
+		u32 crop[4] = {0, 0, 0, 0};
+		int n = sscanf(args, "%63s %63s %31s %31s %f %f %u %u %u %u", target, file, stage, mode, &lo, &hi, &crop[0], &crop[1],
+		               &crop[2], &crop[3]);
 		if (n < 2)
 		{
 			Log("rt_dump <target> <file> [stage] [mode] [lo hi]: see r__screenshot.cpp");
 			return;
 		}
-		AppleQueueRTDump(target, file, stage, mode, lo, hi);
+		AppleQueueRTDump(target, file, stage, mode, lo, hi, crop);
 	}
 };
 #endif

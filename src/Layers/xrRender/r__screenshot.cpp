@@ -65,11 +65,14 @@ struct RTDump
 	string32 stage = "frame_end";
 	string32 mode = "c";
 	float lo = 0, hi = 0;
+	u32 crop[4] = {0, 0, 0, 0};
 } g_rt_dump;
 } // namespace
 
-void AppleQueueRTDump(LPCSTR target, LPCSTR file, LPCSTR stage, LPCSTR mode, float lo, float hi)
+void AppleQueueRTDump(LPCSTR target, LPCSTR file, LPCSTR stage, LPCSTR mode, float lo, float hi, const u32* crop)
 {
+	for (int i = 0; i < 4; ++i)
+		g_rt_dump.crop[i] = crop ? crop[i] : 0;
 	xr_strcpy(g_rt_dump.target, target);
 	xr_strcpy(g_rt_dump.file, file);
 	xr_strcpy(g_rt_dump.stage, stage && *stage ? stage : "frame_end");
@@ -98,6 +101,12 @@ void AppleRTDumpHook(const char* stage)
 	}
 	else if (!xr_strcmp(g_rt_dump.target, "smap"))
 		res = RImplementation.Target->rt_smap_depth ? RImplementation.Target->rt_smap_depth->pSurface : nullptr;
+	else if (!strncmp(g_rt_dump.target, "tex:", 4))
+	{
+		// a loaded texture by its engine name (tex:ui\\ui_icon_equipment)
+		if (CTexture* t = dxRenderDeviceRender::Instance().Resources->DebugFindTexture(g_rt_dump.target + 4))
+			res = t->surface_get();
+	}
 	else if (CRT* rt = dxRenderDeviceRender::Instance().Resources->DebugFindRT(g_rt_dump.target))
 		res = rt->pSurface;
 	if (!res)
@@ -110,6 +119,10 @@ void AppleRTDumpHook(const char* stage)
 	const char* m = g_rt_dump.mode;
 	opt.lo = g_rt_dump.lo;
 	opt.hi = g_rt_dump.hi;
+	opt.cropX = g_rt_dump.crop[0];
+	opt.cropY = g_rt_dump.crop[1];
+	opt.cropW = g_rt_dump.crop[2];
+	opt.cropH = g_rt_dump.crop[3];
 	if (!xr_strcmp(m, "s"))
 		opt.mode = mtl_d3d11::DebugReadOptions::Signed;
 	else if (!xr_strcmp(m, "c"))
