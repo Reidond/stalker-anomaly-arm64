@@ -80,7 +80,26 @@ void xrServer::SendConnectionData(IClient* _CL)
 	// Replicate current entities on to this client
 	xrS_entities::iterator I = entities.begin(), E = entities.end();
 	for (; I != E; ++I) I->second->net_Processed = FALSE;
+#ifdef XR_PLATFORM_APPLE
+	// The order the client spawns the objects in is the order of this loop. MSVC's hash map iterated in the order the
+	// entities were created, libc++'s does not, and the scripts expect the actor (db.actor, set by its binder) to exist
+	// before any stalker is initialised. Spawn the actor first, then by id.
+	{
+		xr_vector<CSE_Abstract*> ordered;
+		ordered.reserve(entities.size());
+		for (I = entities.begin(); I != E; ++I) ordered.push_back(I->second);
+		std::sort(ordered.begin(), ordered.end(), [](CSE_Abstract* a, CSE_Abstract* b)
+		{
+			const bool a_player = a->s_flags.is(M_SPAWN_OBJECT_ASPLAYER), b_player = b->s_flags.is(M_SPAWN_OBJECT_ASPLAYER);
+			if (a_player != b_player)
+				return a_player;
+			return a->ID < b->ID;
+		});
+		for (CSE_Abstract* entity : ordered) Perform_connect_spawn(entity, CL, P);
+	}
+#else
 	for (I = entities.begin(); I != E; ++I) Perform_connect_spawn(I->second, CL, P);
+#endif
 
 	// Start to send server logo and rules
 	SendServerInfoToClient(CL->ID);
