@@ -45,7 +45,12 @@ exists on Apple). What the integration added is the app target, the entry point 
 - `CVisualMemoryManager::current_state/mask`, `CALifeMonsterBrain::smart_terrain` (3): `IC` functions defined in a `.cpp` and
   called from others; MSVC emitted them as COMDATs, clang drops an unused inline definition. They are plain functions now.
 
-No stub was needed: multiplayer is the `mp-stub` shard, Discord and the vendor SDKs were already compiled out by the module
+`tools/xrengine_smoke` failed the same way (`GetUICursor`, `get_binded_action`, `CUICursor::*`: xrEngine's ImGui input glue
+needs xrGame) and, with the modules on, linked its own stubs next to the real ones (9 duplicate symbols). It is now added
+from the root `CMakeLists.txt` after every module file has run, so its stub files drop out for the modules that exist, and it
+links xrGame and the renderer when they are built.
+
+No stub was needed in the app: multiplayer is the `mp-stub` shard, Discord and the vendor SDKs were already compiled out by the module
 owners (`ANOMALY_XRENGINE_DISCORD=OFF`, NvAPI/AGS/ReShade stubs), and `xrengine_smoke`'s own stubs only apply when a module
 is not built.
 
