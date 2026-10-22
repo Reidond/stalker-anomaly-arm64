@@ -5,6 +5,12 @@
 #include "../xrEngine/xr_ioc_cmd.h"
 #include "xr_level_controller.h"
 #include "string_table.h"
+#ifdef XR_PLATFORM_APPLE
+#include <GameInput/Adapter.h>
+#include <GameInput/Bindings.h>
+#include <GameInput/GameInput.h>
+#include <sstream>
+#endif
 
 _binding g_key_bindings [bindings_count];
 _key_group g_current_keygroup = _sp;
@@ -291,6 +297,17 @@ _keyboard keyboards[] = {
 	{"kCUSTOM98", 1098},
 	{"kCUSTOM99", 1099},
 	{NULL, 0}
+#ifdef XR_PLATFORM_APPLE
+	// room for the gamepad keys (gp_cross, ...), which initialize_bindings() puts in front of the terminator
+	,{NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0},
+	{NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0},
+	{NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0},
+	{NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0},
+	{NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0},
+	{NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0},
+	{NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0},
+	{NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0}
+#endif
 };
 
 void initialize_bindings()
@@ -318,6 +335,22 @@ void initialize_bindings()
 
 	for (int idx = 0; idx < bindings_count; ++idx)
 		g_key_bindings[idx].m_action = &actions[idx];
+
+#ifdef XR_PLATFORM_APPLE
+	// The gamepad keys (gp_cross ... gp_radial_32), so bind_pad, user.ltx and the key name lookups know them
+	static std::vector<gameinput::EngineKeyDef> pad_keys = gameinput::EnginePadKeyTable(gameinput::ControllerFamily::PlayStation);
+	int end = 0;
+	while (keyboards[end].key_name)
+		++end;
+	for (const gameinput::EngineKeyDef& def : pad_keys)
+	{
+		keyboards[end].key_name = def.name.c_str();
+		keyboards[end].dik = def.code;
+		keyboards[end].key_local_name = def.label.c_str();
+		++end;
+	}
+	keyboards[end].key_name = NULL;
+#endif
 }
 
 void remap_keys()
@@ -328,6 +361,14 @@ void remap_keys()
 	{
 		buff[0] = 0;
 		_keyboard& kb = keyboards[idx];
+#ifdef XR_PLATFORM_APPLE
+		if (gameinput::IsPadKey(kb.dik))
+		{
+			kb.key_local_name = gameinput::PadKeyLabel(kb.dik, gameinput::ControllerFamily::PlayStation);
+			++idx;
+			continue;
+		}
+#endif
 		bool res = pInput->get_dik_name(kb.dik, buff, sizeof(buff));
 		if (res)
 			kb.key_local_name = buff;
@@ -441,6 +482,9 @@ bool is_binded(EGameActions _action_id, int _dik)
 	if (pbinding->m_keyboard[1] && pbinding->m_keyboard[1]->dik == _dik)
 		return true;
 
+	if (pbinding->m_keyboard[2] && pbinding->m_keyboard[2]->dik == _dik)
+		return true;
+
 	return false;
 }
 
@@ -455,10 +499,13 @@ int get_action_dik(EGameActions _action_id, int idx)
 
 		if (pbinding->m_keyboard[1])
 			return pbinding->m_keyboard[1]->dik;
+
+		if (pbinding->m_keyboard[2])
+			return pbinding->m_keyboard[2]->dik;
 	}
 	else
 	{
-		if (pbinding->m_keyboard[idx])
+		if (idx >= 0 && idx < binding_slots && pbinding->m_keyboard[idx])
 			return pbinding->m_keyboard[idx]->dik;
 	}
 	return 0;
@@ -478,6 +525,9 @@ EGameActions get_binded_action(int _dik)
 			return binding->m_action->id;
 
 		if (binding->m_keyboard[1] && binding->m_keyboard[1]->dik == _dik && b_is_group_matching)
+			return binding->m_action->id;
+
+		if (binding->m_keyboard[2] && binding->m_keyboard[2]->dik == _dik && b_is_group_matching)
 			return binding->m_action->id;
 	}
 	return kNOTBINDED;
@@ -503,6 +553,7 @@ void GetActionAllBinding(LPCSTR _action, char* dst_buff, int dst_buff_sz)
 	}
 	if (NULL == pbinding->m_keyboard[0] && NULL == pbinding->m_keyboard[1])
 	{
+		// the gamepad key only: the keyboard hint strings stay about the keyboard
 		xr_sprintf(dst_buff, dst_buff_sz, "%s", CStringTable().translate("st_key_notbinded").c_str());
 	}
 	else
@@ -570,9 +621,17 @@ public:
 
 				if (binding->m_keyboard[1] == pkeyboard && b_conflict)
 					binding->m_keyboard[1] = NULL;
+
+				if (binding->m_keyboard[2] == pkeyboard && b_conflict)
+					binding->m_keyboard[2] = NULL;
 			}
 		}
 
+#ifdef XR_PLATFORM_APPLE
+		// the controller layer emits only the keys of its own map: keep it equal to slot 2
+		if (m_work_idx == 2 && pInput && pInput->Pad())
+			pInput->Pad()->bindings().Bind(action, pkeyboard->dik);
+#endif
 
 		CStringTable::ReparseKeyBindings();
 	}
@@ -610,6 +669,10 @@ public:
 		int action_id = action_name_to_id(args);
 		_binding* pbinding = &g_key_bindings[action_id];
 		pbinding->m_keyboard[m_work_idx] = NULL;
+#ifdef XR_PLATFORM_APPLE
+		if (m_work_idx == 2 && pInput && pInput->Pad())
+			pInput->Pad()->bindings().Unbind(args);
+#endif
 
 		CStringTable::ReparseKeyBindings();
 	}
@@ -650,7 +713,12 @@ public:
 			_binding* pbinding = &g_key_bindings[idx];
 			pbinding->m_keyboard[0] = NULL;
 			pbinding->m_keyboard[1] = NULL;
+			pbinding->m_keyboard[2] = NULL;
 		}
+#ifdef XR_PLATFORM_APPLE
+		if (pInput && pInput->Pad())
+			pInput->Pad()->bindings().Clear();
+#endif
 		bindConsoleCmds.clear();
 	}
 };
@@ -671,6 +739,13 @@ public:
 		strconcat(sizeof(cmd), cmd, "cfg_load", " ", _cfg);
 		Console->Execute("bind editor kF11"); //Lucy : ImGui default key
 		Console->Execute(cmd);
+#ifdef XR_PLATFORM_APPLE
+		// the default DualSense layout (bind_pad lines; docs/ios-port/CONTROLS.md)
+		std::istringstream pad_lines(gameinput::BindingMap::Default().Serialize());
+		for (std::string line; std::getline(pad_lines, line);)
+			if (!line.empty())
+				Console->Execute(line.c_str());
+#endif
 	}
 };
 
@@ -690,10 +765,11 @@ public:
 		for (int idx = 0; idx < bindings_count; ++idx)
 		{
 			_binding* pbinding = &g_key_bindings[idx];
-			xr_sprintf(buff, "[%s] primary is[%s] secondary is[%s]",
+			xr_sprintf(buff, "[%s] primary is[%s] secondary is[%s] gamepad is[%s]",
 			           pbinding->m_action->action_name,
 			           (pbinding->m_keyboard[0]) ? pbinding->m_keyboard[0]->key_local_name.c_str() : "NULL",
-			           (pbinding->m_keyboard[1]) ? pbinding->m_keyboard[1]->key_local_name.c_str() : "NULL");
+			           (pbinding->m_keyboard[1]) ? pbinding->m_keyboard[1]->key_local_name.c_str() : "NULL",
+			           (pbinding->m_keyboard[2]) ? pbinding->m_keyboard[2]->key_local_name.c_str() : "NULL");
 			Log(buff);
 		}
 		Log("- --- Bind list end   ---");
@@ -790,6 +866,10 @@ void CCC_RegisterInput()
 	CMD2(CCC_Bind, "bind_sec", 1);
 	CMD2(CCC_UnBind, "unbind", 0);
 	CMD2(CCC_UnBind, "unbind_sec", 1);
+#ifdef XR_PLATFORM_APPLE
+	CMD2(CCC_Bind, "bind_pad", 2);
+	CMD2(CCC_UnBind, "unbind_pad", 2);
+#endif
 	CMD1(CCC_UnBindAll, "unbindall");
 	CMD1(CCC_DefControls, "default_controls");
 	CMD1(CCC_ListActions, "list_actions");

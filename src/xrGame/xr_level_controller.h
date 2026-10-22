@@ -157,10 +157,13 @@ extern _action actions [];
 
 #define bindings_count kLASTACTION
 
+// Slots of a binding: primary and secondary keyboard/mouse key, and (Apple builds) the gamepad key (bind_pad, src/Platform/GameInput).
+const int binding_slots = 3;
+
 struct _binding
 {
 	_action* m_action;
-	_keyboard* m_keyboard[2];
+	_keyboard* m_keyboard[binding_slots];
 };
 
 extern _binding g_key_bindings[];

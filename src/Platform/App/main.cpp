@@ -24,6 +24,11 @@
 //   <t> move <x> <y>                mouse pointer, window points
 //   <t> relmove <dx> <dy>           relative mouse motion
 //   <t> click <x> <y> [button]      move, press and release (1 left, 2 middle, 3 right)
+//   <t> padon                       attach a virtual DualSense (to drive the controller layer without a person holding one)
+//   <t> pad <button> [ms]           press a button for ms (80): cross circle square triangle l1 r1 l3 r3 create options touchpad ps
+//                                   up down left right
+//   <t> paddown <button> | padup <button>
+//   <t> padaxis <axis> <value>      lx ly rx ry l2 r2, -1..1 (triggers 0..1); stays until changed
 //   <t> ballast <MB>                allocate and touch that much memory (to provoke the memory warnings), in 64 MB chunks
 //   <t> unballast                   free it again
 //   <t> log <text...>               a line in the shell log
@@ -66,6 +71,7 @@ struct ScriptStep
     std::string command;
     std::string args;
     double release_at = -1; // key presses: when the matching key-up is due
+    bool pad = false;       // the release is for a pad button
 };
 
 struct App
@@ -97,6 +103,7 @@ struct App
     size_t script_next = 0;
     std::vector<ScriptStep> pending_releases;
     std::vector<void*> ballast; // script `ballast`: memory held on purpose
+    SDL_Joystick* virtual_pad = nullptr; // script `padon`
 
     AppleShell::ListenerId lifecycle_listener = 0;
     bool saving = false;            // a background save is under way (its frames must not start another)
@@ -235,6 +242,79 @@ void PushButton(int button, bool down, float x, float y)
     SDL_PushEvent(&e);
 }
 
+// Script pad: a virtual gamepad that SDL reports like a DualSense (the way tools/xrinput_smoke drives the controller layer)
+bool AttachVirtualPad(App& app)
+{
+    if (app.virtual_pad)
+        return true;
+    SDL_VirtualJoystickDesc desc;
+    SDL_INIT_INTERFACE(&desc);
+    desc.type = SDL_JOYSTICK_TYPE_GAMEPAD;
+    desc.naxes = SDL_GAMEPAD_AXIS_COUNT;
+    desc.nbuttons = SDL_GAMEPAD_BUTTON_COUNT;
+    desc.button_mask = 0xFFFFFFFFu;
+    desc.axis_mask = 0xFFFFFFFFu;
+    desc.name = "anomaly script pad";
+    desc.vendor_id = 0x054C;
+    desc.product_id = 0x0CE6; // DualSense
+    const SDL_JoystickID id = SDL_AttachVirtualJoystick(&desc);
+    app.virtual_pad = id ? SDL_OpenJoystick(id) : nullptr;
+    AppleShell::Log("anomaly: script: virtual pad %s", app.virtual_pad ? "attached" : SDL_GetError());
+    return app.virtual_pad != nullptr;
+}
+
+int PadButtonFromName(const std::string& name)
+{
+    static const struct { const char* name; SDL_GamepadButton button; } table[] = {
+        {"cross", SDL_GAMEPAD_BUTTON_SOUTH}, {"circle", SDL_GAMEPAD_BUTTON_EAST}, {"square", SDL_GAMEPAD_BUTTON_WEST},
+        {"triangle", SDL_GAMEPAD_BUTTON_NORTH}, {"l1", SDL_GAMEPAD_BUTTON_LEFT_SHOULDER},
+        {"r1", SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER}, {"l3", SDL_GAMEPAD_BUTTON_LEFT_STICK},
+        {"r3", SDL_GAMEPAD_BUTTON_RIGHT_STICK}, {"create", SDL_GAMEPAD_BUTTON_BACK}, {"options", SDL_GAMEPAD_BUTTON_START},
+        {"touchpad", SDL_GAMEPAD_BUTTON_TOUCHPAD}, {"ps", SDL_GAMEPAD_BUTTON_GUIDE}, {"up", SDL_GAMEPAD_BUTTON_DPAD_UP},
+        {"down", SDL_GAMEPAD_BUTTON_DPAD_DOWN}, {"left", SDL_GAMEPAD_BUTTON_DPAD_LEFT},
+        {"right", SDL_GAMEPAD_BUTTON_DPAD_RIGHT},
+    };
+    for (const auto& entry : table)
+        if (name == entry.name)
+            return int(entry.button);
+    return -1;
+}
+
+void SetPadButton(App& app, const std::string& name, bool down)
+{
+    const int button = PadButtonFromName(name);
+    if (!app.virtual_pad || button < 0)
+    {
+        AppleShell::Log("anomaly: script: no pad or unknown button '%s'", name.c_str());
+        return;
+    }
+    SDL_SetJoystickVirtualButton(app.virtual_pad, button, down);
+}
+
+void SetPadAxis(App& app, const std::string& args)
+{
+    char name[16] = {};
+    float value = 0;
+    if (!app.virtual_pad || sscanf(args.c_str(), "%15s %f", name, &value) != 2)
+    {
+        AppleShell::Log("anomaly: script: padaxis needs a pad and '<axis> <value>'");
+        return;
+    }
+    static const struct { const char* name; SDL_GamepadAxis axis; bool trigger; } table[] = {
+        {"lx", SDL_GAMEPAD_AXIS_LEFTX, false}, {"ly", SDL_GAMEPAD_AXIS_LEFTY, false}, {"rx", SDL_GAMEPAD_AXIS_RIGHTX, false},
+        {"ry", SDL_GAMEPAD_AXIS_RIGHTY, false}, {"l2", SDL_GAMEPAD_AXIS_LEFT_TRIGGER, true},
+        {"r2", SDL_GAMEPAD_AXIS_RIGHT_TRIGGER, true},
+    };
+    for (const auto& entry : table)
+        if (!strcmp(name, entry.name))
+        {
+            const float clamped = std::max(entry.trigger ? 0.f : -1.f, std::min(1.f, value));
+            SDL_SetJoystickVirtualAxis(app.virtual_pad, entry.axis, Sint16(clamped * 32767.f));
+            return;
+        }
+    AppleShell::Log("anomaly: script: unknown pad axis '%s'", name);
+}
+
 // Runs the steps that are due. Returns false once the script asked to quit.
 bool RunScript(App& app)
 {
@@ -243,7 +323,10 @@ bool RunScript(App& app)
     {
         if (now >= app.pending_releases[i].release_at)
         {
-            PushKey(app.pending_releases[i].args, false);
+            if (app.pending_releases[i].pad)
+                SetPadButton(app, app.pending_releases[i].args, false);
+            else
+                PushKey(app.pending_releases[i].args, false);
             app.pending_releases.erase(app.pending_releases.begin() + long(i));
         }
         else
@@ -279,6 +362,31 @@ bool RunScript(App& app)
             release.release_at = now + ms * 1e-3;
             app.pending_releases.push_back(release);
         }
+        else if (step.command == "padon")
+            AttachVirtualPad(app);
+        else if (step.command == "pad")
+        {
+            std::string name = step.args;
+            double ms = 80;
+            const size_t last_space = name.find_last_of(' ');
+            if (last_space != std::string::npos)
+            {
+                ms = atof(name.c_str() + last_space + 1);
+                name.resize(last_space);
+            }
+            SetPadButton(app, name, true);
+            ScriptStep release;
+            release.args = name;
+            release.pad = true;
+            release.release_at = now + ms * 1e-3;
+            app.pending_releases.push_back(release);
+        }
+        else if (step.command == "paddown")
+            SetPadButton(app, step.args, true);
+        else if (step.command == "padup")
+            SetPadButton(app, step.args, false);
+        else if (step.command == "padaxis")
+            SetPadAxis(app, step.args);
         else if (step.command == "keydown")
             PushKey(step.args, true);
         else if (step.command == "keyup")

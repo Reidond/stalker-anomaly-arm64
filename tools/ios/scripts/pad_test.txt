@@ -1,0 +1,31 @@
+# Drives the controller layer with a virtual DualSense: gives the actor weapons, saves `ipad_armed`, then walks, opens the inventory, the PDA,
+# both wheels and shoots. Needs -dbg. Read the STATE lines in the engine log and take screenshots while it runs.
+8 console start server(ipad_test/single/alife/load) client(localhost)
+45 key Space
+50 console run_string ipad_debug.tp(54.9, 3.5, 157.1)
+55 console run_string ipad_debug.give("wpn_ak74")
+56 console run_string ipad_debug.give_ammo("ammo_5.45x39_fmj", 120)
+56 console run_string ipad_debug.give("medkit", 2)
+56 console run_string ipad_debug.give("bandage", 3)
+60 console run_string ipad_debug.equip()
+63 console run_string ipad_debug.state("armed")
+65 console save ipad_armed
+70 padon
+72 console run_string ipad_debug.state("before walk")
+73 padaxis ly -1
+77 padaxis ly 0
+78 console run_string ipad_debug.state("after walk")
+85 pad create 300
+91 pad circle
+93 pad touchpad 300
+99 pad circle
+101 paddown l1
+107 padup l1
+109 paddown r1
+115 padup r1
+118 padaxis l2 1
+120 padaxis r2 1
+123 padaxis r2 0
+124 padaxis l2 0
+126 console run_string ipad_debug.state("after shooting")
+135 quit
