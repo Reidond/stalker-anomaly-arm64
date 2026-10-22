@@ -615,10 +615,18 @@ void TestDevices()
     CHECK(reg.ActiveInstance() == 8);
 
     // Disconnecting the active pad promotes the other; reconnecting gets the same stable key back.
+    reg.TakeEvents();
     CHECK(reg.Disconnect(8));
     CHECK(reg.ActiveInstance() == 7);
+    // xrGame pauses on a Disconnected event only when AnyConnected() is false by then (the device is erased before the event is
+    // delivered); the promotion arrives as ActiveChanged, which is not a disconnect.
+    CHECK(reg.AnyConnected());
+    const std::vector<DeviceEvent> promoted = reg.TakeEvents();
+    CHECK(promoted.size() == 2 && promoted[0].type == DeviceEvent::Type::Disconnected && promoted[0].device.instance_id == 8 &&
+          promoted[1].type == DeviceEvent::Type::ActiveChanged && promoted[1].device.instance_id == 7);
     CHECK(reg.Connect(make(9, "")).stable_key == second);
     CHECK(reg.Disconnect(7));
+    CHECK(reg.AnyConnected()); // 9 is left
     CHECK(reg.Disconnect(9));
     CHECK(!reg.AnyConnected() && reg.Active() == nullptr && reg.ActiveInstance() == 0);
     CHECK(!reg.Disconnect(9));
