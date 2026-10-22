@@ -177,7 +177,9 @@ void TestUpscalerEntries()
     G::Init(Ipad(8, "Apple M3"), options);
     const std::vector<G::Setting> without = G::Settings(NoCommands());
     const std::vector<G::Setting> with = G::Settings(WithUpscaler());
-    Check(Value(without, "vid_mode") && !strcmp(Value(without, "vid_mode"), "1366x1024"), "without MetalFX the render size is vid_mode 1366x1024");
+    Check(Value(without, "vid_mode") && !strcmp(Value(without, "vid_mode"), "1280x960"), "without MetalFX the render size is vid_mode (Quality 1280x960)");
+    Check(!Value(without, "r__render_scale"), "without MetalFX no render scale is set");
+    Check(Value(with, "r__render_scale") && !strcmp(Value(with, "r__render_scale"), "0.47"), "with MetalFX the Quality scale is 0.47");
     Check(Value(with, "vid_mode") && !strcmp(Value(with, "vid_mode"), "2732x2048"), "with MetalFX the back buffer is the native size");
 }
 
