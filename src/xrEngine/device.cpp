@@ -526,7 +526,10 @@ void CRenderDevice::on_idle()
 	mt_csEnter.Leave();
 	STOP_PROFILE;
 
-#ifdef ECO_RENDER // ECO_RENDER START
+// iOS: the CADisplayLink the app runs on and the Metal drawables already pace the menu to the display. This busy-wait counts
+// from the end of the previous wait, so a frame that finishes just after its vsync costs the next one too (30 fps in the menu on a
+// 60 Hz iPad) and the spin keeps a core at 100%.
+#if defined(ECO_RENDER) && !defined(XR_PLATFORM_IOS) // ECO_RENDER START
 	if (Device.Paused() || IsMainMenuActive() || ps_framelimiter)
 	{
 		PROF_EVENT("Eco Render");

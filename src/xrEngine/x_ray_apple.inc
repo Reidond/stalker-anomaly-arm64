@@ -75,6 +75,7 @@ std::string build_command_line(const xr_engine::InitParams& params, const AppleS
 		const bool has_space = strchr(params.argv[i], ' ') != nullptr;
 		append(has_space ? std::string("\"") + params.argv[i] + "\"" : std::string(params.argv[i]));
 	}
+	append(AppleShell::DevicePresetCommandLine()); // e.g. -smap1536 from the iPad preset
 	if (params.extra_command_line)
 		append(params.extra_command_line);
 	else if (!params.ignore_commandline_file)
