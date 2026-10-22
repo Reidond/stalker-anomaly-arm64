@@ -23,7 +23,7 @@ struct Entry
 };
 
 // Raise this when the table below changes: the next launch merges it into the player's user.ltx again.
-constexpr int kIpadPresetVersion = 3;
+constexpr int kIpadPresetVersion = 4;
 
 // iPad Air 13" (M3, 8 GB): 2732x2048 panel, 7.95 GB under jetsam with increased-memory-limit. The footprint on desktop settings
 // was 4.6 GB in the Cordon, 2.5 GB of it Metal (3024x1964, texture LOD 1).
@@ -39,6 +39,7 @@ const Entry kIpadEntries[] = {
     {"r2_sun_quality", "st_opt_low"},
     {"r2_ls_squality", "0.5"},
     {"r3_dynamic_wet_surfaces_sm_res", "1024"},
+    {"r3_dynamic_wet_surfaces", "off"}, // 3.5 ms of GPU at 1920x1440 in the rain
     {"r2_volumetric_lights", "off"},
     {"r2_sunshafts_mode", "screen_space"},
     {"r2_ssao", "st_opt_low"},

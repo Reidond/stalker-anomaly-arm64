@@ -313,6 +313,7 @@ void SaveForBackground(App& app)
     app.last_background_save_ns = start_ns;
     const std::string file = AppleShell::GetPaths().saves + "/ipad_autosave.scop";
     const Uint64 before = FileTimeNs(file);
+    xr_engine::HoldActive(true); // the window's minimize event is pumped by the first Frame() and would stop the engine
     xr_engine::ExecuteConsole("save ipad_autosave");
     bool written = false;
     for (int frame = 0; frame < 200 && double(SDL_GetTicksNS() - start_ns) * 1e-9 < 3.0; ++frame)
@@ -325,6 +326,7 @@ void SaveForBackground(App& app)
             break;
         }
     }
+    xr_engine::HoldActive(false);
     AppleShell::Log("anomaly: background save %s in %.2f s", written ? "written" : "NOT written", double(SDL_GetTicksNS() - start_ns) * 1e-9);
     app.saving = false;
 }
