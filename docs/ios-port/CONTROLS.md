@@ -66,7 +66,8 @@ slot (the look stick is captured while the wheel is open), D-pad left/right flip
 pages, and releasing the button fires the picked slot. A pick survives for 0.3 s after the stick
 springs back to centre, so "flick and let go" works as well as holding the direction; releasing with
 nothing picked cancels.
-Slots are clockwise from the top.
+Slots are clockwise from the top. On the iPad build the game draws the wheel (`xr_pad_render_radial`,
+IPAD.md): item icons and slot badges on the weapon and quick-use tiles, a hub with the picked name and the page dots.
 
 | Wheel | Page | Slots (clockwise from the top) |
 |---|---|---|
@@ -299,8 +300,8 @@ The xrgame-rest session did the small ones, behind `XR_PLATFORM_APPLE` (helpers 
 
 | # | Hook | Status |
 |---|---|---|
-| 1 | key names | open |
-| 2 | pad binding slot, `bind_pad`, Controls screen | open |
+| 1 | key names | **done**: `initialize_bindings()` appends `EnginePadKeyTable(PlayStation)` to `keyboards[]` (spare slots after the terminator), labels from the table |
+| 2 | pad binding slot, `bind_pad`, Controls screen | **done except the Controls screen column**: `_binding::m_keyboard[3]`, `bind_pad`/`unbind_pad`, `default_controls` runs the default DualSense layout, every bind is mirrored into the layer's `BindingMap`, `bind_list` shows the gamepad key. Verified on the iPad with the script pad (`padon`, `padaxis ly -1` walks, `pad create` opens the inventory). **Open:** the Controls screen's Gamepad column |
 | 3 | UI context | **done**: `CUICursor::Show/Hide` call `SetUiContext`, `Feedback::SetMenu` and `Pad()->SetCursorPosition` (`xr_pad_ui_context`); `CGamePersistent` installs `pad_hooks.cursor_jump` (`SetUICursorPosition`) and `pad_hooks.connection` (pauses the game in a level while no pad is connected, resumes when one is back; no "reconnect the controller" message yet). **Open:** `pad_hooks.ui_action` (tabs), `INavigationProvider` |
 | 4 | look scale | **done**: `CActor::IR_OnMouseMove` passes its `scale` to `SetLookRadiansPerCount`. It runs on input, so the first stick motion after a zoom change uses the previous figure |
 | 5 | text fields and the on-screen keyboard | open (`CUICustomEdit` focus, `IR_OnTextInput` through `CDialogHolder`/`CLevel`/`CMainMenu`, `CConsole`) |

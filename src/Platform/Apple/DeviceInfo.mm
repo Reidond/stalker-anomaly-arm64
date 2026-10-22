@@ -13,6 +13,7 @@
 #import <AppKit/AppKit.h>
 #endif
 
+#include <mach/mach.h>
 #include <sys/mount.h>
 #include <sys/sysctl.h>
 
@@ -56,6 +57,29 @@ std::string FormatBytes(uint64_t bytes)
     else
         snprintf(buffer, sizeof(buffer), "%.0f MiB", double(bytes) / (1024.0 * 1024.0));
     return buffer;
+}
+
+uint64_t ProcessFootprint()
+{
+    task_vm_info_data_t info;
+    mach_msg_type_number_t count = TASK_VM_INFO_COUNT;
+    if (task_info(mach_task_self(), TASK_VM_INFO, reinterpret_cast<task_info_t>(&info), &count) != KERN_SUCCESS)
+        return 0;
+    return info.phys_footprint;
+}
+
+ThermalState CurrentThermalState()
+{
+    return ThermalFromNS(NSProcessInfo.processInfo.thermalState);
+}
+
+uint64_t AvailableMemory()
+{
+#if TARGET_OS_IOS
+    return uint64_t(os_proc_available_memory());
+#else
+    return 0;
+#endif
 }
 
 DeviceInfo QueryDeviceInfo()

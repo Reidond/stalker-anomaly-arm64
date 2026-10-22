@@ -27,6 +27,13 @@
 //   <t> waitlevel [seconds [level]] hold the timeline until a level (that one, if named) is loaded and playing (default
 //                                   limit 240 s); the steps after it run with t counted from that moment, so a scene can
 //                                   follow a load of any length
+//   <t> padon                       attach a virtual DualSense (to drive the controller layer without a person holding one)
+//   <t> pad <button> [ms]           press a button for ms (80): cross circle square triangle l1 r1 l3 r3 create options touchpad ps
+//                                   up down left right
+//   <t> paddown <button> | padup <button>
+//   <t> padaxis <axis> <value>      lx ly rx ry l2 r2, -1..1 (triggers 0..1); stays until changed
+//   <t> ballast <MB>                allocate and touch that much memory (to provoke the memory warnings), in 64 MB chunks
+//   <t> unballast                   free it again
 //   <t> log <text...>               a line in the shell log
 //   <t> quit                        leave the app
 
@@ -42,6 +49,8 @@
 #include "Unattended.h"
 #include "xrEngine/xr_engine_app.h"
 
+#include <sys/stat.h>
+
 #include <algorithm>
 #include <cstdio>
 #include <cstdlib>
@@ -52,6 +61,13 @@
 #include <string>
 #include <vector>
 
+// Process-wide GPU time and frame counts of the Metal D3D11 shim (src/Platform/MetalD3D11/include/mtl_d3d11/mtl_d3d11.h)
+namespace mtl_d3d11
+{
+uint64_t GpuTimeNsTotal();
+uint64_t PresentCountTotal();
+} // namespace mtl_d3d11
+
 namespace
 {
 struct ScriptStep
@@ -60,6 +76,7 @@ struct ScriptStep
     std::string command;
     std::string args;
     double release_at = -1; // key presses: when the matching key-up is due
+    bool pad = false;       // the release is for a pad button
 };
 
 struct App
@@ -77,6 +94,12 @@ struct App
     int exit_code = 0;
     Uint64 fps_window_ns = 0; // start of the current frame-rate window
     unsigned fps_frames = 0;
+    Uint64 frame_cpu_ns = 0;     // time spent inside xr_engine::Frame() in the current window
+    Uint64 frame_cpu_max_ns = 0;
+    Uint64 footprint_peak = 0;   // largest process footprint sampled in the current window
+    Uint64 gpu_ns_mark = 0;      // mtl_d3d11::GpuTimeNsTotal() / PresentCountTotal() at the start of the window
+    Uint64 present_mark = 0;
+    Uint64 footprint_sample_ns = 0;
     Uint64 quit_requested_ns = 0; // set when the app asked the engine to quit; it disconnects and unloads the level first
 
     // where the scripted pointer is, window points: motion events carry the position and the delta
@@ -88,6 +111,12 @@ struct App
     bool waiting_level = false; // a `waitlevel` step is holding the timeline
     double wait_started_s = 0, wait_limit_s = 0, wait_step_at = 0;
     std::string wait_level_name;
+    std::vector<void*> ballast; // script `ballast`: memory held on purpose
+    SDL_Joystick* virtual_pad = nullptr; // script `padon`
+
+    AppleShell::ListenerId lifecycle_listener = 0;
+    bool saving = false;            // a background save is under way (its frames must not start another)
+    Uint64 last_background_save_ns = 0;
 
     bool unattended = false;
     bool show_window = false; // --show-window: unattended, but with a (background) window instead of offscreen rendering
@@ -96,6 +125,7 @@ struct App
     std::vector<char*> engine_argv;
 };
 
+App* g_app = nullptr; // the lifecycle listener has no user pointer
 std::string ReadFile(const std::string& path)
 {
     std::ifstream in(path, std::ios::binary);
@@ -154,6 +184,13 @@ bool LoadScript(App& app, const char* path)
         std::getline(words, step.args);
         const size_t arg_start = step.args.find_first_not_of(" \t");
         step.args = arg_start == std::string::npos ? "" : step.args.substr(arg_start);
+        // a trailing ` # comment` (not on console/log lines, whose text may hold a '#')
+        if (step.command != "console" && step.command != "log")
+        {
+            const size_t hash = step.args.find('#');
+            if (hash != std::string::npos && (hash == 0 || step.args[hash - 1] == ' ' || step.args[hash - 1] == '\t'))
+                step.args.resize(hash);
+        }
         while (!step.args.empty() && (step.args.back() == '\r' || step.args.back() == ' '))
             step.args.pop_back();
         app.script.push_back(step);
@@ -215,6 +252,79 @@ void PushButton(int button, bool down, float x, float y)
     SDL_PushEvent(&e);
 }
 
+// Script pad: a virtual gamepad that SDL reports like a DualSense (the way tools/xrinput_smoke drives the controller layer)
+bool AttachVirtualPad(App& app)
+{
+    if (app.virtual_pad)
+        return true;
+    SDL_VirtualJoystickDesc desc;
+    SDL_INIT_INTERFACE(&desc);
+    desc.type = SDL_JOYSTICK_TYPE_GAMEPAD;
+    desc.naxes = SDL_GAMEPAD_AXIS_COUNT;
+    desc.nbuttons = SDL_GAMEPAD_BUTTON_COUNT;
+    desc.button_mask = 0xFFFFFFFFu;
+    desc.axis_mask = 0xFFFFFFFFu;
+    desc.name = "anomaly script pad";
+    desc.vendor_id = 0x054C;
+    desc.product_id = 0x0CE6; // DualSense
+    const SDL_JoystickID id = SDL_AttachVirtualJoystick(&desc);
+    app.virtual_pad = id ? SDL_OpenJoystick(id) : nullptr;
+    AppleShell::Log("anomaly: script: virtual pad %s", app.virtual_pad ? "attached" : SDL_GetError());
+    return app.virtual_pad != nullptr;
+}
+
+int PadButtonFromName(const std::string& name)
+{
+    static const struct { const char* name; SDL_GamepadButton button; } table[] = {
+        {"cross", SDL_GAMEPAD_BUTTON_SOUTH}, {"circle", SDL_GAMEPAD_BUTTON_EAST}, {"square", SDL_GAMEPAD_BUTTON_WEST},
+        {"triangle", SDL_GAMEPAD_BUTTON_NORTH}, {"l1", SDL_GAMEPAD_BUTTON_LEFT_SHOULDER},
+        {"r1", SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER}, {"l3", SDL_GAMEPAD_BUTTON_LEFT_STICK},
+        {"r3", SDL_GAMEPAD_BUTTON_RIGHT_STICK}, {"create", SDL_GAMEPAD_BUTTON_BACK}, {"options", SDL_GAMEPAD_BUTTON_START},
+        {"touchpad", SDL_GAMEPAD_BUTTON_TOUCHPAD}, {"ps", SDL_GAMEPAD_BUTTON_GUIDE}, {"up", SDL_GAMEPAD_BUTTON_DPAD_UP},
+        {"down", SDL_GAMEPAD_BUTTON_DPAD_DOWN}, {"left", SDL_GAMEPAD_BUTTON_DPAD_LEFT},
+        {"right", SDL_GAMEPAD_BUTTON_DPAD_RIGHT},
+    };
+    for (const auto& entry : table)
+        if (name == entry.name)
+            return int(entry.button);
+    return -1;
+}
+
+void SetPadButton(App& app, const std::string& name, bool down)
+{
+    const int button = PadButtonFromName(name);
+    if (!app.virtual_pad || button < 0)
+    {
+        AppleShell::Log("anomaly: script: no pad or unknown button '%s'", name.c_str());
+        return;
+    }
+    SDL_SetJoystickVirtualButton(app.virtual_pad, button, down);
+}
+
+void SetPadAxis(App& app, const std::string& args)
+{
+    char name[16] = {};
+    float value = 0;
+    if (!app.virtual_pad || sscanf(args.c_str(), "%15s %f", name, &value) != 2)
+    {
+        AppleShell::Log("anomaly: script: padaxis needs a pad and '<axis> <value>'");
+        return;
+    }
+    static const struct { const char* name; SDL_GamepadAxis axis; bool trigger; } table[] = {
+        {"lx", SDL_GAMEPAD_AXIS_LEFTX, false}, {"ly", SDL_GAMEPAD_AXIS_LEFTY, false}, {"rx", SDL_GAMEPAD_AXIS_RIGHTX, false},
+        {"ry", SDL_GAMEPAD_AXIS_RIGHTY, false}, {"l2", SDL_GAMEPAD_AXIS_LEFT_TRIGGER, true},
+        {"r2", SDL_GAMEPAD_AXIS_RIGHT_TRIGGER, true},
+    };
+    for (const auto& entry : table)
+        if (!strcmp(name, entry.name))
+        {
+            const float clamped = std::max(entry.trigger ? 0.f : -1.f, std::min(1.f, value));
+            SDL_SetJoystickVirtualAxis(app.virtual_pad, entry.axis, Sint16(clamped * 32767.f));
+            return;
+        }
+    AppleShell::Log("anomaly: script: unknown pad axis '%s'", name);
+}
+
 // Runs the steps that are due. Returns false once the script asked to quit.
 bool RunScript(App& app)
 {
@@ -235,7 +345,10 @@ bool RunScript(App& app)
     {
         if (now >= app.pending_releases[i].release_at)
         {
-            PushKey(app.pending_releases[i].args, false);
+            if (app.pending_releases[i].pad)
+                SetPadButton(app, app.pending_releases[i].args, false);
+            else
+                PushKey(app.pending_releases[i].args, false);
             app.pending_releases.erase(app.pending_releases.begin() + long(i));
         }
         else
@@ -271,6 +384,31 @@ bool RunScript(App& app)
             release.release_at = now + ms * 1e-3;
             app.pending_releases.push_back(release);
         }
+        else if (step.command == "padon")
+            AttachVirtualPad(app);
+        else if (step.command == "pad")
+        {
+            std::string name = step.args;
+            double ms = 80;
+            const size_t last_space = name.find_last_of(' ');
+            if (last_space != std::string::npos)
+            {
+                ms = atof(name.c_str() + last_space + 1);
+                name.resize(last_space);
+            }
+            SetPadButton(app, name, true);
+            ScriptStep release;
+            release.args = name;
+            release.pad = true;
+            release.release_at = now + ms * 1e-3;
+            app.pending_releases.push_back(release);
+        }
+        else if (step.command == "paddown")
+            SetPadButton(app, step.args, true);
+        else if (step.command == "padup")
+            SetPadButton(app, step.args, false);
+        else if (step.command == "padaxis")
+            SetPadAxis(app, step.args);
         else if (step.command == "keydown")
             PushKey(step.args, true);
         else if (step.command == "keyup")
@@ -297,6 +435,27 @@ bool RunScript(App& app)
             app.wait_limit_s = limit > 0 ? limit : 240.0;
             return true;
         }
+        else if (step.command == "ballast")
+        {
+            const long chunks = atol(step.args.c_str()) / 64;
+            for (long i = 0; i < chunks; ++i)
+            {
+                void* block = malloc(64u << 20);
+                if (!block)
+                    break;
+                memset(block, 0x5a, 64u << 20);
+                app.ballast.push_back(block);
+            }
+            AppleShell::Log("anomaly: script: ballast %zu MB held, footprint %.0f MB, available %.0f MB", app.ballast.size() * 64,
+                double(AppleShell::ProcessFootprint()) / 1048576.0, double(AppleShell::AvailableMemory()) / 1048576.0);
+        }
+        else if (step.command == "unballast")
+        {
+            for (void* block : app.ballast)
+                free(block);
+            app.ballast.clear();
+            AppleShell::Log("anomaly: script: ballast freed, available %.0f MB", double(AppleShell::AvailableMemory()) / 1048576.0);
+        }
         else if (step.command == "log")
             AppleShell::Log("anomaly: script: %s", step.args.c_str());
         else if (step.command == "quit")
@@ -322,8 +481,57 @@ bool RequestQuit(App& app)
     return double(SDL_GetTicksNS() - app.quit_requested_ns) * 1e-9 > 30.0;
 }
 
+Uint64 FileTimeNs(const std::string& path)
+{
+    struct stat st;
+    if (stat(path.c_str(), &st) != 0)
+        return 0;
+    return Uint64(st.st_mtimespec.tv_sec) * 1000000000ull + Uint64(st.st_mtimespec.tv_nsec);
+}
+
+// The game is about to lose the screen (WillEnterBackground: also Control Center, alerts, the app switcher): save it, so that a
+// jetsam kill or a force quit while it sits in the background loses nothing. The engine is still active at this point (this
+// listener runs before the engine's own pause), so it runs frames here until the save file is written; GPU work is still allowed
+// until DidEnterBackground. A save is skipped while loading, in the main menu, within 30 s of the previous one, and when the
+// frames this needs would be re-entered.
+void SaveForBackground(App& app)
+{
+    if (app.saving || !app.engine_up || !xr_engine::InGame())
+        return;
+    const Uint64 start_ns = SDL_GetTicksNS();
+    if (app.last_background_save_ns && double(start_ns - app.last_background_save_ns) * 1e-9 < 30.0)
+        return;
+    app.saving = true;
+    app.last_background_save_ns = start_ns;
+    const std::string file = AppleShell::GetPaths().saves + "/ipad_autosave.scop";
+    const Uint64 before = FileTimeNs(file);
+    xr_engine::HoldActive(true); // the window's minimize event is pumped by the first Frame() and would stop the engine
+    xr_engine::ExecuteConsole("save ipad_autosave");
+    bool written = false;
+    for (int frame = 0; frame < 200 && double(SDL_GetTicksNS() - start_ns) * 1e-9 < 3.0; ++frame)
+    {
+        if (!xr_engine::Frame())
+            break;
+        if (FileTimeNs(file) != before)
+        {
+            written = true;
+            break;
+        }
+    }
+    xr_engine::HoldActive(false);
+    AppleShell::Log("anomaly: background save %s in %.2f s", written ? "written" : "NOT written", double(SDL_GetTicksNS() - start_ns) * 1e-9);
+    app.saving = false;
+}
+
 bool StartEngine(App& app)
 {
+    // before the engine registers its own listener: the listeners run in the order they were added
+    if (!app.lifecycle_listener)
+    {
+        AppleShell::Listener l;
+        l.on_pause = [] { if (g_app) SaveForBackground(*g_app); };
+        app.lifecycle_listener = AppleShell::AddListener(std::move(l));
+    }
     xr_engine::InitParams params;
     params.argc = app.argc;
     params.argv = app.argv;
@@ -386,6 +594,7 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char** argv)
 {
     SDL_SetAppMetadata("Anomaly", "0.1", "com.andriishafar.anomaly");
     auto* app = new App;
+    g_app = app;
     *appstate = app;
     app->argc = argc;
     app->argv = argv;
@@ -409,10 +618,12 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char** argv)
         else if (!strcmp(argv[i], "--script") && i + 1 < argc)
             script_path = argv[++i];
     }
-    if (script_path && !LoadScript(*app, script_path))
-        return SDL_APP_FAILURE;
-
     app->unattended = !foreground && (unattended_flag || script_path || app->exit_after_s > 0);
+#if defined(SDL_PLATFORM_IOS)
+    // Unattended mode is for the Mac (no focus, no window, silent sound). On the iPad a scripted run stays an ordinary foreground run:
+    // the engine must pause when the app leaves the screen (GPU work in the background kills the app), so `g_always_active` is wrong there.
+    app->unattended = false;
+#endif
     if (app->unattended)
     {
         // before SDL_Init: SDL reads the hints when it registers the application and creates windows
@@ -439,6 +650,15 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char** argv)
         return SDL_APP_FAILURE;
     }
     const AppleShell::Paths& paths = AppleShell::GetPaths();
+    // a relative script path is looked up next to the shell's files too (iPad: Documents/, where devicectl copies it)
+    if (script_path)
+    {
+        std::string resolved = script_path;
+        if (resolved[0] != '/' && !std::ifstream(resolved))
+            resolved = paths.shell_dir + "/" + script_path;
+        if (!LoadScript(*app, resolved.c_str()))
+            return SDL_APP_FAILURE;
+    }
     AppleShell::Log("anomaly: data root %s", paths.data_root.c_str());
     AppleShell::Log("anomaly: appdata   %s", paths.appdata.c_str());
     if (app->unattended)
@@ -462,17 +682,34 @@ SDL_AppResult SDL_AppIterate(void* appstate)
     auto* app = static_cast<App*>(appstate);
     if (app->engine_up)
     {
+        const Uint64 frame_start_ns = SDL_GetTicksNS();
         if (!xr_engine::Frame())
             return SDL_APP_SUCCESS;
-        // one line in the shell log every 10 s: frames per second of the main loop
+        // one line in the shell log every 10 s: frames per second of the main loop, the CPU time of a frame (time inside
+        // Frame(): the rest of the frame interval is the wait for the GPU and the display), and the memory the OS charges us
         ++app->fps_frames;
         const Uint64 now_ns = SDL_GetTicksNS();
+        app->frame_cpu_ns += now_ns - frame_start_ns;
+        app->frame_cpu_max_ns = std::max<Uint64>(app->frame_cpu_max_ns, now_ns - frame_start_ns);
+        if (now_ns - app->footprint_sample_ns >= 100000000ull)
+        {
+            app->footprint_sample_ns = now_ns;
+            app->footprint_peak = std::max<Uint64>(app->footprint_peak, AppleShell::ProcessFootprint());
+        }
         if (!app->fps_window_ns)
             app->fps_window_ns = now_ns;
         else if (now_ns - app->fps_window_ns >= 10000000000ull)
         {
-            AppleShell::Log("anomaly: %.1f fps (%u frames in %.1f s)", app->fps_frames * 1e9 / double(now_ns - app->fps_window_ns),
-                app->fps_frames, double(now_ns - app->fps_window_ns) * 1e-9);
+            const double mb = 1.0 / (1024.0 * 1024.0);
+            const Uint64 gpu_ns = mtl_d3d11::GpuTimeNsTotal(), presents = mtl_d3d11::PresentCountTotal();
+            const double gpu_ms = presents > app->present_mark ? double(gpu_ns - app->gpu_ns_mark) * 1e-6 / double(presents - app->present_mark) : 0.0;
+            app->gpu_ns_mark = gpu_ns;
+            app->present_mark = presents;
+            AppleShell::Log("anomaly: %.1f fps (%u frames in %.1f s), frame cpu %.1f ms avg %.1f max, gpu %.1f ms, footprint %.0f MB (peak %.0f), available %.0f MB, thermal %s",
+                app->fps_frames * 1e9 / double(now_ns - app->fps_window_ns), app->fps_frames,
+                double(now_ns - app->fps_window_ns) * 1e-9, double(app->frame_cpu_ns) * 1e-6 / app->fps_frames,
+                double(app->frame_cpu_max_ns) * 1e-6, gpu_ms, double(AppleShell::ProcessFootprint()) * mb, double(app->footprint_peak) * mb,
+                double(AppleShell::AvailableMemory()) * mb, AppleShell::ToString(AppleShell::CurrentThermalState()));
             // what the renderer cost over the same window: GPU time per frame, CPU time per frame (wall time minus the time
             // blocked on the GPU), draws and passes per frame, and the Metal memory
             mtl_d3d11::RenderStats st;
@@ -494,6 +731,7 @@ SDL_AppResult SDL_AppIterate(void* appstate)
             }
             app->fps_window_ns = now_ns;
             app->fps_frames = 0;
+            app->frame_cpu_ns = app->frame_cpu_max_ns = app->footprint_peak = 0;
         }
         if (!app->quit_requested_ns && !app->script.empty() && !RunScript(*app))
             AppleShell::Log("anomaly: script asked to quit");
@@ -523,6 +761,18 @@ SDL_AppResult SDL_AppEvent(void* appstate, SDL_Event* event)
     auto* app = static_cast<App*>(appstate);
     if (app->engine_up)
     {
+        if (event->type == SDL_EVENT_TERMINATING)
+        {
+            // the system is ending the app (rare: a suspended app is killed without being told): leave the level through the engine's
+            // own disconnect, for as long as the system allows
+            AppleShell::Log("anomaly: terminating, disconnecting");
+            const Uint64 t0 = SDL_GetTicksNS();
+            RequestQuit(*app);
+            while (double(SDL_GetTicksNS() - t0) * 1e-9 < 4.0 && xr_engine::Frame())
+                ;
+            AppleShell::Log("anomaly: disconnect %s", double(SDL_GetTicksNS() - t0) * 1e-9 < 4.0 ? "finished" : "timed out");
+            return SDL_APP_SUCCESS;
+        }
         // SDL3's callback loop has already taken the event out of the queue the engine would pump
         xr_engine::HandleEvent(*event);
         return SDL_APP_CONTINUE;

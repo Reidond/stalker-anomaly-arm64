@@ -157,10 +157,13 @@ extern _action actions [];
 
 #define bindings_count kLASTACTION
 
+// Slots of a binding: primary and secondary keyboard/mouse key, and (Apple builds) the gamepad key (bind_pad, src/Platform/GameInput).
+const int binding_slots = 3;
+
 struct _binding
 {
 	_action* m_action;
-	_keyboard* m_keyboard[2];
+	_keyboard* m_keyboard[binding_slots];
 };
 
 extern _binding g_key_bindings[];
@@ -182,6 +185,7 @@ void xr_pad_update_actor(CActor* actor); // every frame for the controlled actor
 void xr_pad_on_hit(int hit_type, float power); // CActor::Hit for the controlled actor (ALife::EHitType, health lost)
 void xr_pad_on_shot(CWeapon* weapon);
 void xr_pad_on_dry_fire(CWeapon* weapon);
+void xr_pad_render_radial(); // every HUD frame: draws the open radial wheel (labels around the screen centre), nothing when none is open
 #endif
 
 struct _conCmd

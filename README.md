@@ -13,9 +13,9 @@ is rebuilt for arm64:
 The repo holds source code only. You need your own copy of the Anomaly 1.5.3 game files, which are
 free from ModDB.
 
-> **Status: runs on the Mac, not playable yet.** The whole engine is linked into one macOS app that
-> starts a new game and loads a save; the rendering has defects and nothing has been checked on the
-> iPad yet. See [INTEGRATION.md](docs/ios-port/INTEGRATION.md).
+> **Status: runs on the iPad.** The whole engine is linked into one app that boots on the iPad Air M3, starts a new game in the
+> Cordon, loads and saves, and runs at 60 fps at the iPad preset. The renderer still has defects (M2) and the DualSense has been
+> checked in the lab but not yet in the game. See [IPAD.md](docs/ios-port/IPAD.md) and [INTEGRATION.md](docs/ios-port/INTEGRATION.md).
 
 ## Progress
 
@@ -25,7 +25,7 @@ free from ModDB.
 | M1 | Engine runs on macOS | Reached on the Mac: all modules link into one app, a new game runs in the Cordon against the real data (main menu, faction dialog, scripts and AI ticking, walking), a save round-trips ([INTEGRATION](docs/ios-port/INTEGRATION.md)). Rendering has visible defects; that is M2. |
 | M2 | Metal renderer | Groundwork done. 98% of Anomaly's shaders translate to Metal, and the D3D11 calls the renderer needs work on Metal. Porting the renderer itself is next. |
 | M3 | DualSense controls | Controller layer done and checked on the iPad. Not yet hooked into the engine. |
-| M4 | iPad app | App shell done, and the game data copies to the iPad. Packaging the engine into it is pending. |
+| M4 | iPad app | Reached: the app runs on the iPad (menu, new game, play, save, background and return), with a memory and graphics preset, 60 fps in the Cordon, 3.8 GB of 8 ([IPAD](docs/ios-port/IPAD.md)). |
 | M5 | Polish | LuaJIT's JIT works on the iPad when launched through a debugger; otherwise it falls back to the interpreter. |
 
 ## How it works

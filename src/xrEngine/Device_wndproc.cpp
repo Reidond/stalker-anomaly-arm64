@@ -102,6 +102,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 // The Apple counterpart of WndProc: SDL events instead of window messages. xr_window::PumpEvents() hands every event
 // here after the registered handlers (input) have seen it.
 #include <SDL3/SDL.h>
+#include <Platform/Apple/Shell.h>
+#include "XR_IOConsole.h"
+
+extern "C" size_t malloc_zone_pressure_relief(void* zone, size_t goal); // <malloc/malloc.h> clashes with the shim's mach types
 
 void CRenderDevice::on_sdl_event(const SDL_Event& e)
 {
@@ -168,7 +172,7 @@ void CRenderDevice::SyncActiveState()
 	const bool focused = (flags & SDL_WINDOW_INPUT_FOCUS) != 0;
 #endif
 	const bool visible = !(flags & (SDL_WINDOW_MINIMIZED | SDL_WINDOW_HIDDEN));
-	OnAppActive(focused && visible && !m_bSystemPaused);
+	OnAppActive((focused && visible && !m_bSystemPaused) || m_bHoldActive);
 }
 
 void CRenderDevice::OnSystemPause(bool paused)
@@ -179,9 +183,16 @@ void CRenderDevice::OnSystemPause(bool paused)
 
 void CRenderDevice::OnMemoryPressure(int level)
 {
-	Msg("* memory pressure: level %d (1 = warning, 2 = critical)", level);
-	// Resources the engine can drop without the renderer's help; the renderer's own caches are its session's business.
+	const u64 available_before = AppleShell::AvailableMemory();
+	Msg("* memory pressure: level %d (1 = warning, 2 = critical), %llu MB available", level,
+	    (unsigned long long)(available_before >> 20));
+	// What the engine can give back without the renderer's help (the renderer's own caches are its session's business): the Lua
+	// heap (a full collection) and the free pages malloc keeps. xrMemory::mem_compact() is a no-op outside the debug memory manager.
 	Memory.mem_compact();
+	if (Console)
+		Console->Execute("lua_collect_garbage");
+	malloc_zone_pressure_relief(nullptr, 0);
+	Msg("* memory pressure: %llu MB available after trimming", (unsigned long long)(AppleShell::AvailableMemory() >> 20));
 }
 
 #endif // XR_PLATFORM_APPLE

@@ -5,6 +5,12 @@
 #include "../xrEngine/xr_ioc_cmd.h"
 #include "xr_level_controller.h"
 #include "string_table.h"
+#ifdef XR_PLATFORM_APPLE
+#include <GameInput/Adapter.h>
+#include <GameInput/Bindings.h>
+#include <GameInput/GameInput.h>
+#include <sstream>
+#endif
 
 _binding g_key_bindings [bindings_count];
 _key_group g_current_keygroup = _sp;
@@ -291,6 +297,17 @@ _keyboard keyboards[] = {
 	{"kCUSTOM98", 1098},
 	{"kCUSTOM99", 1099},
 	{NULL, 0}
+#ifdef XR_PLATFORM_APPLE
+	// room for the gamepad keys (gp_cross, ...), which initialize_bindings() puts in front of the terminator
+	,{NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0},
+	{NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0},
+	{NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0},
+	{NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0},
+	{NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0},
+	{NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0},
+	{NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0},
+	{NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0}, {NULL, 0}
+#endif
 };
 
 void initialize_bindings()
@@ -318,6 +335,22 @@ void initialize_bindings()
 
 	for (int idx = 0; idx < bindings_count; ++idx)
 		g_key_bindings[idx].m_action = &actions[idx];
+
+#ifdef XR_PLATFORM_APPLE
+	// The gamepad keys (gp_cross ... gp_radial_32), so bind_pad, user.ltx and the key name lookups know them
+	static std::vector<gameinput::EngineKeyDef> pad_keys = gameinput::EnginePadKeyTable(gameinput::ControllerFamily::PlayStation);
+	int end = 0;
+	while (keyboards[end].key_name)
+		++end;
+	for (const gameinput::EngineKeyDef& def : pad_keys)
+	{
+		keyboards[end].key_name = def.name.c_str();
+		keyboards[end].dik = def.code;
+		keyboards[end].key_local_name = def.label.c_str();
+		++end;
+	}
+	keyboards[end].key_name = NULL;
+#endif
 }
 
 void remap_keys()
@@ -328,6 +361,14 @@ void remap_keys()
 	{
 		buff[0] = 0;
 		_keyboard& kb = keyboards[idx];
+#ifdef XR_PLATFORM_APPLE
+		if (gameinput::IsPadKey(kb.dik))
+		{
+			kb.key_local_name = gameinput::PadKeyLabel(kb.dik, gameinput::ControllerFamily::PlayStation);
+			++idx;
+			continue;
+		}
+#endif
 		bool res = pInput->get_dik_name(kb.dik, buff, sizeof(buff));
 		if (res)
 			kb.key_local_name = buff;
@@ -441,6 +482,9 @@ bool is_binded(EGameActions _action_id, int _dik)
 	if (pbinding->m_keyboard[1] && pbinding->m_keyboard[1]->dik == _dik)
 		return true;
 
+	if (pbinding->m_keyboard[2] && pbinding->m_keyboard[2]->dik == _dik)
+		return true;
+
 	return false;
 }
 
@@ -455,10 +499,13 @@ int get_action_dik(EGameActions _action_id, int idx)
 
 		if (pbinding->m_keyboard[1])
 			return pbinding->m_keyboard[1]->dik;
+
+		if (pbinding->m_keyboard[2])
+			return pbinding->m_keyboard[2]->dik;
 	}
 	else
 	{
-		if (pbinding->m_keyboard[idx])
+		if (idx >= 0 && idx < binding_slots && pbinding->m_keyboard[idx])
 			return pbinding->m_keyboard[idx]->dik;
 	}
 	return 0;
@@ -478,6 +525,9 @@ EGameActions get_binded_action(int _dik)
 			return binding->m_action->id;
 
 		if (binding->m_keyboard[1] && binding->m_keyboard[1]->dik == _dik && b_is_group_matching)
+			return binding->m_action->id;
+
+		if (binding->m_keyboard[2] && binding->m_keyboard[2]->dik == _dik && b_is_group_matching)
 			return binding->m_action->id;
 	}
 	return kNOTBINDED;
@@ -503,6 +553,7 @@ void GetActionAllBinding(LPCSTR _action, char* dst_buff, int dst_buff_sz)
 	}
 	if (NULL == pbinding->m_keyboard[0] && NULL == pbinding->m_keyboard[1])
 	{
+		// the gamepad key only: the keyboard hint strings stay about the keyboard
 		xr_sprintf(dst_buff, dst_buff_sz, "%s", CStringTable().translate("st_key_notbinded").c_str());
 	}
 	else
@@ -570,9 +621,17 @@ public:
 
 				if (binding->m_keyboard[1] == pkeyboard && b_conflict)
 					binding->m_keyboard[1] = NULL;
+
+				if (binding->m_keyboard[2] == pkeyboard && b_conflict)
+					binding->m_keyboard[2] = NULL;
 			}
 		}
 
+#ifdef XR_PLATFORM_APPLE
+		// the controller layer emits only the keys of its own map: keep it equal to slot 2
+		if (m_work_idx == 2 && pInput && pInput->Pad())
+			pInput->Pad()->bindings().Bind(action, pkeyboard->dik);
+#endif
 
 		CStringTable::ReparseKeyBindings();
 	}
@@ -610,6 +669,10 @@ public:
 		int action_id = action_name_to_id(args);
 		_binding* pbinding = &g_key_bindings[action_id];
 		pbinding->m_keyboard[m_work_idx] = NULL;
+#ifdef XR_PLATFORM_APPLE
+		if (m_work_idx == 2 && pInput && pInput->Pad())
+			pInput->Pad()->bindings().Unbind(args);
+#endif
 
 		CStringTable::ReparseKeyBindings();
 	}
@@ -650,7 +713,12 @@ public:
 			_binding* pbinding = &g_key_bindings[idx];
 			pbinding->m_keyboard[0] = NULL;
 			pbinding->m_keyboard[1] = NULL;
+			pbinding->m_keyboard[2] = NULL;
 		}
+#ifdef XR_PLATFORM_APPLE
+		if (pInput && pInput->Pad())
+			pInput->Pad()->bindings().Clear();
+#endif
 		bindConsoleCmds.clear();
 	}
 };
@@ -671,6 +739,13 @@ public:
 		strconcat(sizeof(cmd), cmd, "cfg_load", " ", _cfg);
 		Console->Execute("bind editor kF11"); //Lucy : ImGui default key
 		Console->Execute(cmd);
+#ifdef XR_PLATFORM_APPLE
+		// the default DualSense layout (bind_pad lines; docs/ios-port/CONTROLS.md)
+		std::istringstream pad_lines(gameinput::BindingMap::Default().Serialize());
+		for (std::string line; std::getline(pad_lines, line);)
+			if (!line.empty())
+				Console->Execute(line.c_str());
+#endif
 	}
 };
 
@@ -690,10 +765,11 @@ public:
 		for (int idx = 0; idx < bindings_count; ++idx)
 		{
 			_binding* pbinding = &g_key_bindings[idx];
-			xr_sprintf(buff, "[%s] primary is[%s] secondary is[%s]",
+			xr_sprintf(buff, "[%s] primary is[%s] secondary is[%s] gamepad is[%s]",
 			           pbinding->m_action->action_name,
 			           (pbinding->m_keyboard[0]) ? pbinding->m_keyboard[0]->key_local_name.c_str() : "NULL",
-			           (pbinding->m_keyboard[1]) ? pbinding->m_keyboard[1]->key_local_name.c_str() : "NULL");
+			           (pbinding->m_keyboard[1]) ? pbinding->m_keyboard[1]->key_local_name.c_str() : "NULL",
+			           (pbinding->m_keyboard[2]) ? pbinding->m_keyboard[2]->key_local_name.c_str() : "NULL");
 			Log(buff);
 		}
 		Log("- --- Bind list end   ---");
@@ -790,6 +866,10 @@ void CCC_RegisterInput()
 	CMD2(CCC_Bind, "bind_sec", 1);
 	CMD2(CCC_UnBind, "unbind", 0);
 	CMD2(CCC_UnBind, "unbind_sec", 1);
+#ifdef XR_PLATFORM_APPLE
+	CMD2(CCC_Bind, "bind_pad", 2);
+	CMD2(CCC_UnBind, "unbind_pad", 2);
+#endif
 	CMD1(CCC_UnBindAll, "unbindall");
 	CMD1(CCC_DefControls, "default_controls");
 	CMD1(CCC_ListActions, "list_actions");
@@ -809,6 +889,11 @@ void CCC_RegisterInput()
 #include "Weapon.h"
 #include "WeaponMagazined.h"
 #include "UICursor.h"
+#include "ui_base.h"
+#include "ui/UIStatic.h"
+#include "Inventory.h"
+#include "inventory_item.h"
+#include "ui/UIInventoryUtilities.h"
 
 void xr_pad_install_hooks()
 {
@@ -951,3 +1036,257 @@ void xr_pad_on_dry_fire(CWeapon* weapon)
 		pad->feedback().OnDryFire();
 }
 #endif // XR_PLATFORM_APPLE
+
+// The radial wheel (hold L1 or R1). The layer keeps the model (which wheel, page and slot the stick points at); the engine had nothing that draws it,
+// so the HUD calls this. It is made of the game's own parts and palette: flat dark tiles with the item icons of the inventory (the same atlas and
+// rects the inventory grid uses), the menus' amber (216,186,140) for the picked slot, the HUD fonts. Slots sit on a circle, clockwise from the top.
+//
+// Motion (high-frequency UI, so short and soft): the wheel fades in and grows from 94% over 120 ms with an ease-out (never from nothing), the picked
+// tile grows to 110% and warms up with an exponential approach that is interrupted and retargeted every frame, and closing is instant: releasing
+// the button already runs the action. Every state also has a static cue (amber border and name in the hub), motion is never the only one.
+namespace
+{
+struct RadialEntry
+{
+	std::string name;   // the hub's headline when this slot is picked
+	std::string detail; // the hub's second line
+	std::string badge;  // small corner text: the inventory slot number, the quick-use key
+	CInventoryItem* item = nullptr;
+	bool item_slot = false; // an inventory slot (drawn with an icon or as empty) rather than a plain action
+};
+
+const float INV_GRID_WIDTHF = 50.f, INV_GRID_HEIGHTF = 50.f; // the inventory grid's cell, as in ui/UICellCustomItems.cpp
+
+float clamp01(float v) { return v < 0.f ? 0.f : (v > 1.f ? 1.f : v); }
+float ease_out(float t) // ~ cubic-bezier(0.23, 1, 0.32, 1)
+{
+	const float u = 1.f - clamp01(t);
+	return 1.f - u * u * u * u;
+}
+u32 scale_alpha(u32 color, float k) { return color_argb(u32(float(color >> 24) * clamp01(k)), (color >> 16) & 0xff, (color >> 8) & 0xff, color & 0xff); }
+u32 mix(u32 c0, u32 c1, float t)
+{
+	auto ch = [&](int shift) { return u32(float((c0 >> shift) & 0xff) + (float((c1 >> shift) & 0xff) - float((c0 >> shift) & 0xff)) * clamp01(t)); };
+	return color_argb(ch(24), ch(16), ch(8), ch(0));
+}
+
+const u32 kAmber = color_argb(255, 216, 186, 140); // the menus' text colour
+const u32 kTileBase = color_argb(255, 24, 26, 28);
+const u32 kTileHot = color_argb(255, 46, 40, 30);
+const u32 kEdgeBase = color_argb(255, 78, 82, 84);
+const u32 kGrey = color_argb(255, 150, 152, 150);
+
+void describe(const std::string& action, RadialEntry& e)
+{
+	CActor* actor = Actor();
+	if (action.size() == 5 && !action.compare(0, 4, "wpn_") && action[4] >= '1' && action[4] <= '6')
+	{
+		const u16 slot = u16(action[4] - '0');
+		e.item_slot = true;
+		e.badge = std::string(1, action[4]);
+		e.item = actor ? actor->inventory().ItemFromSlot(slot) : nullptr;
+		static const char* kinds[] = {"", "Melee", "Pistol", "Primary weapon", "Grenade", "Binoculars", "Bolt"};
+		e.detail = kinds[slot];
+	}
+	else if (action.size() == 11 && !action.compare(0, 10, "quick_use_") && action[10] >= '1' && action[10] <= '4')
+	{
+		const int i = action[10] - '1';
+		e.item_slot = true;
+		e.badge = std::string("F") + action[10];
+		e.detail = "Quick use";
+		if (actor && ACTOR_DEFS::g_quick_use_slots[i] && ACTOR_DEFS::g_quick_use_slots[i][0])
+			e.item = actor->inventory().GetAny(ACTOR_DEFS::g_quick_use_slots[i]);
+	}
+	else if (action == "artefact" || action == "show_detector")
+	{
+		e.item_slot = true;
+		e.detail = action == "artefact" ? "Artefact" : "Detector";
+		e.item = actor ? actor->inventory().ItemFromSlot(action == "artefact" ? ARTEFACT_SLOT : DETECTOR_SLOT) : nullptr;
+	}
+	else if (!action.compare(0, 6, "custom"))
+		e.detail = "Addon action";
+	if (e.item)
+		e.name = e.item->NameItem();
+	else if (e.item_slot)
+		e.name = "Empty";
+}
+
+class CPadRadialUi
+{
+	static const int kMaxSlots = 12;
+	CUIStatic m_flat, m_icon, m_text;
+	float m_open = 0.f;
+	float m_hot[kMaxSlots] = {};
+	u32 m_last_frame = u32(-1);
+
+	void rect(float x, float y, float w, float h, u32 color)
+	{
+		m_flat.SetWndPos(Fvector2().set(x, y));
+		m_flat.SetWndSize(Fvector2().set(w, h));
+		m_flat.SetTextureColor(color);
+		m_flat.Draw();
+	}
+
+	void text(CGameFont* font, float x, float y, float w, float h, u32 color, const char* str, bool wrap = false)
+	{
+		CUILines* lines = m_text.TextItemControl();
+		lines->SetFont(font);
+		lines->SetTextColor(color);
+		lines->SetTextAlignment(CGameFont::alCenter);
+		lines->SetVTextAlignment(valCenter);
+		lines->SetTextComplexMode(wrap);
+		lines->SetText(str);
+		m_text.SetWndPos(Fvector2().set(x, y));
+		m_text.SetWndSize(Fvector2().set(w, h));
+		m_text.Draw();
+	}
+
+	// the item's icon, fitted into the square (cx, cy, side)
+	void icon(CInventoryItem* item, float cx, float cy, float side, float alpha)
+	{
+		const char* section = item->m_section_id.c_str();
+		if (pSettings->line_exist(section, "icons_texture"))
+			m_icon.SetShader(InventoryUtilities::GetCustomIconTextureShader(pSettings->r_string(section, "icons_texture")));
+		else
+			m_icon.SetShader(InventoryUtilities::GetEquipmentIconsShader());
+		const Irect grid = item->GetInvGridRect();
+		Frect tex;
+		tex.lt.set(INV_GRID_WIDTHF * grid.x1, INV_GRID_HEIGHTF * grid.y1);
+		tex.rb.set(tex.lt.x + INV_GRID_WIDTHF * grid.x2, tex.lt.y + INV_GRID_HEIGHTF * grid.y2);
+		m_icon.SetTextureRect(tex);
+		const float w = INV_GRID_WIDTHF * grid.x2, h = INV_GRID_HEIGHTF * grid.y2;
+		const float k = std::min(side / w, side / h);
+		m_icon.SetWndSize(Fvector2().set(w * k, h * k));
+		m_icon.SetWndPos(Fvector2().set(cx - w * k * 0.5f, cy - h * k * 0.5f));
+		m_icon.SetTextureColor(color_argb(u32(255.f * alpha), 255, 255, 255));
+		m_icon.Draw();
+	}
+
+	void tile(float cx, float cy, float side, float hot, float alpha, const RadialEntry& e, const std::string& label)
+	{
+		const float k = (0.94f + 0.06f * ease_out(m_open)) * (1.f + 0.10f * ease_out(hot));
+		const float s = side * k, x = cx - s * 0.5f, y = cy - s * 0.5f;
+		// elevation: two soft shadow layers, then the tile; the 1.2 unit edge is structure (amber when picked)
+		if (hot > 0.01f) // the picked tile also glows: a faint amber halo, the static cue is the amber edge and the hub's name
+			rect(x - 5.f, y - 5.f, s + 10.f, s + 10.f, scale_alpha(color_argb(34, 216, 186, 140), alpha * ease_out(hot)));
+		rect(x - 3.f, y + 1.f, s + 6.f, s + 8.f, scale_alpha(color_argb(46, 0, 0, 0), alpha));
+		rect(x - 1.f, y + 3.f, s + 2.f, s + 3.f, scale_alpha(color_argb(70, 0, 0, 0), alpha));
+		const bool dim = e.item_slot && !e.item;
+		rect(x, y, s, s, scale_alpha(mix(kTileBase, kTileHot, ease_out(hot)), alpha * (dim ? 0.78f : 0.94f)));
+		rect(x + 1.2f, y + 1.2f, s - 2.4f, 1.f, scale_alpha(color_argb(20, 255, 255, 255), alpha)); // a faint top light
+		const u32 edge = scale_alpha(mix(kEdgeBase, kAmber, ease_out(hot)), alpha * (dim ? 0.6f : 1.f));
+		const float t = 1.2f;
+		rect(x, y, s, t, edge);
+		rect(x, y + s - t, s, t, edge);
+		rect(x, y + t, t, s - 2.f * t, edge);
+		rect(x + s - t, y + t, t, s - 2.f * t, edge);
+
+		if (e.item)
+			icon(e.item, cx, cy + 2.f, s - 16.f, alpha * (0.86f + 0.14f * ease_out(hot)));
+		else if (e.item_slot)
+		{
+			rect(cx - 8.f, cy, 16.f, 1.5f, scale_alpha(color_argb(110, 150, 152, 150), alpha)); // an empty slot: a dash
+			if (e.badge.empty()) // the slots without a number say what they are
+				text(UI().Font().pFontArial14, x + 2.f, y + s - 22.f, s - 4.f, 18.f, scale_alpha(color_argb(255, 120, 122, 120), alpha), e.detail.c_str());
+		}
+		else
+			text(UI().Font().pFontLetterica16Russian, x + 4.f, y + 4.f, s - 8.f, s - 8.f, scale_alpha(mix(kAmber, color_argb(255, 255, 240, 205), hot), alpha),
+			    label.c_str(), true);
+		if (!e.badge.empty())
+			text(UI().Font().pFontArial14, x + 3.f, y + 2.f, 24.f, 16.f, scale_alpha(mix(kGrey, kAmber, hot), alpha), e.badge.c_str());
+	}
+
+public:
+	CPadRadialUi()
+	{
+		m_flat.InitTexture("ui_inGame2_white_rect");
+		m_flat.SetStretchTexture(true);
+		m_icon.SetStretchTexture(true);
+	}
+
+	void Draw(const gameinput::RadialView& view, const gameinput::RadialWheel& wheel, const gameinput::RadialPage& page,
+	    const std::vector<std::string>& labels, const std::vector<RadialEntry>& entries)
+	{
+		const float dt = std::min(Device.fTimeDelta, 0.05f);
+		if (Device.dwFrame - m_last_frame > 2) // not drawn for a while: this is a fresh opening
+		{
+			m_open = 0.f;
+			std::fill(std::begin(m_hot), std::end(m_hot), 0.f);
+		}
+		m_last_frame = Device.dwFrame;
+		m_open = clamp01(m_open + dt / 0.12f);
+		const float alpha = ease_out(m_open);
+		const int n = std::min(int(entries.size()), kMaxSlots);
+		for (int i = 0; i < n; ++i)
+		{
+			const float target = i == view.selected ? 1.f : 0.f;
+			m_hot[i] += (target - m_hot[i]) * (1.f - expf(-dt * 20.f));
+		}
+
+		const float cx = UI_BASE_WIDTH * 0.5f, cy = UI_BASE_HEIGHT * 0.5f;
+		rect(0.f, 0.f, UI_BASE_WIDTH, UI_BASE_HEIGHT, scale_alpha(color_argb(130, 0, 0, 0), alpha)); // the veil
+
+		// hub: the picked slot's name, or the wheel's title while nothing is picked; a page dot per page
+		const bool picked = view.selected >= 0 && view.selected < n;
+		const std::string headline = picked ? (entries[view.selected].name.empty() ? labels[view.selected] : entries[view.selected].name) : wheel.name;
+		const std::string detail = picked ? (entries[view.selected].detail.empty() ? page.title : entries[view.selected].detail) : page.title;
+		const float hub_w = 250.f;
+		text(UI().Font().pFontGraffiti22Russian, cx - hub_w * 0.5f, cy - 34.f, hub_w, 34.f, scale_alpha(picked ? kAmber : color_argb(255, 200, 202, 200), alpha),
+		    headline.c_str());
+		text(UI().Font().pFontLetterica16Russian, cx - hub_w * 0.5f, cy, hub_w, 22.f, scale_alpha(kGrey, alpha), detail.c_str());
+		if (view.page_count > 1)
+		{
+			const float step = 12.f, x0 = cx - step * float(view.page_count - 1) * 0.5f - 2.5f;
+			for (int p = 0; p < view.page_count; ++p)
+				rect(x0 + step * float(p), cy + 30.f, 5.f, 5.f, scale_alpha(p == view.page ? kAmber : color_argb(255, 90, 92, 92), alpha));
+		}
+
+		const float side = 100.f, radius = 194.f, kx = UI().get_current_kx();
+		for (int i = 0; i < n; ++i)
+		{
+			const float angle = -0.5f * 3.1415927f + 6.2831853f * float(i) / float(n);
+			if (i != view.selected)
+				tile(cx + radius * cosf(angle) * kx, cy + radius * sinf(angle), side, m_hot[i], alpha, entries[i], labels[i]);
+		}
+		if (picked) // the picked tile is drawn last so its shadow and growth sit on top of its neighbours
+		{
+			const float angle = -0.5f * 3.1415927f + 6.2831853f * float(view.selected) / float(n);
+			tile(cx + radius * cosf(angle) * kx, cy + radius * sinf(angle), side, m_hot[view.selected], alpha, entries[view.selected], labels[view.selected]);
+		}
+	}
+};
+
+CPadRadialUi* g_pad_radial_ui = nullptr;
+} // namespace
+
+void xr_pad_render_radial()
+{
+	gameinput::GameInput* pad = pInput ? pInput->Pad() : nullptr;
+	if (!pad)
+		return;
+	const gameinput::RadialView view = pad->radial().View();
+	if (!view.open || view.wheel < 0)
+		return;
+	const std::vector<gameinput::RadialWheel>& wheels = pad->radial().Wheels();
+	if (size_t(view.wheel) >= wheels.size() || size_t(view.page) >= wheels[view.wheel].pages.size())
+		return;
+	const gameinput::RadialWheel& wheel = wheels[view.wheel];
+	const gameinput::RadialPage& page = wheel.pages[view.page];
+	if (page.slots.empty())
+		return;
+
+	std::vector<std::string> labels;
+	std::vector<RadialEntry> entries;
+	for (const gameinput::RadialSlot& slot : page.slots)
+	{
+		const std::string* action = pad->bindings().ActionForKey(slot.key);
+		labels.push_back(action ? gameinput::ActionLabel(*action) : slot.label);
+		RadialEntry entry;
+		if (action)
+			describe(*action, entry);
+		entries.push_back(entry);
+	}
+	if (!g_pad_radial_ui)
+		g_pad_radial_ui = xr_new<CPadRadialUi>();
+	g_pad_radial_ui->Draw(view, wheel, page, labels, entries);
+}

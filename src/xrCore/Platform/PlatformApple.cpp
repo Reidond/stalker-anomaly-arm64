@@ -75,17 +75,34 @@ bool find_entry(const std::string& dir, const std::string& name, bool rescan, st
 // $HOME is the container root on iOS (the home directory on macOS): put its real spelling back first.
 std::string restore_home_spelling(const std::string& native)
 {
-	static const std::string home = []
+	// $HOME says "/private/var/mobile/Containers/Data/Application/<UUID>" while NSSearchPathForDirectoriesInDomains (and so the
+	// roots of the generated fsgame.ltx) say "/var/mobile/...": the same directory through the /var symlink. Both spellings
+	// are restored.
+	static const std::vector<std::string> homes = []
 	{
 		const char* h = getenv("HOME");
 		std::string r(h ? h : "");
 		while (r.size() > 1 && r.back() == '/') r.pop_back();
-		return r;
+		std::vector<std::string> v;
+		if (r.size() >= 2)
+		{
+			v.push_back(r);
+			static const std::string priv = "/private";
+			if (r.compare(0, priv.size() + 1, priv + "/") == 0)
+				v.push_back(r.substr(priv.size()));
+			else
+				v.push_back(priv + r);
+		}
+		return v;
 	}();
-	if (home.size() < 2 || native.size() < home.size() || native.compare(0, home.size(), home) == 0) return native;
-	if (strncasecmp(native.c_str(), home.c_str(), home.size()) != 0) return native;
-	if (native.size() != home.size() && native[home.size()] != '/') return native;
-	return home + native.substr(home.size());
+	for (const std::string& home : homes)
+	{
+		if (native.size() < home.size() || native.compare(0, home.size(), home) == 0) continue;
+		if (strncasecmp(native.c_str(), home.c_str(), home.size()) != 0) continue;
+		if (native.size() != home.size() && native[home.size()] != '/') continue;
+		return home + native.substr(home.size());
+	}
+	return native;
 }
 
 // Resolves 'native' (already '/'-separated) component by component, ignoring case where the exact spelling does not

@@ -4,11 +4,18 @@
 #include <mtl_d3d11/mtl_stats.h>
 
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <thread>
 
 namespace mtl_d3d11
 {
+// Process-wide totals for the app's frame-time log (GPU time of every command buffer, frames presented)
+static std::atomic<uint64_t> g_gpuTimeNs{0};
+static std::atomic<uint64_t> g_presentCount{0};
+uint64_t GpuTimeNsTotal() { return g_gpuTimeNs.load(std::memory_order_relaxed); }
+uint64_t PresentCountTotal() { return g_presentCount.load(std::memory_order_relaxed); }
+
 namespace
 {
 constexpr size_t kRingMaxAlloc = 256 * 1024; // larger DISCARD maps use per-buffer rename pools
@@ -228,6 +235,8 @@ void Context::commit(bool wait)
             Log("command buffer %llu failed: %s", (unsigned long long)s, b.error.localizedDescription.UTF8String);
         if (b.GPUEndTime > b.GPUStartTime && b.GPUStartTime > 0)
             d->gpuNanos += uint64_t((b.GPUEndTime - b.GPUStartTime) * 1e9);
+        if (b.GPUEndTime > b.GPUStartTime)
+            g_gpuTimeNs.fetch_add(uint64_t((b.GPUEndTime - b.GPUStartTime) * 1e9), std::memory_order_relaxed);
         self->harvestQueries(s);
         d->noteCompleted(s);
     }];
@@ -326,7 +335,10 @@ void Context::present(id<CAMetalDrawable> drawable, void (^preCommit)(id<MTLComm
     if (preCommit)
         preCommit(cb_);
     if (drawable)
+    {
         [cb_ presentDrawable:drawable];
+        g_presentCount.fetch_add(1, std::memory_order_relaxed);
+    }
     commit(false);
     ++dev_->frameCount;
     endFrame();

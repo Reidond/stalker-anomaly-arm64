@@ -1,0 +1,100 @@
+-- Test helpers for the iPad port (docs/ios-port/IPAD.md). With -dbg on the command line the console has `run_string`:
+--   run_string ipad_debug.dump_smarts()        logs the actor's position and every smart terrain's position (lines ACTORPOS / SMART)
+--   run_string ipad_debug.tp(x, y, z)          teleports the actor
+-- Nothing in the game calls this file.
+
+function dump_smarts()
+	local p = db.actor:position()
+	printf("%s", string.format("ACTORPOS %.1f %.1f %.1f %s", p.x, p.y, p.z, level.name()))
+	alife():iterate_objects(function(se)
+		if se and se:clsid() == clsid.smart_terrain and string.find(se:name(), "^esc_") then
+			local q = se.position
+			printf("%s", string.format("SMART %s %.1f %.1f %.1f", se:name(), q.x, q.y, q.z))
+		end
+	end)
+end
+
+function tp(x, y, z)
+	db.actor:set_actor_position(vector():set(x, y, z))
+end
+
+-- Puts items into the actor's inventory (`run_string ipad_debug.give("wpn_ak74")`) ...
+function give(section, count)
+	local a = db.actor
+	for i = 1, (count or 1) do
+		alife():create(section, a:position(), a:level_vertex_id(), a:game_vertex_id(), a:id())
+	end
+end
+
+function give_ammo(section, count)
+	local a = db.actor
+	alife():create_ammo(section, a:position(), a:level_vertex_id(), a:game_vertex_id(), a:id(), count)
+end
+
+-- ... and puts the rifle into slot 3 (1 knife, 2 pistol, 3 primary weapon) and draws it, so a save made afterwards has it in hand. Logs SLOT lines.
+function equip()
+	local a = db.actor
+	local function slot(section, n)
+		local o = a:object(section)
+		printf("%s", "SLOT find " .. section .. " " .. tostring(o ~= nil))
+		if o then
+			local ok, err = pcall(function() a:move_to_slot(o, n) end)
+			printf("%s", "SLOT move " .. section .. " -> " .. n .. " " .. tostring(ok) .. " " .. tostring(err))
+		end
+	end
+	slot("wpn_ak74", 3)
+	slot("device_pda_1", 8)    -- a start made by script leaves the PDA and the outfit in the backpack
+	slot("novice_outfit", 7)
+	slot("helm_resp", 12)
+	for n = 1, 3 do
+		local o = a:item_in_slot(n)
+		printf("%s", "SLOT " .. n .. " holds " .. (o and o:section() or "nothing"))
+	end
+	local ok, err = pcall(function() a:activate_slot(3) end)
+	printf("%s", "SLOT activate_slot " .. tostring(ok) .. " " .. tostring(err))
+end
+
+-- One line of state for the log: position, the item in hand and its magazine, which dialogs are open.
+function state(tag)
+	local a = db.actor
+	local p = a:position()
+	local item = a:active_item()
+	local slot = a:active_slot()
+	local s = string.format("STATE %s pos %.1f %.1f %.1f item %s ammo %s slot %s", tag or "", p.x, p.y, p.z,
+		item and item:section() or "none", item and tostring(item:get_ammo_in_magazine()) or "-", tostring(slot))
+	printf("%s", s)
+end
+
+-- Logs what the actor carries (INV lines)
+function list_inventory()
+	local n = 0
+	db.actor:iterate_inventory(function(owner, item)
+		n = n + 1
+		printf("%s", "INV " .. item:section())
+	end, db.actor)
+	printf("%s", "INV count " .. n)
+end
+
+-- Checks the UI colour helpers (COLOR lines)
+function color_test()
+	local c = GetARGB(255, 216, 186, 140)
+	printf("%s", string.format("COLOR GetARGB(255,216,186,140) = %d (%08x) A=%d R=%d G=%d B=%d", c, c, ClrGetA(c), ClrGetR(c), ClrGetG(c), ClrGetB(c)))
+end
+
+-- Logs which item is in each inventory slot (SLOTS line), and puts the PDA into slot 8 when it is not there
+function slots(fix)
+	local a = db.actor
+	local parts = {}
+	for n = 1, 12 do
+		local o = a:item_in_slot(n)
+		parts[#parts + 1] = n .. "=" .. (o and o:section() or "-")
+	end
+	printf("%s", "SLOTS " .. table.concat(parts, " "))
+	if fix then
+		local pda = a:object("device_pda_1")
+		if pda then
+			local ok, err = pcall(function() a:move_to_slot(pda, 8) end)
+			printf("%s", "SLOTS moved pda " .. tostring(ok) .. " " .. tostring(err))
+		end
+	end
+end

@@ -1,0 +1,43 @@
+# GPU cost of each graphics setting. Loads ipad_test, renders at 1920x1440 (GPU bound: at the preset's 1366x1024 the GPU ms is hidden
+# behind vsync), stands in a Cordon field, and changes one setting every 20 s, undoing the previous one. Run with -dbg:
+#   tools/ios/ipad.sh script tools/ios/scripts/sweep_gpu.txt -dbg
+# then read the 10 s lines (gpu ms) next to the SWEEP markers. Run `--device-preset reset` afterwards: the engine saves the last vid_mode.
+5 console vid_mode 1920x1440
+8 console start server(ipad_test/single/alife/load) client(localhost)
+45 key Space
+50 console run_string ipad_debug.tp(54.9, 3.5, 157.1)
+80 log SWEEP baseline
+100 log SWEEP r2_ssao off
+100 console r2_ssao st_opt_off
+120 log SWEEP r2_sun off
+120 console r2_ssao st_opt_low
+120 console r2_sun off
+140 log SWEEP grass off
+140 console r2_sun on
+140 console r__detail_density 0.04
+160 log SWEEP view distance 0.4
+160 console r__detail_density 0.4
+160 console rs_vis_distance 0.4
+180 log SWEEP soft particles off
+180 console rs_vis_distance 0.8
+180 console r2_soft_particles off
+200 log SWEEP soft water off
+200 console r2_soft_particles on
+200 console r2_soft_water off
+220 log SWEEP wet surfaces off
+220 console r2_soft_water on
+220 console r3_dynamic_wet_surfaces off
+240 log SWEEP sunshafts off
+240 console r3_dynamic_wet_surfaces on
+240 console r2_sunshafts_mode off
+260 log SWEEP aniso 1
+260 console r2_sunshafts_mode screen_space
+260 console r__tf_aniso 1
+280 log SWEEP shadow quality medium
+280 console r__tf_aniso 4
+280 console r2_sun_quality st_opt_medium
+300 log SWEEP volumetric lights on
+300 console r2_sun_quality st_opt_low
+300 console r2_volumetric_lights on
+320 log SWEEP end
+325 quit

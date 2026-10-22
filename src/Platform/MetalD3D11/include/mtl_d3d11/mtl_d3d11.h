@@ -124,6 +124,11 @@ struct Stats
 void GetStats(ID3D11DeviceContext* pContext, Stats* out);
 // The same for the most recent device (what an app that does not hold the context wants); false before a device exists.
 bool GetGlobalStats(Stats* out);
+
+// Process-wide totals, for a frame-time log: the GPU time (start to end) of every command buffer completed so far, and the number
+// of frames presented. Differences over a window give the average GPU ms per frame.
+uint64_t GpuTimeNsTotal();
+uint64_t PresentCountTotal();
 void ResetFrameStats(ID3D11DeviceContext* pContext);
 // Debug: logs the next `count` draws with shader names, render targets and fixed-function state.
 void TraceDraws(ID3D11DeviceContext* pContext, int count);

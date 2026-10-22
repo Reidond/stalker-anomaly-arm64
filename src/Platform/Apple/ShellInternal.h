@@ -24,6 +24,12 @@ void SetCrashContext(const std::string& context);
 // is already current. False when there is nothing to pack.
 bool BuildOverlayArchive(const std::string& source_dir, const std::string& archive_dir);
 
+// Device graphics presets (DevicePreset.cpp): merges the preset named by `preset` ("ipad", or "" for none) into
+// <appdata>/user.ltx the first time and whenever the preset's version is raised, or always with `reset`.
+void ApplyDevicePreset(const std::string& preset, bool reset, const std::string& appdata, const std::string& app_support);
+// Engine command line flags the preset wants (valid after ApplyDevicePreset).
+const std::string& DevicePresetCommandLine();
+
 // Event history (Lifecycle.mm)
 void RecordEvent(const char* category, const std::string& text);
 

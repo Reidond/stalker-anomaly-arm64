@@ -279,6 +279,7 @@ public:
 		m_hWnd = NULL;
 #ifdef XR_PLATFORM_APPLE
 		m_bSystemPaused = false;
+		m_bHoldActive = false;
 		m_bResizePending = false;
 #endif
 		b_is_Active = FALSE;
@@ -493,6 +494,7 @@ public:
 	// The OS is short on memory: 1 = warning, 2 = critical.
 	void OnMemoryPressure(int level);
 	bool m_bSystemPaused;
+	bool m_bHoldActive; // the app keeps the engine running through the window events of a move to the background (a save)
 	bool m_bResizePending;
 #endif
 

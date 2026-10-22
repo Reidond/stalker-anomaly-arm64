@@ -1,0 +1,5 @@
+# Loads the save `ipad_test` (made by new_game.txt) and stands in the world; for measurements.
+# usage: tools/ios/ipad.sh script tools/ios/scripts/load_game.txt
+8 console start server(ipad_test/single/alife/load) client(localhost)
+60 key Space          # "Press any key to continue" if it asks
+300 quit

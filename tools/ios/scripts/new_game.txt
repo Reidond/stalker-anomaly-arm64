@@ -1,0 +1,13 @@
+# New game from the main menu on the iPad (1366x1024 points, 4:3: the 1024x768 UI is scaled by 1.334, no letterbox), a short
+# walk and a save. Times are seconds after the engine came up; the Start button is at (873, 901) points.
+# usage: tools/ios/ipad.sh script tools/ios/scripts/new_game.txt
+8 key Return          # opens the faction dialog on the highlighted "New game"
+12 move 873 901       # the Start button
+13 click 873 901
+50 key Space          # "Press any key to continue" (twice, in case the first lands during the load)
+65 key Space
+90 key Space
+110 keydown W         # walk
+125 keyup W
+140 console save ipad_test
+200 quit
