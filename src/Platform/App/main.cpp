@@ -61,6 +61,7 @@ struct App
     double exit_after_s = 0;
     Uint64 engine_start_ns = 0;
     int exit_code = 0;
+    Uint64 quit_requested_ns = 0; // set when the app asked the engine to quit; it disconnects and unloads the level first
 
     // where the scripted pointer is, window points: motion events carry the position and the delta
     float pointer_x = 0, pointer_y = 0;
@@ -210,6 +211,21 @@ bool RunScript(App& app)
     return true;
 }
 
+// The way a user quits: the engine disconnects from the level and quits from its own event queue. Returns when the app should
+// give up waiting for that (the engine did not finish in 30 s).
+bool RequestQuit(App& app)
+{
+    if (!app.quit_requested_ns)
+    {
+        app.quit_requested_ns = SDL_GetTicksNS();
+        SDL_Event quit{};
+        quit.type = SDL_EVENT_QUIT;
+        SDL_PushEvent(&quit);
+        return false;
+    }
+    return double(SDL_GetTicksNS() - app.quit_requested_ns) * 1e-9 > 30.0;
+}
+
 bool StartEngine(App& app)
 {
     xr_engine::InitParams params;
@@ -321,14 +337,17 @@ SDL_AppResult SDL_AppIterate(void* appstate)
     {
         if (!xr_engine::Frame())
             return SDL_APP_SUCCESS;
-        if (!app->script.empty() && !RunScript(*app))
-        {
+        if (!app->quit_requested_ns && !app->script.empty() && !RunScript(*app))
             AppleShell::Log("anomaly: script asked to quit");
-            return SDL_APP_SUCCESS;
-        }
-        if (app->exit_after_s > 0 && double(SDL_GetTicksNS() - app->engine_start_ns) * 1e-9 >= app->exit_after_s)
-        {
+        else if (!app->quit_requested_ns && app->exit_after_s > 0 &&
+                 double(SDL_GetTicksNS() - app->engine_start_ns) * 1e-9 >= app->exit_after_s)
             AppleShell::Log("anomaly: --exit-after %.1f s reached", app->exit_after_s);
+        else if (!app->quit_requested_ns)
+            return SDL_APP_CONTINUE;
+        // a quit was just asked for, or is under way
+        if (RequestQuit(*app))
+        {
+            AppleShell::Log("anomaly: the engine did not quit in 30 s, leaving");
             return SDL_APP_SUCCESS;
         }
         return SDL_APP_CONTINUE;
