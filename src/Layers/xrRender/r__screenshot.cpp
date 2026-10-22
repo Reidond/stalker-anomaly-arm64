@@ -69,6 +69,9 @@ void AppleLoadScreenshot(int stage, int max_stage)
 {
 	if (!g_load_shots[0] || stage == g_load_shots_last)
 		return;
+	// the previous capture reads back for a frame or two: try this stage again at the next loading frame instead of skipping it
+	if (g_apple_shot.queued || g_apple_shot.armed)
+		return;
 	g_load_shots_last = stage;
 	string_path name;
 	xr_sprintf(name, "%s_%02d_stage%d_of_%d", g_load_shots, g_load_shots_count++, stage, max_stage);
