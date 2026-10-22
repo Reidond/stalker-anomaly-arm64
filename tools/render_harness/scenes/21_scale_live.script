@@ -1,0 +1,21 @@
+# Render scale changed at run time (each change resets the device): scale and upscaler switches, with a screenshot of each, and a
+# return to 1.0. Nothing may crash, stay stale or draw the UI at the scene's size.
+1 console run_string xr_harness.env(12,0,"w_clear1")
+3 console run_string xr_harness.tp(-2.8,2.8,82.7,200)
+12 console screenshot 21_a_scale_1.0
+14 console r__render_scale 0.67
+22 console screenshot 21_b_scale_0.67_metalfx
+24 console r__upscaler bilinear
+28 console screenshot 21_c_scale_0.67_bilinear
+30 console r__render_scale 0.5
+36 console screenshot 21_d_scale_0.5_bilinear
+38 console r__upscaler metalfx
+42 console screenshot 21_e_scale_0.5_metalfx
+44 console r__upscale_sharpness 0.5
+48 console screenshot 21_f_scale_0.5_metalfx_sharp
+50 console r__upscale_sharpness 0
+52 console vid_mode 1920x1080
+58 console screenshot 21_g_resized_1920x1080_scale_0.5
+60 console r__render_scale 1.0
+66 console screenshot 21_h_scale_1.0
+68 quit

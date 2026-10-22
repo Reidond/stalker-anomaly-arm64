@@ -1,0 +1,12 @@
+# Render scale: the UI cursor must end up in the same place at every scale (the pointer maps to Device.dwWidth/dwHeight, the output's
+# size, never the scene's). Opens the inventory and moves the pointer twice; compare the cursor sprite's position of the shots of a run
+# with `-x "r__render_scale 1.0"` and one with 0.67 (run at the same -s size).
+1 console run_string xr_harness.env(12,0,"w_clear1")
+3 console run_string xr_harness.tp(-2.8,2.8,82.7,200)
+8 key I
+12 move 1066 519
+15 console screenshot 23_a_hover_pistol
+16 move 1066 1060
+19 console screenshot 23_b_hover_knife
+21 key Escape
+23 quit
