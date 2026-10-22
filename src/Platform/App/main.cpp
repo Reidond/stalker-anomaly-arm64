@@ -661,11 +661,11 @@ SDL_AppResult SDL_AppIterate(void* appstate)
             const double gpu_ms = presents > app->present_mark ? double(gpu_ns - app->gpu_ns_mark) * 1e-6 / double(presents - app->present_mark) : 0.0;
             app->gpu_ns_mark = gpu_ns;
             app->present_mark = presents;
-            AppleShell::Log("anomaly: %.1f fps (%u frames in %.1f s), frame cpu %.1f ms avg %.1f max, gpu %.1f ms, footprint %.0f MB (peak %.0f), available %.0f MB",
+            AppleShell::Log("anomaly: %.1f fps (%u frames in %.1f s), frame cpu %.1f ms avg %.1f max, gpu %.1f ms, footprint %.0f MB (peak %.0f), available %.0f MB, thermal %s",
                 app->fps_frames * 1e9 / double(now_ns - app->fps_window_ns), app->fps_frames,
                 double(now_ns - app->fps_window_ns) * 1e-9, double(app->frame_cpu_ns) * 1e-6 / app->fps_frames,
                 double(app->frame_cpu_max_ns) * 1e-6, gpu_ms, double(AppleShell::ProcessFootprint()) * mb, double(app->footprint_peak) * mb,
-                double(AppleShell::AvailableMemory()) * mb);
+                double(AppleShell::AvailableMemory()) * mb, AppleShell::ToString(AppleShell::CurrentThermalState()));
             app->fps_window_ns = now_ns;
             app->fps_frames = 0;
             app->frame_cpu_ns = app->frame_cpu_max_ns = app->footprint_peak = 0;

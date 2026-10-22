@@ -136,6 +136,8 @@ DeviceInfo QueryDeviceInfo();
 uint64_t ProcessFootprint();
 // os_proc_available_memory() on iOS: how much more the process may use before it is killed. 0 elsewhere.
 uint64_t AvailableMemory();
+// The system's thermal state now (the shell log also records every change).
+ThermalState CurrentThermalState();
 
 struct Insets
 {

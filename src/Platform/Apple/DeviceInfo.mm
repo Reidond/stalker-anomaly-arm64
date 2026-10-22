@@ -68,6 +68,11 @@ uint64_t ProcessFootprint()
     return info.phys_footprint;
 }
 
+ThermalState CurrentThermalState()
+{
+    return ThermalFromNS(NSProcessInfo.processInfo.thermalState);
+}
+
 uint64_t AvailableMemory()
 {
 #if TARGET_OS_IOS
