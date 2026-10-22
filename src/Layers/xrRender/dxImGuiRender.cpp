@@ -68,6 +68,10 @@ void dxImGuiRender::Render(ImDrawData* data)
 {
 #if defined(USE_DX11)
     ImGui_ImplDX11_RenderDrawData(data);
+#if defined(XR_PLATFORM_APPLE)
+    // the backend cannot save and restore the pipeline state on the Metal shim (no Get* queries): forget what we cached
+    RCache.Invalidate();
+#endif
 #elif defined(USE_DX10)
     ImGui_ImplDX10_RenderDrawData(data);
 #else

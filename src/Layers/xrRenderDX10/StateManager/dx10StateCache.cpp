@@ -148,3 +148,11 @@ dx10StateCache< ID3DxxBlendState , D3D_BLEND_DESC >
 	}
 }
 */
+
+#if defined(XR_PLATFORM_APPLE)
+// The members are defined in this file. MSVC emits the implicit instantiations as COMDATs; clang only emits one in the
+// translation unit that uses it, and not at all when it is inlined there, so dx10HW.cpp would not link.
+template class dx10StateCache<ID3DRasterizerState, D3D_RASTERIZER_DESC>;
+template class dx10StateCache<ID3DDepthStencilState, D3D_DEPTH_STENCIL_DESC>;
+template class dx10StateCache<ID3DBlendState, D3D_BLEND_DESC>;
+#endif
