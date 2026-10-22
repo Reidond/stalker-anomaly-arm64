@@ -29,6 +29,12 @@ CSpaceRestrictionHolder::~CSpaceRestrictionHolder()
 
 void CSpaceRestrictionHolder::clear()
 {
+	// A composition holds a reference to the bridge of every restriction it is made of, and delete_data deletes the bridges one
+	// by one in key order. A composition deleted after a bridge it refers to released a reference on freed memory (MSVC's heap
+	// let that pass; libc++'s malloc reuses it). Let go of all the references while every bridge is alive.
+	for (auto& restriction : m_restrictions)
+		if (auto* composition = smart_cast<CSpaceRestrictionComposition*>(&restriction.second->object()))
+			composition->release_restrictions();
 	delete_data(m_restrictions);
 	m_default_out_restrictions = "";
 	m_default_in_restrictions = "";
