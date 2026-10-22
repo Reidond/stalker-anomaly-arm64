@@ -151,7 +151,9 @@ would need the renderer to reload them. With 4.2 GB of headroom at the preset th
   nothing renders, the sound emitters pause (xrSound's `AVAudioSession` handling), the cursor is released. `DidEnterForeground` resumes: the
   game was back at 59.7 fps in the next 10 s window after 15 s in Settings.
 - **Save on the way out**. The app's listener runs before the engine pauses and saves `ipad_autosave` (a normal save, in the Load menu),
-  running frames until the file is written: 0.07 s of wall time here, complete before `DidEnterBackground`. Not while loading, in the main menu,
+  running frames until the file is written: 0.07 to 0.10 s of wall time here, complete before `DidEnterBackground`. The engine is held active for
+  those frames (`xr_engine::HoldActive`): SDL sends a window-minimize before `WillEnterBackground`, the engine's `Frame()` pumps it, and without the
+  hold the engine stopped mid-save (seen once with Control Center). Not while loading, in the main menu,
   or within 30 s of the previous one. So a jetsam kill or a force quit of the backgrounded app loses nothing.
 - **Terminate**. `SDL_EVENT_TERMINATING` (rare: a suspended app is killed without being told) leaves the level through the engine's disconnect
   (`KERNEL:disconnect` and `quit`), for up to 4 s. A normal quit (the menu's Exit, the script's `quit`) goes the same way and was clean in every run.
