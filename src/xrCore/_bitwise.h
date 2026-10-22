@@ -79,6 +79,13 @@ IC u64 btwCount1(u64 v)
 }
 
 
+#ifdef XR_PLATFORM_APPLE
+// The bit trick below shifts by an exponent outside 0..31 for |x| < 1 and |x| >= 2^31 (undefined; x86 and arm64 both
+// reduce the count mod 32, and the masking at the end relies on that) and overflows for -0.0f. frintm + fcvtzs is two
+// instructions here and defined for every input (the conversion saturates).
+ICF int iFloor(float x) { return int(floorf(x)); }
+ICF int iCeil(float x) { return int(ceilf(x)); }
+#else
 ICF int iFloor(float x)
 {
 	int a = *(const int*)(&x);
@@ -118,6 +125,7 @@ ICF int iCeil(float x)
 	}
 	return r; /* r = (int)(ceil(f)) */
 }
+#endif // XR_PLATFORM_APPLE
 
 // Validity checks
 IC bool fis_gremlin(const float& f)
