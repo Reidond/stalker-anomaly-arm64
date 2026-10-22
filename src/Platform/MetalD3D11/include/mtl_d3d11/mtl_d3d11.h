@@ -84,6 +84,11 @@ struct Stats
     uint64_t deviceAllocatedBytes = 0; // MTLDevice.currentAllocatedSize
 };
 void GetStats(ID3D11DeviceContext* pContext, Stats* out);
+
+// Process-wide totals, for a frame-time log: the GPU time (start to end) of every command buffer completed so far, and the number
+// of frames presented. Differences over a window give the average GPU ms per frame.
+uint64_t GpuTimeNsTotal();
+uint64_t PresentCountTotal();
 void ResetFrameStats(ID3D11DeviceContext* pContext);
 
 // Native handles for tools and tests. Return unretained id<MTLTexture>/id<MTLBuffer>/id<MTLDevice>.
