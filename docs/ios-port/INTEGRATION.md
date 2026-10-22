@@ -248,6 +248,13 @@ Classes of bug to expect more of (all found by running the game, none by the com
 locals, `u32(-1)` enums used as indexes, container iteration order, explicit destructor calls followed by implicit ones,
 `unsigned long` constants compared with `int`.
 
+Those were found by walking the game. The crash sweep ([SANITIZERS.md](SANITIZERS.md)) runs the game under AddressSanitizer and
+UBSan through combat, inventory, PDA, trade and dialogs, an emission, anomalies, sleeping, a level change, save and load mid-fight, death
+and the game-over "Load", and quit from each of those states; it found and fixed 26 more, among them the same dangling-local bug in
+`spawn_supplies` (it is in the table there), a use after free when the game-over screen loads a save, negative Lua numbers
+converted to unsigned parameters (0 here, 0xFFFFFFFF with MSVC's x64 code) and a call whose arguments the PC evaluated right to left.
+Re-run `tools/sweep/run.sh smoke` after a change in the gameplay or engine code.
+
 ## Known issues by module
 
 - **Renderer R4 / Metal shim (M2).**

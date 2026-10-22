@@ -513,7 +513,8 @@ u32 CUILines::GetColorFromText(const xr_string& str) const
 	if (begin == npos || end == npos)
 		return m_dwTextColor;
 	// try default color
-	if (npos != str.find("%c[default]", begin, end - begin))
+	// (the length passed to find is the needle's: the token's length would read past the literal)
+	if (0 == str.compare(begin, end - begin + 1, "%c[default]"))
 		return m_dwTextColor;
 
 	// Try predefined in XML colors

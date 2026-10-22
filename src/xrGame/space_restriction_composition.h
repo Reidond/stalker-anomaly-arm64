@@ -46,6 +46,8 @@ public:
 	IC virtual bool shape() const;
 	IC virtual bool default_restrictor() const;
 	virtual Fsphere sphere() const;
+	// drops the references to the restrictions this one is made of (the holder does it before it deletes any of them)
+	void release_restrictions() { m_restrictions.clear(); }
 #ifdef DEBUG
 				void		test_correctness				();
 #endif

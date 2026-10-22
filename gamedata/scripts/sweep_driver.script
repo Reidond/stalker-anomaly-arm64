@@ -1,0 +1,776 @@
+--[[
+	Crash-sweep driver (docs/ios-port/SANITIZERS.md, tools/sweep/).
+
+	Inert unless the environment sets ANOMALY_SWEEP, e.g. ANOMALY_SWEEP=smoke (tools/sweep/run.sh does). axr_main calls
+	on_game_start() of every script; this one then drives the game from actor_on_update: it spawns enemies and items,
+	shoots, takes damage, uses medkits, opens the inventory, PDA, trade and talk dialogs, forces an emission, sleeps,
+	changes level, saves, dies and reloads, and quits, logging "[sweep] ..." lines. Every step runs under pcall, so a Lua
+	error of the driver is a "[sweep] FAIL" line and the run goes on; a crash of the engine is the finding.
+
+	Plans (ANOMALY_SWEEP=<plan>): a plan is a list of phases. A phase ends by asking for a reload of a save or for the
+	end of the run; the progress (plan name and next phase) lives in <appdata>/sweep_state.txt so it survives the reload
+	(the Lua state is rebuilt on every load). Delete the file to start a plan over.
+
+	Needs the engine's debug commands: start the app with -dbg (jump_to_level, g_god, run_string, ...). The driver itself
+	only needs the Lua exports, not the console commands.
+--]]
+
+local plan_name = nil
+local state_file = nil
+local co = nil            -- the running phase (a coroutine resumed once per actor update)
+local phase_index = 1
+local started_at = 0
+
+-- printf of _g only substitutes %s
+local function say(fmt, ...)
+	printf("[sweep] [t=%s f=%s] " .. fmt:gsub("%%d", "%%s"), time_global(), device().frame, ...)
+	get_console():execute("flush") -- the engine log is buffered; a hung run would otherwise show nothing
+end
+
+-- progress file ---------------------------------------------------------------------------------------------------
+local function state_path()
+	if not state_file then
+		state_file = getFS():update_path("$app_data_root$", "") .. "sweep_state.txt"
+	end
+	return state_file
+end
+
+local function read_state()
+	local f = io.open(state_path(), "r")
+	if not f then
+		return nil, 1
+	end
+	local name, idx = f:read("*l"), tonumber(f:read("*l"))
+	f:close()
+	return name, idx or 1
+end
+
+local function write_state(name, idx)
+	local f = io.open(state_path(), "w")
+	if f then
+		f:write(name, "\n", tostring(idx), "\n")
+		f:close()
+	end
+end
+
+-- helpers (usable from a phase, i.e. from inside the coroutine) -----------------------------------------------------
+local function pause(ms)
+	local t = time_global() + ms
+	while time_global() < t do
+		coroutine.yield()
+	end
+end
+
+local function wait_for(what, timeout_ms, pred)
+	local t = time_global() + timeout_ms
+	while time_global() < t do
+		local ok, res = pcall(pred)
+		if ok and res then
+			return true
+		end
+		coroutine.yield()
+	end
+	say("TIMEOUT waiting for %s", what)
+	return false
+end
+
+local function try(name, fn, ...)
+	local ok, err = pcall(fn, ...)
+	if ok then
+		say("ok   %s", name)
+	else
+		say("FAIL %s: %s", name, tostring(err))
+	end
+	return ok, err
+end
+
+local function give(section, count, ammo)
+	for _ = 1, count or 1 do
+		if ammo then
+			alife_create_item(section, db.actor, { ammo = ammo })
+		else
+			alife_create_item(section, db.actor)
+		end
+	end
+end
+
+-- a spot `dist` metres from the actor in direction `ang` (radians, 0 = +z), walkable
+local function spot(dist, ang)
+	local dir = vector():set(math.sin(ang), 0, math.cos(ang))
+	local lvid = level.vertex_in_direction(db.actor:level_vertex_id(), dir, dist)
+	return level.vertex_position(lvid), lvid
+end
+
+-- the transition spot of a level is next to its level changer; a fight there ends in a level change (autosave, disconnect)
+local function move_inland(dist)
+	local best, best_d = nil, 0
+	for i = 0, 7 do
+		local pos, lvid = spot(dist, i * 0.785)
+		local d = db.actor:position():distance_to(pos)
+		if d > best_d then
+			best, best_d = pos, d
+		end
+	end
+	if best then
+		db.actor:set_actor_position(best)
+		say("moved %s m inland", tostring(math.floor(best_d)))
+	end
+end
+
+local function spawn_near(section, dist, ang)
+	local pos, lvid = spot(dist, ang)
+	local se = alife_create(section, pos, lvid, db.actor:game_vertex_id())
+	say("spawn %s -> %s", section, se and tostring(se.id) or "nil")
+	return se
+end
+
+local function god(on)
+	get_console():execute("g_god " .. (on and "on" or "off"))
+end
+
+local function actor_hit(power, kind)
+	god(false)
+	local h = hit()
+	h.type = kind or hit.wound
+	h.power = power
+	h.impulse = 0
+	h.direction = vector():set(0, 0, 1)
+	h.draftsman = db.actor
+	db.actor:hit(h)
+	god(true)
+end
+
+local function press_dik(dik, ms)
+	level.press_action(dik)
+	local t = time_global() + (ms or 100)
+	while time_global() < t do
+		level.hold_action(dik)
+		coroutine.yield()
+	end
+	level.release_action(dik)
+end
+
+local function press(action, ms)
+	press_dik(bind_to_dik(action), ms)
+end
+
+-- Which dialogs are up, from the callbacks the UI scripts send. (CUIActorMenu:IsShown() is false for the inventory even when it is
+-- showing, so it is not used.) Escape with nothing open is the pause menu, which stops the level and this driver's tick: it is
+-- only sent when a dialog is known to be open.
+local shown = {}
+local function gui_on_show(name) shown[name] = true end
+local function gui_on_hide(name) shown[name] = nil end
+
+local function ui_open()
+	if next(shown) ~= nil then
+		return true
+	end
+	return db.actor:is_talking()
+end
+
+local function close_ui(what)
+	if not ui_open() then
+		say("no dialog open to close (%s)", what)
+		return
+	end
+	try("close " .. what, function() press_dik(DIK_keys.DIK_ESCAPE, 150) end)
+	pause(1500)
+	if ui_open() then
+		-- the dialog did not take the key: the way a script closes the PDA and the actor menu
+		try("hide " .. what, function()
+			if ActorMenu.get_pda_menu():IsShown() then ActorMenu.get_pda_menu():HideDialog() end
+			if ActorMenu.get_actor_menu():IsShown() then ActorMenu.get_actor_menu():HideDialog() end
+		end)
+		pause(1500)
+	end
+	say("%s closed: %s", what, tostring(not ui_open()))
+end
+
+local function face(obj)
+	local d = vector():set(obj:position()):sub(db.actor:position())
+	d.y = 0
+	db.actor:set_actor_direction(d:getH())
+end
+
+local function level_is(name)
+	return level.present() and db.actor ~= nil and level.name() == name
+end
+
+-- true once the actor stands in a running level (also the first frames of a fresh game)
+local function actor_ready()
+	return level.present() and db.actor ~= nil and db.actor:alive() and db.actor:level_vertex_id() ~= nil
+end
+
+-- a loaded save can come back with input and HUD still disabled by the script that saved it
+local function enable_ui()
+	pcall(function() level.enable_input() end)
+	pcall(function() level.show_indicators() end)
+end
+
+-- after the actor died the game plays its game-over tutorial; its stop callback switches the main menu on (the player sees the
+-- "Load last save" button then). A load during it would be followed by that callback.
+local function finish_game_over()
+	pause(5000)
+	try("stop game-over tutorial", function() game.stop_tutorial() end)
+	-- no pause here: with the menu on, the level (and this driver's tick) stands still; reload() is the "Load last save" button
+end
+
+local function reload(save)
+	say("RELOAD %s", save)
+	-- what the game-over screen's "Load" does (ui_main_menu LoadLastSave): the menu goes off, then the save loads
+	get_console():execute("main_menu off")
+	if save == "last" then
+		get_console():execute("load_last_save")
+	else
+		get_console():execute("load " .. save)
+	end
+end
+
+local function finish()
+	say("DONE plan %s", plan_name)
+	write_state(plan_name, 1)
+	get_console():execute("quit")
+end
+
+-- scenario pieces -------------------------------------------------------------------------------------------------
+
+local function gear_up()
+	try("gear", function()
+		give("wpn_pm", 1)
+		give("ammo_9x18_fmj", 3, 30)
+		give("wpn_ak74u", 1)
+		give("ammo_5.45x39_fmj", 3, 30)
+		give("medkit", 3)
+		give("bandage", 3)
+		give("bread", 2)
+		give("vodka", 1)
+		give("wpn_binoc", 1)
+		give("detector_simple", 1)
+		give("repair_kit_1", 1)
+		give("guide_wpn_1", 1)
+		give("stalker_outfit", 1)
+	end)
+	pause(1500)
+end
+
+local function arm()
+	try("arm", function()
+		local wpn = db.actor:object("wpn_ak74u") or db.actor:object("wpn_pm")
+		if wpn then
+			db.actor:make_item_active(wpn)
+		end
+	end)
+	pause(2500)
+end
+
+local function fire_burst(target, ms)
+	pcall(face, target)
+	local dik = bind_to_dik(key_bindings.kWPN_FIRE)
+	level.press_action(dik)
+	local t = time_global() + ms
+	while time_global() < t do
+		pcall(face, target)
+		level.hold_action(dik)
+		coroutine.yield()
+	end
+	level.release_action(dik)
+end
+
+local function combat()
+	say("-- combat")
+	god(true) -- the enemies shoot for real, the actor does not die before the driver says so
+	local enemies = {}
+	for i, sec in ipairs({ "sim_default_bandit_0", "sim_default_bandit_1", "boar_normal", "dog_normal" }) do
+		local ok, se = pcall(spawn_near, sec, 12 + i * 2, i * 1.3)
+		if ok and se then
+			enemies[#enemies + 1] = se.id
+		end
+	end
+	pause(4000)
+	try("hostile", function()
+		for _, id in ipairs(enemies) do
+			local o = level.object_by_id(id)
+			if o and o:alive() and IsStalker(o) then
+				o:set_relation(game_object.enemy, db.actor)
+			end
+		end
+	end)
+	for round = 1, 3 do
+		for _, id in ipairs(enemies) do
+			local o = level.object_by_id(id)
+			if o and o:alive() then
+				fire_burst(o, 1200)
+				pcall(function() press(key_bindings.kWPN_RELOAD, 100) end)
+				pause(800)
+			end
+		end
+		try("hit", actor_hit, 0.08)
+		pause(800)
+	end
+	try("bandage", function() db.actor:eat(db.actor:object("bandage")) end)
+	pause(1200)
+	try("medkit", function() db.actor:eat(db.actor:object("medkit")) end)
+	pause(1200)
+	try("kill_enemies", function()
+		for _, id in ipairs(enemies) do
+			local o = level.object_by_id(id)
+			if o and o:alive() then
+				o:kill(db.actor)
+			end
+		end
+	end)
+	pause(2500)
+	say("health after combat %s", tostring(db.actor.health))
+end
+
+local function inventory()
+	say("-- inventory")
+	-- the key is dropped while the game is still settling after a load; ask again a few times
+	for attempt = 1, 4 do
+		try("open inventory", function() press(key_bindings.kINVENTORY, 150) end)
+		if wait_for("the inventory", 6000, ui_open) then break end
+	end
+	say("inventory open: %s", tostring(ui_open()))
+	pause(1500)
+	try("slots", function()
+		local wpn = db.actor:object("wpn_ak74u")
+		if wpn then db.actor:move_to_slot(wpn, 2) end
+		local pm = db.actor:object("wpn_pm")
+		if pm then db.actor:move_to_slot(pm, 1) end
+		local outfit = db.actor:object("stalker_outfit")
+		if outfit then db.actor:move_to_slot(outfit, 7) end
+		local det = db.actor:object("detector_simple")
+		if det then db.actor:move_to_slot(det, 9) end
+	end)
+	pause(1500)
+	try("belt/ruck", function()
+		local m = db.actor:object("medkit")
+		if m then
+			db.actor:move_to_belt(m)
+			db.actor:move_to_ruck(m)
+		end
+	end)
+	try("condition", function()
+		local w = db.actor:object("wpn_pm")
+		if w then w:set_condition(0.4) end
+	end)
+	try("repair", function()
+		local kit = db.actor:object("repair_kit_1")
+		if kit then db.actor:eat(kit) end
+	end)
+	try("eat/use", function()
+		db.actor:eat(db.actor:object("bread"))
+		db.actor:eat(db.actor:object("vodka"))
+	end)
+	try("drop", function()
+		local b = db.actor:object("bread")
+		if b then db.actor:drop_item(b) end
+		local c = db.actor:object("medkit")
+		if c then db.actor:drop_item(c) end
+	end)
+	pause(1500)
+	try("iterate", function()
+		local n = 0
+		db.actor:iterate_inventory(function() n = n + 1 end, db.actor)
+		say("inventory items: %d", n)
+	end)
+	close_ui("inventory")
+end
+
+local function pda()
+	say("-- pda")
+	try("pda item", function() give("device_pda", 1) end)
+	pause(1000)
+	-- the PDA is opened like the engine does for its key; its tabs are switched through the PDA menu object
+	try("open pda", function() ActorMenu.get_pda_menu():ShowDialog(true) end)
+	pause(2500)
+	say("pda open: %s", tostring(ui_open()))
+	for _, tab in ipairs({ "eptTasks", "eptMap", "eptContacts", "eptLogs", "eptRanking", "eptRelations", "eptEncyclopedia", "eptRadio", "eptTasks" }) do
+		try("pda tab " .. tab, function() ActorMenu.get_pda_menu():SetActiveSubdialog(tab) end)
+		pause(1800)
+	end
+	pause(1500)
+	close_ui("pda")
+end
+
+local function trade()
+	say("-- trade/dialog")
+	local trader = nil
+	try("find trader", function()
+		trader = get_story_object("esc_m_trader")
+		say("trader %s", trader and trader:name() or "nil")
+	end)
+	if trader then
+		try("goto trader", function()
+			db.actor:set_actor_position(trader:position())
+		end)
+		pause(4000)
+		try("talk", function()
+			trader = get_story_object("esc_m_trader")
+			db.actor:run_talk_dialog(trader, false)
+		end)
+		pause(3500)
+		say("talk open: %s", tostring(ui_open()))
+		close_ui("talk")
+		try("trade", function()
+			trader = get_story_object("esc_m_trader")
+			db.actor:start_trade(trader)
+		end)
+		pause(3500)
+		say("trade open: %s", tostring(ui_open()))
+		close_ui("trade")
+	end
+end
+
+local function surge()
+	say("-- emission")
+	try("start surge", function()
+		local sm = surge_manager.get_surge_manager()
+		sm.started = false
+		sm:start(true)
+		say("surge started=%s", tostring(sm.started))
+	end)
+	try("time factor", function() level.set_time_factor(20) end)
+	pause(15000)
+	try("psi storm", function()
+		local pm = psi_storm_manager.get_psi_storm_manager()
+		pm:start(true)
+	end)
+	pause(8000)
+	try("end surge", function()
+		local sm = surge_manager.get_surge_manager()
+		if sm.started then sm:end_surge(true) end
+		level.set_time_factor(1)
+	end)
+	pause(3000)
+end
+
+local function surge_start_only()
+	try("start surge", function()
+		local sm = surge_manager.get_surge_manager()
+		sm.started = false
+		sm:start(true)
+	end)
+	try("time factor", function() level.set_time_factor(20) end)
+end
+
+local function anomalies()
+	say("-- anomalies / artefacts")
+	god(true)
+	try("artefact", function()
+		give("af_medusa", 1)
+		give("af_blood", 1)
+		give("af_vyvert", 1)
+	end)
+	-- the anomaly zones of the level (a zone made by alife():create has no shape, and CCustomZone asserts on that)
+	local n = 0
+	for name, binder in pairs(db.anomaly_by_name or {}) do
+		n = n + 1
+		if n <= 3 then
+			try("respawn artefacts in " .. tostring(name), function() binder:respawn_artefacts_and_replace_anomaly_zone() end)
+			try("walk into " .. tostring(name), function() db.actor:set_actor_position(binder.object:position()) end)
+			pause(6000)
+		end
+	end
+	say("anomaly zones on the level: %d", n)
+	try("belt artefact", function()
+		local af = db.actor:object("af_medusa")
+		if af then db.actor:move_to_belt(af) end
+	end)
+	pause(3000)
+end
+
+local function sleeping()
+	say("-- sleep / wait")
+	try("sleep", function()
+		level.set_time_factor(60)
+		actor_status_sleep.force_sleep()
+	end)
+	pause(10000)
+	try("restore time", function() level.set_time_factor(1) end)
+	pause(1500)
+end
+
+local function save_here(name)
+	try("save " .. name, function()
+		get_console():execute("save " .. name)
+	end)
+	pause(4000)
+end
+
+-- phases ----------------------------------------------------------------------------------------------------------
+-- A phase gets called inside the coroutine and returns what to do next: nothing (go on with the next phase in this
+-- session), {reload = "<save>"} or {quit = true}.
+local phases = {
+	smoke = {
+		function() -- fresh Cordon: gear, combat, inventory, a mid-combat save, then death and reload
+			if not wait_for("the Cordon", 240000, function() return level_is("l01_escape") end) then return { quit = true } end
+			pause(8000)
+			gear_up()
+			arm()
+			combat()
+			inventory()
+			try("spawn for save", function()
+				spawn_near("sim_default_bandit_2", 14, 0.5)
+				spawn_near("boar_normal", 16, 2.0)
+			end)
+			pause(3000)
+			save_here("sweep_smoke")
+			try("die", function() god(false); db.actor:kill(db.actor) end)
+			finish_game_over()
+			return { reload = "last" }
+		end,
+		function() -- after the reload: PDA, trade, a level change, one more save, then reload that one too
+			if not wait_for("the reload", 240000, function() return actor_ready() and level_is("l01_escape") end) then return { quit = true } end
+			enable_ui()
+			pause(6000)
+			say("reloaded, health %s", tostring(db.actor.health))
+			pda()
+			trade()
+			try("to garbage", function()
+				get_console():execute("jump_to_level l02_garbage")
+			end)
+			return { next = true } -- the level change rebuilds the Lua state; phase 3 starts at the first update there
+		end,
+		function() -- in the Garbage
+			if not wait_for("the Garbage", 240000, function() return level_is("l02_garbage") end) then return { quit = true } end
+			enable_ui()
+			pause(8000)
+			say("in garbage")
+			try("inland", function() move_inland(120) end)
+			pause(4000)
+			gear_up()
+			arm()
+			combat()
+			save_here("sweep_smoke2")
+			return { quit = true }
+		end,
+	},
+	-- a fresh game: wait for the Cordon, take the base save every other plan starts from
+	newgame = {
+		function()
+			if not wait_for("the Cordon", 300000, function() return level_is("l01_escape") end) then return { quit = true } end
+			pause(10000)
+			save_here("sweep_base")
+			return { quit = true }
+		end,
+	},
+	-- one scenario each (run on a loaded save or a fresh game)
+	combat = { function() wait_for("actor", 240000, actor_ready); enable_ui(); pause(5000); gear_up(); arm(); combat(); return { quit = true } end },
+	inventory = { function() wait_for("actor", 240000, actor_ready); enable_ui(); pause(12000); gear_up(); inventory(); return { quit = true } end },
+	pda = { function() wait_for("actor", 240000, actor_ready); enable_ui(); pause(5000); pda(); return { quit = true } end },
+	trade = { function() wait_for("actor", 240000, actor_ready); enable_ui(); pause(5000); trade(); return { quit = true } end },
+	surge = { function() wait_for("actor", 240000, actor_ready); enable_ui(); pause(5000); surge(); return { quit = true } end },
+	anomalies = { function() wait_for("actor", 240000, actor_ready); enable_ui(); pause(5000); gear_up(); anomalies(); return { quit = true } end },
+	sleep = { function() wait_for("actor", 240000, actor_ready); enable_ui(); pause(5000); sleeping(); return { quit = true } end },
+	-- Cordon -> Garbage -> Cordon; every level change rebuilds the Lua state, so each hop is a phase
+	transition = {
+		function()
+			wait_for("actor", 240000, actor_ready); enable_ui()
+			pause(6000)
+			get_console():execute("jump_to_level l02_garbage")
+			return { next = true }
+		end,
+		function()
+			if not wait_for("the Garbage", 240000, function() return level_is("l02_garbage") end) then return { quit = true } end
+			enable_ui()
+			pause(10000)
+			say("in garbage")
+			get_console():execute("jump_to_level l01_escape")
+			return { next = true }
+		end,
+		function()
+			if not wait_for("the Cordon", 240000, function() return level_is("l01_escape") end) then return { quit = true } end
+			enable_ui()
+			pause(10000)
+			say("back in the Cordon")
+			return { quit = true }
+		end,
+	},
+	-- die, then load the last save the way the game-over screen's "Load last save" does
+	die_reload = {
+		function()
+			wait_for("actor", 240000, actor_ready); enable_ui()
+			pause(8000)
+			save_here("sweep_die")
+			try("die", function() god(false); db.actor:kill(db.actor) end)
+			finish_game_over()
+			return { reload = "last" }
+		end,
+		function()
+			wait_for("the reload", 240000, actor_ready); enable_ui()
+			pause(8000)
+			say("alive again: %s", tostring(db.actor:alive()))
+			return { quit = true }
+		end,
+	},
+	-- quit from a state: reach it on sweep_base, then ask the engine to quit with the state still up
+	quit_level = { function() wait_for("actor", 240000, actor_ready); enable_ui(); pause(3000); return { quit = true } end },
+	quit_inventory = {
+		function()
+			wait_for("actor", 240000, actor_ready); enable_ui()
+			pause(12000)
+			for attempt = 1, 4 do
+				try("open inventory", function() press(key_bindings.kINVENTORY, 150) end)
+				if wait_for("the inventory", 6000, ui_open) then break end
+			end
+			pause(2000)
+			say("inventory open: %s", tostring(ui_open()))
+			return { quit = true }
+		end,
+	},
+	quit_pda = {
+		function()
+			wait_for("actor", 240000, actor_ready); enable_ui()
+			pause(5000)
+			try("give pda", function() give("device_pda", 1) end)
+			try("open pda", function() ActorMenu.get_pda_menu():ShowDialog(true) end)
+			pause(3000)
+			say("pda open: %s", tostring(ui_open()))
+			return { quit = true }
+		end,
+	},
+	quit_dialog = {
+		function()
+			wait_for("actor", 240000, actor_ready); enable_ui()
+			pause(5000)
+			local trader = get_story_object("esc_m_trader")
+			db.actor:set_actor_position(trader:position())
+			pause(4000)
+			trader = get_story_object("esc_m_trader")
+			try("talk", function() db.actor:run_talk_dialog(trader, false) end)
+			pause(4000)
+			say("talk open: %s", tostring(ui_open()))
+			return { quit = true }
+		end,
+	},
+	quit_combat = {
+		function()
+			wait_for("actor", 240000, actor_ready); enable_ui()
+			pause(5000)
+			god(true)
+			gear_up()
+			arm()
+			for i, sec in ipairs({ "sim_default_bandit_0", "sim_default_bandit_1", "boar_normal" }) do
+				pcall(spawn_near, sec, 10 + i * 2, i * 1.3)
+			end
+			pause(6000)
+			return { quit = true }
+		end,
+	},
+	quit_dead = { function() wait_for("actor", 240000, actor_ready); enable_ui(); pause(5000); try("die", function() god(false); db.actor:kill(db.actor) end); pause(6000); return { quit = true } end },
+	quit_surge = { function() wait_for("actor", 240000, actor_ready); enable_ui(); pause(5000); surge_start_only(); pause(8000); return { quit = true } end },
+	saveload = {
+		function()
+			wait_for("actor", 240000, actor_ready); enable_ui()
+			pause(5000)
+			gear_up()
+			arm()
+			try("spawn", function()
+				spawn_near("sim_default_bandit_0", 12, 0.5)
+				spawn_near("boar_normal", 14, 2.0)
+			end)
+			pause(3000)
+			save_here("sweep_mid_combat")
+			return { reload = "sweep_mid_combat" }
+		end,
+		function()
+			wait_for("the reload", 240000, actor_ready); enable_ui()
+			pause(8000)
+			combat()
+			return { quit = true }
+		end,
+	},
+}
+
+-- the driver ------------------------------------------------------------------------------------------------------
+local function start_phase()
+	local list = phases[plan_name]
+	if not list or not list[phase_index] then
+		say("no phase %s/%d, quitting", tostring(plan_name), phase_index)
+		finish()
+		return
+	end
+	say("PHASE %s #%d", plan_name, phase_index)
+	co = coroutine.create(list[phase_index])
+	started_at = time_global()
+end
+
+local ticks = 0
+local tick_frame = -1
+local function on_update()
+	-- one step per frame, whichever tick source calls (a reload can leave an older registration alive)
+	local frame = device().frame
+	if frame == tick_frame then
+		return
+	end
+	tick_frame = frame
+	ticks = ticks + 1
+	if ticks % 600 == 1 then
+		say("tick %d (co %s)", ticks, co and coroutine.status(co) or "none")
+	end
+	if not co then
+		return
+	end
+	local ok, res = coroutine.resume(co)
+	if not ok then
+		say("FAIL phase %s #%d: %s", plan_name, phase_index, tostring(res))
+		co = nil
+		finish()
+		return
+	end
+	if coroutine.status(co) == "dead" then
+		co = nil
+		if type(res) == "table" and res.reload then
+			write_state(plan_name, phase_index + 1)
+			reload(res.reload)
+		elseif type(res) == "table" and res.next then
+			write_state(plan_name, phase_index + 1) -- carried on by the next first update (a level change)
+		elseif type(res) == "table" and res.quit then
+			finish()
+		else
+			phase_index = phase_index + 1
+			start_phase()
+		end
+	end
+end
+
+-- level.add_call runs every frame of the level, also while the actor is dead (actor_on_update does not)
+local function register_tick()
+	level.add_call(function() on_update() return false end, function() end)
+end
+
+local function on_first_update()
+	-- the first game starts at fake_start (the faction dialog) and changes level; a load comes here too
+	if co then
+		return
+	end
+	local saved_plan, saved_index = read_state()
+	if saved_plan == plan_name then
+		phase_index = saved_index
+	else
+		phase_index = 1
+	end
+	say("plan %s, phase %d", plan_name, phase_index)
+	register_tick()
+	start_phase()
+end
+
+function on_game_start()
+	plan_name = os.getenv("ANOMALY_SWEEP")
+	if not plan_name or plan_name == "" then
+		return
+	end
+	say("driver armed: plan %s", plan_name)
+	RegisterScriptCallback("actor_on_first_update", on_first_update)
+	RegisterScriptCallback("GUI_on_show", gui_on_show)
+	RegisterScriptCallback("GUI_on_hide", gui_on_hide)
+	if plan_name == "keytest" then
+		RegisterScriptCallback("on_before_key_press", function(dik, bind, dis, flags)
+			if dik == 23 or dik == 25 then say("on_before_key_press dik=%s bind=%s dis=%s ret=%s", dik, bind, tostring(dis), tostring(flags.ret_value)) end
+		end)
+		RegisterScriptCallback("ActorMenu_on_before_init_mode", function(mode, flags, obj)
+			say("ActorMenu_on_before_init_mode %s ret=%s", tostring(mode), tostring(flags.ret))
+		end)
+	end
+end

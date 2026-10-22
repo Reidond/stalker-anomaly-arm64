@@ -52,6 +52,12 @@ namespace luabind {
         new(r) detail::class_registry(L);
         lua_settable(L, LUA_REGISTRYINDEX);
 
+        // A thread of its own, only for releasing registry slots and weak references (see ref.cpp, weak_ref.cpp): a reference is
+        // made from whatever coroutine the script runs in, and that coroutine can be collected long before the reference is
+        // released. The main thread is no substitute: while it runs a coroutine its stack is not in a state to push onto.
+        lua_newthread(L);
+        lua_setfield(L, LUA_REGISTRYINDEX, "__luabind_release_thread");
+
         // add functions (class, cast etc...)
         lua_pushstring(L, "class");
         lua_pushcclosure(L, detail::create_class::stage1, 0);

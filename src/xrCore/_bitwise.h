@@ -79,12 +79,11 @@ IC u64 btwCount1(u64 v)
 }
 
 
-#if defined(XR_PLATFORM_APPLE)
-// The bit tricks below shift by up to 158 bits (and by negative counts), which only x86 defines (it masks the count). Clang
-// folds a constant argument to poison on arm64: color_argb_f(1.f, 1.f, 1.f, 1.f) came out as 0x0000ffff, and every progress
-// bar, light flicker and other UI colour built from floats was wrong.
+#ifdef XR_PLATFORM_APPLE
+// The bit trick below shifts by an exponent outside 0..31 for |x| < 1 and |x| >= 2^31 (undefined; x86 and arm64 both
+// reduce the count mod 32, and the masking at the end relies on that) and overflows for -0.0f. frintm + fcvtzs is two
+// instructions here and defined for every input (the conversion saturates).
 ICF int iFloor(float x) { return int(floorf(x)); }
-
 ICF int iCeil(float x) { return int(ceilf(x)); }
 #else
 ICF int iFloor(float x)
@@ -126,7 +125,7 @@ ICF int iCeil(float x)
 	}
 	return r; /* r = (int)(ceil(f)) */
 }
-#endif
+#endif // XR_PLATFORM_APPLE
 
 // Validity checks
 IC bool fis_gremlin(const float& f)
@@ -143,7 +142,12 @@ IC bool fis_denormal(const float& f)
 // Approximated calculations
 IC float apx_InvSqrt(const float& n)
 {
+#ifdef XR_PLATFORM_APPLE
+	// `long` is 64 bits here: the load below read four bytes past the float and the shift moved garbage into the result
+	int tmp = (int(0xBE800000) - *(const int*)&n) >> 1;
+#else
 	long tmp = (long(0xBE800000) - *(long*)&n) >> 1;
+#endif
 	float y = *(float*)&tmp;
 	return y * (1.47f - 0.47f * n * y * y);
 }

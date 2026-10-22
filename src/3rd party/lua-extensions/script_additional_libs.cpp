@@ -157,6 +157,11 @@ int str_trim(lua_State *L)
     const char *end;
     size_t      size;
     front = luaL_checklstring(L, 1, &size);
+    if (!size) // &front[size - 1] would point before the string
+    {
+        lua_pushlstring(L, front, 0);
+        return 1;
+    }
     end = &front[size - 1];
     for (; size && isspace(*front); size--, front++)
         ;
@@ -172,6 +177,11 @@ int str_trim_l(lua_State *L)
     const char *end;
     size_t      size;
     front = luaL_checklstring(L, 1, &size);
+    if (!size) // &front[size - 1] would point before the string
+    {
+        lua_pushlstring(L, front, 0);
+        return 1;
+    }
     end = &front[size - 1];
     for (; size && isspace(*front); size--, front++)
         ;
@@ -185,6 +195,11 @@ int str_trim_r(lua_State *L)
     const char *end;
     size_t      size;
     front = luaL_checklstring(L, 1, &size);
+    if (!size) // &front[size - 1] would point before the string
+    {
+        lua_pushlstring(L, front, 0);
+        return 1;
+    }
     end = &front[size - 1];
     for (; size && isspace(*end); size--, end--)
         ;

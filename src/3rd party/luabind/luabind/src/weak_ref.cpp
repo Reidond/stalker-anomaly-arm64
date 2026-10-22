@@ -95,8 +95,16 @@ namespace luabind {
         impl(lua_State* s, int index)
             : count(0)
             , state(s)
+            , release_state(s)
             , ref(0)
         {
+            // ~impl runs when the wrapped object is destroyed, which can be long after the coroutine `s` was collected (or
+            // while the main state closes): it has to use a state that outlives the reference, luabind::open()'s release thread.
+            lua_getfield(s, LUA_REGISTRYINDEX, "__luabind_release_thread");
+            if (lua_State* release_thread = lua_tothread(s, -1))
+                release_state = release_thread;
+            lua_pop(s, 1);
+
             lua_pushvalue(s, index);
             get_weak_table(s);
 
@@ -125,16 +133,19 @@ namespace luabind {
 
         ~impl()
         {
-            get_weak_table(state);
-            lua_rawgeti(state, -1, freelist_ref);
-            lua_rawseti(state, -2, ref);
-            lua_pushnumber(state, (lua_Number)ref);
-            lua_rawseti(state, -2, freelist_ref);
-            lua_pop(state, 1);
+            lua_State* L = release_state;
+            lua_checkstack(L, 4);
+            get_weak_table(L);
+            lua_rawgeti(L, -1, freelist_ref);
+            lua_rawseti(L, -2, ref);
+            lua_pushnumber(L, (lua_Number)ref);
+            lua_rawseti(L, -2, freelist_ref);
+            lua_pop(L, 1);
         }
 
         int count;
         lua_State* state;
+        lua_State* release_state;
         int ref;
     };
 

@@ -32,7 +32,8 @@ void FlushLog()
 {
 	PROF_EVENT();
 
-	if (!no_log)
+	// the freeze watchdog thread calls this too, also after the file system has been shut down
+	if (!no_log && xr_FS)
 	{
 		PROF_EVENT("Flushing");
 		logCS.Enter();
@@ -123,7 +124,9 @@ void AddOne(const char* split)
 		static shared_str last_str;
 		static int items_count;
 
-		if (last_str.equal(temp))
+		// (LogFile is empty after CloseLog() / clear_log: erase(end() - 1) on it moved the end below the begin and the next
+		// push_back crashed, which is how a quit that logged the same line twice died)
+		if (!LogFile.empty() && last_str.equal(temp))
 		{
 			xr_string tmp = temp.c_str();
 

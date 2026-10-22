@@ -18,6 +18,42 @@ if(NOT CMAKE_OSX_ARCHITECTURES STREQUAL "arm64")
     message(FATAL_ERROR "Only arm64 is supported (got '${CMAKE_OSX_ARCHITECTURES}'); use a preset from CMakePresets.json.")
 endif()
 
+# Sanitizers (macOS only), applied to every target defined after this file: the engine modules, the third-party libraries
+# built from external/, the shell and the `anomaly` app. Usage and the suppression files: docs/ios-port/SANITIZERS.md.
+#   cmake --preset macos-arm64-asan            # = -DANOMALY_SANITIZE="address;undefined" on the RelWithDebInfo build
+set(ANOMALY_SANITIZE "" CACHE STRING "Sanitizers to build with, ';'-separated: address, undefined, thread (macOS only)")
+set(ANOMALY_SANITIZE_COMPILE_FLAGS "")
+set(ANOMALY_SANITIZE_LINK_FLAGS "")
+if(ANOMALY_SANITIZE)
+    if(ANOMALY_IOS)
+        message(FATAL_ERROR "ANOMALY_SANITIZE is for the macOS build; the iOS Simulator is not used and the device build is not sanitized.")
+    endif()
+    string(REPLACE ";" "," anomaly_sanitize_list "${ANOMALY_SANITIZE}")
+    set(ANOMALY_SANITIZE_COMPILE_FLAGS "-fsanitize=${anomaly_sanitize_list}" -fno-omit-frame-pointer)
+    set(ANOMALY_SANITIZE_LINK_FLAGS "-fsanitize=${anomaly_sanitize_list}")
+    if("address" IN_LIST ANOMALY_SANITIZE)
+        # let ASAN_OPTIONS=halt_on_error=0 keep a scenario going after the first report
+        list(APPEND ANOMALY_SANITIZE_COMPILE_FLAGS -fsanitize-recover=address)
+    endif()
+    if("undefined" IN_LIST ANOMALY_SANITIZE)
+        # vptr: the engine casts through unrelated bases on purpose (CObject <-> CGameObject mixins, luabind) and has
+        # no use for the RTTI-based check. function: luabind and the script exports call through casted pointers.
+        # Both are noise, not bugs. alignment: the engine reads packed file data through typed pointers and nests structs in
+        # `#pragma pack` records, ~90% of the first run's reports; arm64 loads and stores do not care, so it is off unless
+        # "alignment" is in ANOMALY_SANITIZE. Everything else in `undefined` stays on and prints instead of aborting.
+        list(APPEND ANOMALY_SANITIZE_COMPILE_FLAGS -fno-sanitize=vptr,function -fsanitize-recover=undefined)
+        # float-cast-overflow is not part of `undefined` but is the check for the x86-64 -> arm64 change in float to unsigned
+        # conversion: out of range, MSVC's cvttsd2si wraps (-1.0 -> 0xFFFFFFFF), arm64's fcvtzu saturates (-1.0 -> 0).
+        list(APPEND ANOMALY_SANITIZE_COMPILE_FLAGS -fsanitize=float-cast-overflow)
+        if(NOT "alignment" IN_LIST ANOMALY_SANITIZE)
+            list(APPEND ANOMALY_SANITIZE_COMPILE_FLAGS -fno-sanitize=alignment)
+        endif()
+    endif()
+    message(STATUS "Sanitizers: ${anomaly_sanitize_list}")
+    add_compile_options(${ANOMALY_SANITIZE_COMPILE_FLAGS})
+    add_link_options(${ANOMALY_SANITIZE_LINK_FLAGS})
+endif()
+
 set(ANOMALY_BUNDLE_ID_PREFIX "com.andriishafar.anomaly" CACHE STRING "Reverse-DNS prefix for app bundle identifiers")
 set(ANOMALY_IOS_TEAM_ID "" CACHE STRING "Apple Developer team ID used to sign iOS builds")
 

@@ -636,7 +636,8 @@ inline errno_t strncpy_s(char* dest, size_t size, const char* src, size_t count)
 	size_t i = 0;
 	size_t limit = (count < size) ? count : size - 1;
 	for (; i < limit && src[i]; ++i) dest[i] = src[i];
-	if (!src[i] || i == count) { dest[i] = 0; return 0; }
+	// i == count first: src need not be terminated beyond count characters (IReader::r_string passes the end of a buffer)
+	if (i == count || !src[i]) { dest[i] = 0; return 0; }
 	dest[0] = 0;
 	return ERANGE;
 }

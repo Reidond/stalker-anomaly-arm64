@@ -392,6 +392,16 @@ static void terminate_handler() { handler_base("Unexpected application terminati
 
 static std::atomic_flag g_in_crash = ATOMIC_FLAG_INIT;
 
+// Everything the fatal handler does after the first line is best effort and runs on a process whose heap, log or level may be
+// the thing that broke (a crash while the level is being destroyed made the game-over save below loop for minutes, and the log,
+// which is buffered, was never written). The alarm ends the process if it takes too long.
+static void crash_handler_watchdog(int)
+{
+	static const char msg[] = "\n*** the crash handler did not finish in time, exiting\n";
+	(void)!write(STDERR_FILENO, msg, sizeof(msg) - 1);
+	_exit(128 + SIGSEGV);
+}
+
 // Fatal signal: report, then let the default action (and the OS crash reporter) run.
 static void fatal_signal_handler(int sig, siginfo_t* info, void*)
 {
@@ -412,6 +422,16 @@ static void fatal_signal_handler(int sig, siginfo_t* info, void*)
 	int n = snprintf(head, sizeof(head), "\n*** Fatal %s at address %p\n", name, info ? info->si_addr : nullptr);
 	if (n > 0) (void)!write(STDERR_FILENO, head, (size_t)n);
 
+	signal(SIGALRM, crash_handler_watchdog);
+	alarm(20);
+
+	// the log first: it is buffered, and what comes after can hang
+	if (shared_str_initialized)
+	{
+		Msg("*** Fatal %s at address %p", name, info ? info->si_addr : nullptr);
+		FlushLog();
+	}
+
 	crash_saving::save();
 
 	// Everything below is best effort: the heap or the log may be what crashed.
@@ -421,7 +441,6 @@ static void fatal_signal_handler(int sig, siginfo_t* info, void*)
 
 	if (shared_str_initialized)
 	{
-		Msg("*** Fatal %s at address %p", name, info ? info->si_addr : nullptr);
 		size_t pos = 0;
 		while (pos < trace.size())
 		{
@@ -464,6 +483,10 @@ static void install_alt_stack()
 	static thread_local bool done = false;
 	if (done) return;
 	done = true;
+	// A sanitizer runtime installs (and at thread exit unmaps) its own alternate stack; replacing it with a malloc'ed block
+	// makes ASan's thread teardown munmap that block and die ("failed to deallocate", CHECK in UnsetAlternateSignalStack).
+	stack_t old = {};
+	if (sigaltstack(nullptr, &old) == 0 && !(old.ss_flags & SS_DISABLE) && old.ss_sp) return;
 	const size_t size = 128 * 1024;
 	stack_t ss;
 	ss.ss_sp = malloc(size);

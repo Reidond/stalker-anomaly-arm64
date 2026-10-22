@@ -21,6 +21,7 @@ option(ANOMALY_LUAJIT_TXM_EMULATE "Build LuaJIT with the dual-mapped JIT region 
 mark_as_advanced(ANOMALY_LUAJIT_TXM_EMULATE)
 
 set(luajit_make_args BUILDMODE=static)
+set(luajit_xcflags "")
 set(luajit_patches "")
 set(luajit_variant "stock")
 if((ANOMALY_IOS AND ANOMALY_IOS_LUAJIT_JIT) OR (NOT ANOMALY_IOS AND ANOMALY_LUAJIT_TXM_EMULATE))
@@ -29,12 +30,28 @@ if((ANOMALY_IOS AND ANOMALY_IOS_LUAJIT_JIT) OR (NOT ANOMALY_IOS AND ANOMALY_LUAJ
     find_program(ANOMALY_PATCH_EXECUTABLE patch REQUIRED)
     if(ANOMALY_IOS)
         set(luajit_variant "ios-txm-jit")
-        list(APPEND luajit_make_args "XCFLAGS=-DLUAJIT_ENABLE_JIT -DLUAJIT_TXM_DUALMAP")
+        list(APPEND luajit_xcflags -DLUAJIT_ENABLE_JIT -DLUAJIT_TXM_DUALMAP)
     else()
         set(luajit_variant "macos-txm-emulate")
         # No external unwinding: the dual-mapped writer does not support unwind info in mcode (same as iOS).
-        list(APPEND luajit_make_args "XCFLAGS=-DLUAJIT_TXM_DUALMAP -DLUAJIT_TXM_EMULATE -DLUAJIT_UNWIND_INTERNAL")
+        list(APPEND luajit_xcflags -DLUAJIT_TXM_DUALMAP -DLUAJIT_TXM_EMULATE -DLUAJIT_UNWIND_INTERNAL)
     endif()
+endif()
+if(ANOMALY_SANITIZE_COMPILE_FLAGS)
+    # ASan sees LuaJIT's own heap only if it goes through malloc: LUAJIT_USE_SYSMALLOC replaces lj_alloc.c's mmap-based
+    # allocator (the GC64 build of arm64 supports it). The C part of the VM is instrumented like the engine; the
+    # assembly interpreter (lj_vm.S) cannot be.
+    # TARGET_CFLAGS, not XCFLAGS: the host tools (minilua, buildvm) are not sanitized.
+    list(APPEND luajit_xcflags -DLUAJIT_USE_SYSMALLOC)
+    string(JOIN " " luajit_sanitize_cflags ${ANOMALY_SANITIZE_COMPILE_FLAGS})
+    string(MD5 luajit_sanitize_id "${luajit_sanitize_cflags}")
+    string(SUBSTRING "${luajit_sanitize_id}" 0 8 luajit_sanitize_id)
+    string(APPEND luajit_variant "+sanitize-${luajit_sanitize_id}") # a new flag set builds the copy again
+    list(APPEND luajit_make_args "TARGET_CFLAGS=${luajit_sanitize_cflags}" "TARGET_LDFLAGS=${ANOMALY_SANITIZE_LINK_FLAGS}")
+endif()
+if(luajit_xcflags)
+    string(JOIN " " luajit_xcflags_str ${luajit_xcflags})
+    list(APPEND luajit_make_args "XCFLAGS=${luajit_xcflags_str}")
 endif()
 if(ANOMALY_IOS)
     execute_process(COMMAND xcrun --sdk iphoneos --show-sdk-path OUTPUT_VARIABLE ios_sdk OUTPUT_STRIP_TRAILING_WHITESPACE COMMAND_ERROR_IS_FATAL ANY)

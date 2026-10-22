@@ -51,13 +51,15 @@ enum ECameraStyle
 	cs_forcedword = u32(-1)
 };
 
-enum ECamEffectorType
+// Fixed underlying type: scripts (add_cam_effector) and the game (ECameraEffector...) pass ids beyond cefNext.
+enum ECamEffectorType : int
 {
 	cefDemo = 0,
 	cefNext
 };
 
-enum EEffectorPPType
+// Fixed underlying type, like ECamEffectorType: the game passes ids beyond ppeNext.
+enum EEffectorPPType : int
 {
 	ppeNext = 0,
 };
