@@ -111,8 +111,9 @@ set(xrgame_compile_options
     -Wno-inline-new-delete -Wno-implicit-exception-spec-mismatch
     -Wno-macro-redefined -Wno-builtin-macro-redefined -Wno-pragma-once-outside-header
 )
-# gameinput: the controller layer's headers (xr_level_controller.cpp feeds its feedback model)
-set(xrgame_link_targets luabind LuaJIT::luajit ode xrAPI xrCDB xrNetServer xrPhysics xrXMLParser gameinput)
+# gameinput: the controller layer's headers (xr_level_controller.cpp feeds its feedback model); lua_extensions: luaopen_lua_extensions,
+# luaopen_socket_core_init and pdebug_init_init, called by CScriptStorage (absent targets are skipped)
+set(xrgame_link_targets luabind LuaJIT::luajit ode xrAPI xrCDB xrNetServer xrPhysics xrXMLParser gameinput lua_extensions)
 
 # One OBJECT library per shard, configured like anomaly_add_module() configures a module.
 set(xrgame_objects "")
@@ -137,6 +138,10 @@ foreach(shard IN LISTS XRGAME_SHARDS)
         target_compile_options(${tgt} PRIVATE "SHELL:-iquote \"${dir}\"")
     endforeach()
     target_compile_definitions(${tgt} PRIVATE XRGAME_EXPORTS)
+    if(NOT ANOMALY_XRGAME_MULTIPLAYER)
+        # single-player code that names a multiplayer class guards that code with this (see XRGAME-SHARDS.md)
+        target_compile_definitions(${tgt} PRIVATE XRGAME_NO_MULTIPLAYER)
+    endif()
     target_compile_options(${tgt} PRIVATE ${xrgame_compile_options})
     if(ANOMALY_XRGAME_PCH)
         # the multiplayer sources include plain C files (GameSpy, atlas): there is no C PCH to reuse for them
