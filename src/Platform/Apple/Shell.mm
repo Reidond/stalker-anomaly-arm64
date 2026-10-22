@@ -311,13 +311,21 @@ bool Init(const InitParams& params)
             device.has_memory_budget ? FormatBytes(device.available_memory).c_str() : "n/a",
             FormatBytes(device.storage_free_raw).c_str(), FormatBytes(device.storage_total).c_str());
 
+        // The generated fsgame.ltx mounts the archive only when this run packed (or found current) the one for the overlay it
+        // uses: an archive left in the cache by another build or a failed run must not be mounted.
         if (!p.overlay_source.empty())
         {
             if (!Internal::BuildOverlayArchive(p.overlay_source, p.overlay_archive_dir))
-                Log("overlay: nothing packed from %s", p.overlay_source.c_str());
+            {
+                Log("overlay: nothing packed from %s, not mounted", p.overlay_source.c_str());
+                p.overlay_archive_dir.clear();
+            }
         }
         else
+        {
             Log("overlay: none (no Resources/overlay in the bundle, no --overlay): the Monolith scripts and shaders are missing");
+            p.overlay_archive_dir.clear();
+        }
         WriteFsGameLtx();
         Internal::StartObservers();
         Internal::RecordEvent("shell", std::string("started, data ") + (FileExists(p.data_root + "/db") ? "folder present" : "folder missing"));
