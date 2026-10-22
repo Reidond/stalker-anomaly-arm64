@@ -103,6 +103,14 @@ public:
 	};
 };
 
+#ifdef XR_PLATFORM_APPLE
+// Mailslots are Win32 IPC to the Lua IDE debugger (script_debugger.cpp), which USE_DEBUGGER, never defined, switches on:
+// without them the debugger finds no IDE.
+inline HANDLE CreateMailSlotByName(LPSTR) { return INVALID_HANDLE_VALUE; }
+inline BOOL CheckExisting(LPSTR) { return FALSE; }
+inline BOOL SendMailslotMessage(LPSTR, CMailSlotMsg&) { return FALSE; }
+inline BOOL CheckMailslotMessage(HANDLE, CMailSlotMsg&) { return FALSE; }
+#else // XR_PLATFORM_APPLE
 inline HANDLE CreateMailSlotByName(LPSTR slotName)
 {
 	HANDLE hSlot = CreateMailslot(slotName,
@@ -208,3 +216,4 @@ inline BOOL CheckMailslotMessage(HANDLE hSlot, CMailSlotMsg& msg)
 	CloseHandle(hEvent);
 	return fResult;
 }
+#endif // XR_PLATFORM_APPLE

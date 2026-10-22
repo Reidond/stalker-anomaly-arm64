@@ -238,3 +238,14 @@ public:
 	virtual void Player_AddMoney(game_PlayerState* ps, s32 MoneyAmount);
 	void SpawnPlayer(ClientID id, LPCSTR N);
 };
+
+// game_sv_mp's RTTI is in the multiplayer sources, which an XRGAME_NO_MULTIPLAYER build leaves out: nothing there is a game_sv_mp.
+template <class T>
+inline game_sv_mp* mp_sv_game_cast(T* game)
+{
+#ifdef XRGAME_NO_MULTIPLAYER
+	return nullptr;
+#else
+	return smart_cast<game_sv_mp*>(game);
+#endif
+}

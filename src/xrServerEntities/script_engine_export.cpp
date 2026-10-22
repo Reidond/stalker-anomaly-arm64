@@ -41,11 +41,13 @@ void export_classes	(lua_State *L)
 	CScriptSoundType::script_register(L);
 	CScriptTokenList::script_register(L);
 	
+#ifndef XRGAME_NO_MULTIPLAYER // GameSpy accounts and profiles
 	gamespy_gp_account_manager::script_register(L);
 	gamespy_gp_suggest_nicks_cb::script_register(L);
 	gamespy_gp_account_operation_cb::script_register(L);
 	gamespy_gp_account_profiles_cb::script_register(L);
 	gamespy_gp_found_email_cb::script_register(L);
+#endif
 	CScriptActionBase::script_register(L);
 	CScriptActionPlanner::script_register(L);
 	CScriptActionPlannerAction::script_register(L);
@@ -84,8 +86,10 @@ void export_classes	(lua_State *L)
 	CHolderCustom::script_register(L);
 	key_binding_registrator::script_register(L);
 	CLevel::script_register(L);
+#ifndef XRGAME_NO_MULTIPLAYER
 	gamespy_gp_login_operation_cb::script_register(L);
 	gamespy_gp_login_manager::script_register(L);
+#endif
 	CMemoryInfo::script_register(L);
 	CMincer::script_register(L);
 	CMosquitoBald::script_register(L);
@@ -99,9 +103,11 @@ void export_classes	(lua_State *L)
 	cphysics_joint_scripted::script_register(L);
 	cphysics_shell_scripted::script_register(L);
 	cphysics_world_scripted::script_register(L);
+#ifndef XRGAME_NO_MULTIPLAYER
 	gamespy_profile_store_operation_cb::script_register(L);
 	profile_data_script_registrator::script_register(L);
 	gamespy_profile_profile_store::script_register(L);
+#endif
 	CScriptPropertyEvaluator::script_register(L);
 	CPropertyStorage::script_register(L);
 	//CRadioactiveZone::script_register(L);
@@ -265,7 +271,9 @@ void export_classes	(lua_State *L)
 	CWeaponSSRS::script_register(L);
 	CAntirad::script_register(L);
 	CInventoryItem::script_register(L);
+#ifndef XRGAME_NO_MULTIPLAYER
 	gamespy_gp_profile::script_register(L);
+#endif
 	CMedkit::script_register(L);
 	player_hud::script_register(L);
 	script_attachment::script_register(L);

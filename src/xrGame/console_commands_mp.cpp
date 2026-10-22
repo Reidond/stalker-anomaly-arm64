@@ -114,6 +114,7 @@ void XRNETSERVER_API DumpNetCompressorStats(bool brief);
 extern BOOL XRNETSERVER_API g_net_compressor_enabled;
 extern BOOL XRNETSERVER_API g_net_compressor_gather_stats;
 
+#ifndef XRGAME_NO_MULTIPLAYER // the multiplayer console commands; register_mp_console_commands() is commented out in console_commands.cpp
 class CCC_Restart : public IConsole_Command
 {
 public:
@@ -2355,3 +2356,4 @@ void register_mp_console_commands()
 	CMD4(CCC_Integer, "sv_write_update_bin", &g_sv_write_updates_bin, 0, 1);
 	CMD4(CCC_Integer, "sv_traffic_optimization_level", (int*)&g_sv_traffic_optimization_level, 0, 7);
 }
+#endif // XRGAME_NO_MULTIPLAYER

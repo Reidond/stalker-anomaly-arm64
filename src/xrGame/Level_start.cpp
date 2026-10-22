@@ -120,8 +120,14 @@ bool CLevel::net_start1()
 		}
 		else
 		{
+#ifdef XRGAME_NO_MULTIPLAYER
+			Msg("! Multiplayer is not available in this build (game type '%s'): not starting the server", p.m_game_type);
+			net_start_result_total = FALSE;
+			return true;
+#else
 			g_allow_heap_min = false;
 			Server = xr_new<xrGameSpyServer>();
+#endif
 		}
 
 		if (xr_strcmp(p.m_alife, "alife"))

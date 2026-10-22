@@ -211,7 +211,7 @@ void CSpectator::IR_OnKeyboardPress(int cmd)
 		break;
 	case kWPN_ZOOM:
 		{
-			game_cl_mp* pMPGame = smart_cast<game_cl_mp*>(&Game());
+			game_cl_mp* pMPGame = mp_cl_game_cast(&Game());
 			if (!pMPGame) break;
 			game_PlayerState* PS = Game().local_player;
 			if (!Level().IsDemoPlay() && (!PS || PS->GameID != ID())) break;
@@ -273,7 +273,7 @@ void CSpectator::IR_OnKeyboardHold(int cmd)
 {
 	if (Remote()) return;
 
-	game_cl_mp* pMPGame = smart_cast<game_cl_mp*>(&Game());
+	game_cl_mp* pMPGame = mp_cl_game_cast(&Game());
 	game_PlayerState* PS = Game().local_player;
 
 	if ((cam_active == eacFreeFly) || (cam_active == eacFreeLook))
@@ -503,7 +503,7 @@ BOOL CSpectator::net_Spawn(CSE_Abstract* DC)
 	CSE_Abstract* E = (CSE_Abstract*)(DC);
 	if (!E) return FALSE;
 
-	game_cl_mp* pMPGame = smart_cast<game_cl_mp*>(&Game());
+	game_cl_mp* pMPGame = mp_cl_game_cast(&Game());
 	float tmp_roll = 0.f;
 	if (!pMPGame || pMPGame->Is_Spectator_Camera_Allowed(eacFreeFly))
 	{
@@ -552,7 +552,7 @@ bool CSpectator::SelectNextPlayerToLook(bool const search_next)
 	if (!PS) return false;
 	m_pActorToLookAt = NULL;
 
-	game_cl_mp* pMPGame = smart_cast<game_cl_mp*>(&Game());
+	game_cl_mp* pMPGame = mp_cl_game_cast(&Game());
 
 	game_cl_GameState::PLAYERS_MAP_IT it = Game().players.begin(),
 	                                  ite = Game().players.end();
