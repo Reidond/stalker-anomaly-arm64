@@ -137,6 +137,10 @@ function safe()
 	if not safe_registered then
 		safe_registered = true
 		RegisterScriptCallback("actor_on_update", keep_safe)
+		-- a bite or a bullet would put the blood overlay on the shot
+		RegisterScriptCallback("actor_on_before_hit", function(s_hit, bone_id)
+			s_hit.power = 0
+		end)
 	end
 	keep_safe()
 	log("safe")

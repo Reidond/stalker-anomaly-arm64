@@ -4,6 +4,7 @@
 1 console r_screenshot_mode png
 2 console start server(h_cordon/single/alife/load) client(localhost)
 3 waitlevel 300 l01_escape
+3.5 console ai_ignore_actor on
 5 key Left Shift
 7 key Left Shift
 9 key Left Shift
