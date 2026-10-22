@@ -1,0 +1,12 @@
+# standalone
+# Starts a new game from the main menu and saves it as h_cordon, the base of every other scene.
+2 console r_screenshot_mode png
+5 key Return
+8 move 640 300
+9 click 640 300
+10 waitlevel 300 l01_escape
+14 key Left Shift
+20 key Left Shift
+30 console run_string exec_console_cmd("save h_cordon")
+36 console screenshot newgame_start
+40 quit

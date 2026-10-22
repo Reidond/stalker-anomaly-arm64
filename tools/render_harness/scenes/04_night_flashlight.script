@@ -1,0 +1,8 @@
+# Night, clear sky, flashlight on, in the Rookie village.
+1 console run_string xr_harness.freeze()
+2 console run_string xr_harness.weather("w_clear2")
+3 console run_string xr_harness.time(0,30)
+4 console run_string xr_harness.tp(-215,-8.5,-40.6,0)
+10 key L
+14 console screenshot 04_night_flashlight
+16 quit

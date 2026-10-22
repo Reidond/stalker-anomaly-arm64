@@ -1,0 +1,7 @@
+# Inside the Cordon bunker (Sidorovich's trader room) while it rains outside: rain must not draw over interior geometry.
+1 console run_string xr_harness.freeze()
+2 console run_string xr_harness.weather("w_rain2")
+3 console run_string xr_harness.time(14,0)
+4 console run_string xr_harness.tp_story("esc_m_trader",90)
+14 console screenshot 03_bunker
+16 quit

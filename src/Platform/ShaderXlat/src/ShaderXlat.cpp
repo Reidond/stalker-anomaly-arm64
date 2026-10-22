@@ -118,6 +118,8 @@ Result translate(const std::string& source, const std::string& sourceName, const
         return result;
     }
 
+    if (fo.aliasedSemantics)
+        result.applied_hooks.push_back("duplicate-input-semantic-alias");
     result.reflection = std::move(fo.d3d);
     const auto tCross = Clock::now();
     const bool crossOk = detail::crossCompile(fo.spirv, options, result);

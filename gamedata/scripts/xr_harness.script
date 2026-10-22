@@ -1,0 +1,75 @@
+-- Render test harness helpers (tools/render_harness). Test-only: nothing calls these unless a --script line does,
+-- e.g. `10 console run_string xr_harness.tp(-200,-20,-150,90)`. Needs the -dbg engine flag for run_string.
+
+local function log(fmt, ...)
+	printf("%s", "HARNESS " .. string.format(fmt, ...))
+end
+
+-- prints where the player is and the Cordon's named places
+function probe()
+	local p = db.actor:position()
+	log("actor %.1f %.1f %.1f lvid=%d gvid=%d level=%s time=%02d:%02d weather=%s",
+		p.x, p.y, p.z, db.actor:level_vertex_id(), db.actor:game_vertex_id(), level.name(),
+		level.get_time_hours(), level.get_time_minutes(), level.get_weather())
+end
+
+function places()
+	local n = 0
+	for name, smart in pairs(sim_board.get_sim_board().smarts_by_names) do
+		local o = alife_object(smart.id)
+		if o and o.position and (string.find(name, "esc_") or string.find(name, "trader")) then
+			log("smart %s %.1f %.1f %.1f", name, o.position.x, o.position.y, o.position.z)
+			n = n + 1
+		end
+	end
+	for _, story in ipairs({"esc_m_trader", "esc_wolf", "esc_fox", "esc_lis"}) do
+		local id = get_story_object_id(story)
+		local o = id and alife_object(id)
+		if o then
+			log("story %s %.1f %.1f %.1f", story, o.position.x, o.position.y, o.position.z)
+		end
+	end
+end
+
+-- teleports the player; yaw in degrees (0 = +z)
+function tp(x, y, z, yaw)
+	db.actor:set_actor_position(vector():set(x, y, z))
+	if yaw then
+		db.actor:set_actor_direction(math.rad(yaw))
+	end
+	log("tp %.1f %.1f %.1f yaw=%s", x, y, z, tostring(yaw))
+end
+
+-- next to a story object (the trader sits in the Cordon bunker)
+function tp_story(story, yaw)
+	local id = get_story_object_id(story)
+	local o = id and alife_object(id)
+	if not o then
+		log("no story object %s", story)
+		return
+	end
+	tp(o.position.x, o.position.y + 0.3, o.position.z, yaw)
+end
+
+-- sets the game clock to hh:mm and applies the weather for that time at once
+function time(hh, mm)
+	local now = level.get_time_hours() * 60 + level.get_time_minutes()
+	local want = hh * 60 + (mm or 0)
+	local delta = (want - now) % (24 * 60)
+	level.change_game_time(0, math.floor(delta / 60), delta % 60)
+	level_weathers.get_weather_manager():forced_weather_change()
+	log("time now %02d:%02d", level.get_time_hours(), level.get_time_minutes())
+end
+
+-- a weather preset by file name (w_clear1, w_rain2, w_foggy1, ...)
+function weather(name)
+	level.set_weather(name, true)
+	log("weather %s", name)
+end
+
+-- stops the clock and the weather so repeated screenshots show the same sky
+function freeze()
+	exec_console_cmd("time_factor 0.0001")
+	exec_console_cmd("g_god on")
+	log("frozen")
+end

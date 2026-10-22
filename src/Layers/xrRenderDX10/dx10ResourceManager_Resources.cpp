@@ -10,6 +10,9 @@
 #pragma warning(default:4995)
 
 #include <D3DX10Core.h>
+#if defined(XR_PLATFORM_APPLE)
+# include <mtl_d3d11/mtl_d3d11.h>
+#endif
 
 #include "../xrRender/ResourceManager.h"
 #include "../xrRender/tss.h"
@@ -218,12 +221,24 @@ SVS* CResourceManager::_CreateVS(LPCSTR _name)
 		HRESULT const _hr = ::Render->shader_compile(name, (DWORD const*)data, size, c_entry, c_target,
 		                                             D3D10_SHADER_PACK_MATRIX_ROW_MAJOR, (void*&)_vs);
 
+#if defined(XR_PLATFORM_APPLE)
+		if (FAILED(_hr))
+		{
+			// like the "null" shader: the draws that use it are skipped (HLSL that vkd3d-shader or Metal cannot take must not end the game)
+			Msg("! Metal: vertex shader '%s' failed to translate or compile (hr 0x%08x); draws that use it are skipped", name, _hr);
+			_vs->vs = NULL;
+			return _vs;
+		}
+#endif
 		VERIFY(SUCCEEDED(_hr));
 
 		CHECK_OR_EXIT(
 			!FAILED(_hr),
 			make_string("Shader compilation failed, check your log file for additional information.")
 		);
+#if defined(XR_PLATFORM_APPLE)
+		mtl_d3d11::SetDebugName(_vs->vs, name);
+#endif
 
 		return _vs;
 	}
@@ -348,12 +363,24 @@ SPS* CResourceManager::_CreatePS(LPCSTR _name)
 		HRESULT const _hr = ::Render->shader_compile(name, (DWORD const*)data, size, c_entry, c_target,
 		                                             D3D10_SHADER_PACK_MATRIX_ROW_MAJOR, (void*&)_ps);
 
+#if defined(XR_PLATFORM_APPLE)
+		if (FAILED(_hr))
+		{
+			// like the "null" shader: the draws that use it are skipped (HLSL that vkd3d-shader or Metal cannot take must not end the game)
+			Msg("! Metal: pixel shader '%s' failed to translate or compile (hr 0x%08x); draws that use it are skipped", name, _hr);
+			_ps->ps = NULL;
+			return _ps;
+		}
+#endif
 		VERIFY(SUCCEEDED(_hr));
 
 		CHECK_OR_EXIT(
 			!FAILED(_hr),
 			make_string("Shader compilation failed, check your log file for additional information.")
 		);
+#if defined(XR_PLATFORM_APPLE)
+		mtl_d3d11::SetDebugName(_ps->ps, name);
+#endif
 
 		return _ps;
 	}

@@ -280,6 +280,45 @@ bool frontendCompile(const FrontendInput& in, FrontendOutput& out)
     takeMessages(messages, out.log);
     if (crashed)
         out.log += "\nvkd3d-shader crashed while compiling this shader (contained by the crash guard)";
+    std::string rewritten; // keeps the retry's source alive
+    if (rc != VKD3D_OK && !crashed && out.log.find("E5013") != std::string::npos)
+    {
+        // "Input semantic ... used multiple times with incompatible types": FXC allows it. Preprocess, alias, compile again.
+        vkd3d_shader_code pre_out = {};
+        char* pre_messages = nullptr;
+        if (vkd3d_shader_preprocess(&info, &pre_out, &pre_messages) == VKD3D_OK)
+        {
+            rewritten.assign(static_cast<const char*>(pre_out.code), pre_out.size);
+            if (aliasDuplicateInputSemantics(rewritten, in.options->entry))
+            {
+                vkd3d_shader_hlsl_source_info plain = {};
+                plain.type = VKD3D_SHADER_STRUCTURE_TYPE_HLSL_SOURCE_INFO;
+                plain.entry_point = in.options->entry.c_str();
+                plain.profile = in.profile.c_str();
+                vkd3d_shader_compile_info again = info;
+                again.next = &plain;
+                again.source.code = rewritten.data();
+                again.source.size = rewritten.size();
+                vkd3d_shader_free_shader_code(&dxbc);
+                dxbc = {};
+                char* messages2 = nullptr;
+                const int rc2 = guardedCompile(&again, &dxbc, &messages2, &crashed);
+                std::string second;
+                takeMessages(messages2, second);
+                if (rc2 == VKD3D_OK)
+                {
+                    rc = VKD3D_OK;
+                    out.aliasedSemantics = true;
+                    out.log.clear();
+                }
+                else
+                    out.log += "\n[after aliasing the duplicate input semantics] " + second;
+            }
+        }
+        vkd3d_shader_free_shader_code(&pre_out);
+        if (pre_messages)
+            vkd3d_shader_free_messages(pre_messages);
+    }
     if (rc != VKD3D_OK)
         return false;
 
