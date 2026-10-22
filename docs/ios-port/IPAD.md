@@ -198,8 +198,35 @@ fps, CPU ms inside `Frame()`, GPU ms, footprint (peak) and available memory.
   iPad (the push script skips `bin/`), so OpenAL Soft runs on its defaults.
 - Runtime changes of `vid_mode` through the console work, but the engine saves the last one at exit, and it becomes the next start's size.
 - The main menu's "Exit to Windows" quits the app.
-- The save screenshot (`.dds`) next to a save was not checked.
+- The save screenshot (`.dds`) next to a save is black (the Load game preview shows black or noise).
+- Three `SIGABRT`s from libmalloc (`pointer being freed was not allocated`) in about 35 runs, at different places (vkd3d, `CloseLog` at shutdown): a
+  double free or a foreign pointer somewhere, passed to the crash-sweep session.
+
+## Controller
+
+The DualSense layer (`src/Platform/GameInput`, CONTROLS.md) is hooked into the engine. A first hands-on session found that only the menu cursor and
+the look stick worked: the engine had no names for the pad keys and no binding slot for them, so no button reached a game action. Now
+`keyboards[]` has the `gp_*` keys, `_binding` has a third slot (`bind_pad`, `unbind_pad`; `default_controls` runs the default DualSense layout; `bind_list`
+shows it), and every bind is mirrored into the layer's own map.
+
+The virtual DualSense of `--script` (`padon`, `pad <button> [ms]`, `paddown`/`padup`, `padaxis <lx|ly|rx|ry|l2|r2> <value>`) drives the whole path without a
+person: left stick up walks 11 m in 4 s, Create opens the inventory, the touchpad raises the PDA (with the PDA in its slot), R2 fires and empties the
+magazine. `tools/ios/scripts/pad_test.txt` does it all, makes the `ipad_armed` save (AK-74 in hand with 30 rounds, 120 spare, PDA and outfit in their
+slots, medkits, bandages) and logs `STATE` lines; `ipad_debug.script` has `give`, `give_ammo`, `equip`, `state`, `slots`.
+
+Not done: the radial wheels (hold L1 or R1) have no on-screen drawing (nothing in the engine draws them), so they can only be used blind;
+the Controls screen has no Gamepad column. A game started by script leaves the PDA and the outfit in the backpack (`slots(true)` moves the PDA to its
+slot; a normal new game from the menu was not checked), and the 3D PDA only rises from its slot.
+
+## The UI colour bug
+
+Symptoms: the Load game list showed no saves, the inventory no item icons. Cause (luabind, found on the iPad): Lua scripts pass UI colours to `u32` parameters as
+negative numbers (`GetARGB(255, 216, 186, 140)` is -2573684, the alpha in the sign bit); luabind cast the double straight to the unsigned type, which
+is undefined for a negative value: x86 wrapped it, arm64 saturates it to 0. Every Lua-set colour became `00000000`, fully transparent (the list's
+glyph quads were being drawn, with vertex colour 0). Integer parameters now go through `long long`. This is very likely the Mac's "dark rectangles".
 
 ## Hands-on session
 
-Results of the checks with a DualSense on the iPad are in the PR description and are added here when they come in.
+First session (before the controller fix): menu and loading fine, the look stick smooth and stable frame rate, sound good (it went to the AirPods Max once the
+iPad had them connected), background and return fine. Movement, Create, touchpad, L1 and R1 did nothing, the list text and the item icons were missing:
+all of it fixed above. A second session with the fixed build is pending.

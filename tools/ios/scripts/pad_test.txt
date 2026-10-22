@@ -18,7 +18,8 @@
 85 pad create 300
 91 pad circle
 93 pad touchpad 300
-99 pad circle
+97 console run_string ipad_debug.state("pda up")
+99 pad touchpad 300
 101 paddown l1
 107 padup l1
 109 paddown r1

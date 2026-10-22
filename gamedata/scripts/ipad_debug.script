@@ -43,6 +43,9 @@ function equip()
 		end
 	end
 	slot("wpn_ak74", 3)
+	slot("device_pda_1", 8)    -- a start made by script leaves the PDA and the outfit in the backpack
+	slot("novice_outfit", 7)
+	slot("helm_resp", 12)
 	for n = 1, 3 do
 		local o = a:item_in_slot(n)
 		printf("%s", "SLOT " .. n .. " holds " .. (o and o:section() or "nothing"))
@@ -56,8 +59,9 @@ function state(tag)
 	local a = db.actor
 	local p = a:position()
 	local item = a:active_item()
-	local s = string.format("STATE %s pos %.1f %.1f %.1f item %s ammo %s", tag or "", p.x, p.y, p.z,
-		item and item:section() or "none", item and tostring(item:get_ammo_in_magazine()) or "-")
+	local slot = a:active_slot()
+	local s = string.format("STATE %s pos %.1f %.1f %.1f item %s ammo %s slot %s", tag or "", p.x, p.y, p.z,
+		item and item:section() or "none", item and tostring(item:get_ammo_in_magazine()) or "-", tostring(slot))
 	printf("%s", s)
 end
 
@@ -75,4 +79,22 @@ end
 function color_test()
 	local c = GetARGB(255, 216, 186, 140)
 	printf("%s", string.format("COLOR GetARGB(255,216,186,140) = %d (%08x) A=%d R=%d G=%d B=%d", c, c, ClrGetA(c), ClrGetR(c), ClrGetG(c), ClrGetB(c)))
+end
+
+-- Logs which item is in each inventory slot (SLOTS line), and puts the PDA into slot 8 when it is not there
+function slots(fix)
+	local a = db.actor
+	local parts = {}
+	for n = 1, 12 do
+		local o = a:item_in_slot(n)
+		parts[#parts + 1] = n .. "=" .. (o and o:section() or "-")
+	end
+	printf("%s", "SLOTS " .. table.concat(parts, " "))
+	if fix then
+		local pda = a:object("device_pda_1")
+		if pda then
+			local ok, err = pcall(function() a:move_to_slot(pda, 8) end)
+			printf("%s", "SLOTS moved pda " .. tostring(ok) .. " " .. tostring(err))
+		end
+	end
 end
