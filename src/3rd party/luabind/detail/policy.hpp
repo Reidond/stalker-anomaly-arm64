@@ -248,6 +248,14 @@ namespace luabind { namespace detail
 		void apply(lua_State* L, bool b) { lua_pushboolean(L, b); }
 	};
 
+	// A Lua number (a double) into an unsigned C++ parameter. Scripts pass -1 for "invalid id" (u32, u16, u8 parameters) and
+	// MSVC's x64 code converted out-of-range doubles through a signed 64-bit conversion (cvttsd2si), so -1.0 became 0xFF...F.
+	// arm64's fcvtzu saturates to 0 instead, which turns "no vertex / no object" into vertex 0 / object 0.
+	inline unsigned long long lua_number_to_unsigned(double d)
+	{
+		return d < 0 ? static_cast<unsigned long long>(static_cast<long long>(d)) : static_cast<unsigned long long>(d);
+	}
+
 	template<>
 	struct primitive_converter<Direction::lua_to_cpp>
 	{
@@ -308,7 +316,7 @@ namespace luabind { namespace detail
 			{
 				return 0;
 			}
-			return static_cast<unsigned int>(lua_tonumber(L, index));
+			return static_cast<unsigned int>(lua_number_to_unsigned(lua_tonumber(L, index)));
 		}
 		PRIMITIVE_MATCHER(unsigned int)
 		{
@@ -368,7 +376,7 @@ namespace luabind { namespace detail
 			{
 				return 0;
 			}
-			return static_cast<unsigned char>(lua_tonumber(L, index));
+			return static_cast<unsigned char>(lua_number_to_unsigned(lua_tonumber(L, index)));
 		}
 		PRIMITIVE_MATCHER(unsigned char)
 		{
@@ -408,7 +416,7 @@ namespace luabind { namespace detail
 			{
 				return 0;
 			}
-			return static_cast<unsigned short>(lua_tonumber(L, index));
+			return static_cast<unsigned short>(lua_number_to_unsigned(lua_tonumber(L, index)));
 		}
 		PRIMITIVE_MATCHER(unsigned short)
 		{
@@ -448,7 +456,7 @@ namespace luabind { namespace detail
 			{
 				return 0;
 			}
-			return static_cast<unsigned long>(lua_tonumber(L, index));
+			return static_cast<unsigned long>(lua_number_to_unsigned(lua_tonumber(L, index)));
 		}
 		PRIMITIVE_MATCHER(unsigned long)
 		{
@@ -467,7 +475,7 @@ namespace luabind { namespace detail
 			{
 				return 0;
 			}
-			return static_cast<unsigned long long>(lua_tonumber(L, index));
+			return static_cast<unsigned long long>(lua_number_to_unsigned(lua_tonumber(L, index)));
 		}
 		PRIMITIVE_MATCHER(unsigned long long)
 		{
