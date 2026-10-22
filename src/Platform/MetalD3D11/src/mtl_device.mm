@@ -268,6 +268,9 @@ Device::Device(const DeviceDesc& d) : desc(d) { g_latestDevice = this; }
 
 Device::~Device()
 {
+    // LatestDevice() must not hand out a destroyed device (a later GetRenderStats() would read freed memory)
+    Device* self = this;
+    g_latestDevice.compare_exchange_strong(self, nullptr);
     // The immediate context shares this object's reference count, so it is never referenced from outside now.
     delete context;
     context = nullptr;

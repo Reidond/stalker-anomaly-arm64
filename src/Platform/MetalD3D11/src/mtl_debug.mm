@@ -165,12 +165,12 @@ bool DebugReadTexture(ID3D11DeviceContext* pContext, ID3D11Resource* pResource, 
     ch = std::min<NSUInteger>(ch, tex.height - cy);
 
     PixelReader reader;
-    size_t bytesPerRow, bytesTotal;
+    size_t bytesPerRow, bytesTotal, rows;
     if (bc1 || bc3)
     {
         const size_t blockBytes = bc3 ? 16 : 8;
         bytesPerRow = (cw / 4) * blockBytes;
-        bytesTotal = bytesPerRow * (ch / 4);
+        rows = ch / 4;
     }
     else
     {
@@ -181,8 +181,11 @@ bool DebugReadTexture(ID3D11DeviceContext* pContext, ID3D11Resource* pResource, 
         else if (!readerFor(fmt, &reader))
             return false;
         bytesPerRow = cw * reader.bpp;
-        bytesTotal = bytesPerRow * ch;
+        rows = ch;
     }
+    // rows of the readback buffer start on 256-byte boundaries, the alignment Metal asks for buffer/texture blits
+    const size_t rowPitch = (bytesPerRow + 255) & ~size_t(255);
+    bytesTotal = rowPitch * rows;
 
     id<MTLBuffer> buf = [dev->mtl newBufferWithLength:bytesTotal options:MTLResourceStorageModeShared];
     id<MTLCommandBuffer> cb = [dev->queue commandBuffer];
@@ -197,12 +200,17 @@ bool DebugReadTexture(ID3D11DeviceContext* pContext, ID3D11Resource* pResource, 
               sourceSize:MTLSizeMake(cw, ch, 1)
                 toBuffer:buf
        destinationOffset:0
-  destinationBytesPerRow:bytesPerRow
+  destinationBytesPerRow:rowPitch
 destinationBytesPerImage:bytesTotal
                  options:options];
     [be endEncoding];
     [cb commit];
     [cb waitUntilCompleted];
+    if (cb.status != MTLCommandBufferStatusCompleted)
+    {
+        Log("! Metal: the debug readback failed (%s)", cb.error.localizedDescription.UTF8String);
+        return false;
+    }
 
     const uint8_t* src = static_cast<const uint8_t*>(buf.contents);
     out->width = uint32_t(cw);
@@ -220,7 +228,7 @@ destinationBytesPerImage:bytesTotal
             for (size_t bx = 0; bx < cw / 4; ++bx)
             {
                 uint8_t px[64];
-                decodeBCBlock(src + by * bytesPerRow + bx * blockBytes, bc3, px);
+                decodeBCBlock(src + by * rowPitch + bx * blockBytes, bc3, px);
                 for (int i = 0; i < 16; ++i)
                 {
                     uint8_t* o = &out->rgba[((by * 4 + i / 4) * cw + bx * 4 + i % 4) * 4];
@@ -260,7 +268,7 @@ destinationBytesPerImage:bytesTotal
     for (size_t i = 0; i < n; ++i)
     {
         float v[4];
-        reader.read(src + i * reader.bpp, v);
+        reader.read(src + (i / cw) * rowPitch + (i % cw) * reader.bpp, v);
         const int c = std::min(opt.channel, reader.channels - 1);
         const float x = opt.mode == DebugReadOptions::Colour || opt.mode == DebugReadOptions::Signed
                             ? std::min({v[0], v[std::min(1, reader.channels - 1)], v[std::min(2, reader.channels - 1)]})
@@ -283,7 +291,7 @@ destinationBytesPerImage:bytesTotal
     for (size_t i = 0; i < n; ++i)
     {
         float v[4];
-        reader.read(src + i * reader.bpp, v);
+        reader.read(src + (i / cw) * rowPitch + (i % cw) * reader.bpp, v);
         uint8_t* o = &out->rgba[i * 4];
         auto to8 = [](float x) { return uint8_t(std::clamp(x, 0.f, 1.f) * 255.f + 0.5f); };
         switch (opt.mode)
