@@ -28,8 +28,40 @@ SwapChain::~SwapChain()
     dev_->Release();
 }
 
+id<MTLTexture> SwapChain::makeOffscreen(UINT w, UINT h)
+{
+    MTLTextureDescriptor* td = [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:pixelFormat_
+                                                                                  width:w
+                                                                                 height:h
+                                                                              mipmapped:NO];
+    td.usage = MTLTextureUsageRenderTarget | MTLTextureUsageShaderRead | MTLTextureUsagePixelFormatView;
+    td.storageMode = MTLStorageModePrivate;
+    id<MTLTexture> t = [dev_->mtl newTextureWithDescriptor:td];
+    t.label = @"offscreen back buffer";
+    return t;
+}
+
 bool SwapChain::init()
 {
+    if (cfg_.offscreen)
+    {
+        pixelFormat_ = layerFormatFor(cfg_.format);
+        if (!cfg_.width || !cfg_.height)
+            return false;
+        offscreen_ = makeOffscreen(cfg_.width, cfg_.height);
+        if (!offscreen_)
+            return false;
+        backBuffer_ = NewBackBuffer(dev_, this, cfg_.width, cfg_.height, cfg_.format, pixelFormat_);
+        desc1_.Width = cfg_.width;
+        desc1_.Height = cfg_.height;
+        desc1_.Format = cfg_.format;
+        desc1_.SampleDesc = {1, 0};
+        desc1_.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+        desc1_.BufferCount = cfg_.bufferCount;
+        desc1_.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
+        desc1_.AlphaMode = DXGI_ALPHA_MODE_IGNORE;
+        return true;
+    }
     if (!cfg_.metalLayer)
         return false;
     layer_ = (__bridge CAMetalLayer*)cfg_.metalLayer;
@@ -77,6 +109,8 @@ HRESULT SwapChain::GetDevice(MtlREFIID riid, void** pp) { return dev_->QueryInte
 
 id<MTLTexture> SwapChain::currentTexture()
 {
+    if (offscreen_)
+        return offscreen_;
     if (!drawable_)
         drawable_ = [layer_ nextDrawable];
     return drawable_ ? drawable_.texture : nil;
@@ -87,16 +121,21 @@ HRESULT SwapChain::Present(UINT syncInterval, UINT flags)
     if (flags & DXGI_PRESENT_TEST)
         return S_OK;
 #if TARGET_OS_OSX
-    layer_.displaySyncEnabled = syncInterval != 0;
+    if (layer_)
+        layer_.displaySyncEnabled = syncInterval != 0;
 #endif
     Context* ctx = dev_->context;
     id<CAMetalDrawable> d = drawable_;
     drawable_ = nil;
     void (^pre)(id<MTLCommandBuffer>) = nil;
-    if (captureRequested_ && d)
+    // a drawable acquired before RequestCapture is still framebufferOnly: the capture waits for the next one
+    const bool capturable = offscreen_ ? true : (d && !d.texture.framebufferOnly);
+    if (captureRequested_ && capturable)
     {
         captureRequested_ = false;
-        id<MTLTexture> src = d.texture;
+        if (layer_)
+            layer_.framebufferOnly = !cfg_.allowReadback;
+        id<MTLTexture> src = offscreen_ ? offscreen_ : d.texture;
         const NSUInteger w = src.width, h = src.height;
         id<MTLBuffer> buf = [dev_->mtl newBufferWithLength:w * h * 4 options:MTLResourceStorageModeShared];
         const bool bgra = src.pixelFormat == MTLPixelFormatBGRA8Unorm || src.pixelFormat == MTLPixelFormatBGRA8Unorm_sRGB;
@@ -136,6 +175,23 @@ HRESULT SwapChain::Present(UINT syncInterval, UINT flags)
     }
     ctx->present(d, pre);
     return S_OK;
+}
+
+void SwapChain::requestCapture()
+{
+    if (layer_)
+        layer_.framebufferOnly = NO;
+    captureRequested_ = true;
+}
+
+bool SwapChain::pollCapture(CaptureResult* out)
+{
+    std::lock_guard<std::mutex> lk(captureMutex_);
+    if (!captureReady_)
+        return false;
+    *out = std::move(capture_);
+    captureReady_ = false;
+    return true;
 }
 
 bool SwapChain::waitCapture(CaptureResult* out)
@@ -201,16 +257,27 @@ HRESULT SwapChain::ResizeBuffers(UINT count, UINT w, UINT h, DXGI_FORMAT fmt, UI
     {
         desc1_.Format = fmt;
         pixelFormat_ = layerFormatFor(fmt);
-        layer_.pixelFormat = pixelFormat_;
+        if (layer_)
+            layer_.pixelFormat = pixelFormat_;
         backBuffer_->dxgi = fmt;
         backBuffer_->mtlFormat = pixelFormat_;
     }
     if (count)
         desc1_.BufferCount = count;
-    if (w && h)
-        layer_.drawableSize = CGSizeMake(w, h);
-    desc1_.Width = UINT(layer_.drawableSize.width);
-    desc1_.Height = UINT(layer_.drawableSize.height);
+    if (offscreen_)
+    {
+        const UINT nw = w ? w : desc1_.Width, nh = h ? h : desc1_.Height;
+        offscreen_ = makeOffscreen(nw, nh);
+        desc1_.Width = nw;
+        desc1_.Height = nh;
+    }
+    else
+    {
+        if (w && h)
+            layer_.drawableSize = CGSizeMake(w, h);
+        desc1_.Width = UINT(layer_.drawableSize.width);
+        desc1_.Height = UINT(layer_.drawableSize.height);
+    }
     backBuffer_->width = desc1_.Width;
     backBuffer_->height = desc1_.Height;
     return S_OK;
@@ -266,6 +333,10 @@ void RequestCapture(IDXGISwapChain1* sc) { static_cast<SwapChain*>(static_cast<I
 bool WaitForCapture(IDXGISwapChain1* sc, CaptureResult* out)
 {
     return static_cast<SwapChain*>(static_cast<IDXGISwapChain3*>(sc))->waitCapture(out);
+}
+bool PollCapture(IDXGISwapChain1* sc, CaptureResult* out)
+{
+    return static_cast<SwapChain*>(static_cast<IDXGISwapChain3*>(sc))->pollCapture(out);
 }
 
 // TextureCore::current for back buffers is defined here because it needs the swap chain.

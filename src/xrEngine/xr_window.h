@@ -83,6 +83,11 @@ ENGINE_API bool Create(const char* title, int width, int height);
 // events (the app's --script) still reach the engine.
 ENGINE_API void SetBackground(bool background);
 ENGINE_API bool IsBackground();
+// Offscreen mode (unattended runs, call before Create): the window is never shown, raised or given a Metal view; the renderer
+// draws into an offscreen swap chain of the render resolution (xr_apple_window::AttachMetalLayer), and screenshots read that
+// texture back. The window object still exists for input events and the drawable size.
+ENGINE_API void SetOffscreen(bool offscreen);
+ENGINE_API bool IsOffscreen();
 ENGINE_API void Destroy();
 ENGINE_API SDL_Window* Get();
 inline HWND Handle() { return (HWND)Get(); }

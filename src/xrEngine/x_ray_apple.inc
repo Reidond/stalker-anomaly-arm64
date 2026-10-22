@@ -131,6 +131,7 @@ InitResult Init(const InitParams& params, std::string& error)
 	}
 
 	xr_window::SetBackground(params.background);
+	xr_window::SetOffscreen(params.offscreen);
 	g_app.command_line = build_command_line(params, paths);
 	AppleShell::Log("engine: command line '%s'", g_app.command_line.c_str());
 
