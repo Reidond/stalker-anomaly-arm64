@@ -172,7 +172,7 @@ void CRenderDevice::SyncActiveState()
 	const bool focused = (flags & SDL_WINDOW_INPUT_FOCUS) != 0;
 #endif
 	const bool visible = !(flags & (SDL_WINDOW_MINIMIZED | SDL_WINDOW_HIDDEN));
-	OnAppActive(focused && visible && !m_bSystemPaused);
+	OnAppActive((focused && visible && !m_bSystemPaused) || m_bHoldActive);
 }
 
 void CRenderDevice::OnSystemPause(bool paused)

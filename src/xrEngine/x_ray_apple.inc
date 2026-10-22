@@ -250,6 +250,12 @@ void Shutdown()
 
 bool IsRunning() { return g_app.running; }
 
+void HoldActive(bool hold)
+{
+	Device.m_bHoldActive = hold;
+	Device.SyncActiveState();
+}
+
 bool InGame() { return g_app.running && g_pGameLevel && g_pGameLevel->bReady && Device.dwPrecacheFrame == 0; }
 
 void HandleEvent(const SDL_Event& event)

@@ -66,6 +66,10 @@ ENGINE_API bool IsRunning();
 // background.
 ENGINE_API bool InGame();
 
+// While held, the engine stays active whatever the window events say (the minimize that comes with a move to the background is pumped by
+// Frame() itself): the app holds it for the frames of a save made on the way to the background. Releasing re-reads the window state.
+ENGINE_API void HoldActive(bool hold);
+
 // An event the app received in SDL_AppEvent. SDL3's callback loop takes every event out of the queue before the engine's
 // frame (Frame() pumps only what is left, which is nothing outside the long loads), so the app has to hand them over.
 ENGINE_API void HandleEvent(const SDL_Event& event);
