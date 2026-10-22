@@ -142,7 +142,12 @@ IC bool fis_denormal(const float& f)
 // Approximated calculations
 IC float apx_InvSqrt(const float& n)
 {
+#ifdef XR_PLATFORM_APPLE
+	// `long` is 64 bits here: the load below read four bytes past the float and the shift moved garbage into the result
+	int tmp = (int(0xBE800000) - *(const int*)&n) >> 1;
+#else
 	long tmp = (long(0xBE800000) - *(long*)&n) >> 1;
+#endif
 	float y = *(float*)&tmp;
 	return y * (1.47f - 0.47f * n * y * y);
 }

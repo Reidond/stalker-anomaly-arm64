@@ -74,7 +74,7 @@ public:
 		_r = (BYTE)(r * 255.f);
 		_g = (BYTE)(g * 255.f);
 		_b = (BYTE)(b * 255.f);
-		return ((u32)(_a << 24) | (_b << 16) | (_g << 8) | (_r));
+		return (u32(_a) << 24) | (u32(_b) << 16) | (u32(_g) << 8) | u32(_r); // (_a << 24) is an int shift into the sign bit
 	};
 	IC SelfRef set_windows(u32 dw)
 	{
