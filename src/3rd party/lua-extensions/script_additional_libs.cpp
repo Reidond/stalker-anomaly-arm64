@@ -4,6 +4,30 @@
 #include <random>
 #include "../../build_config_defines.h"
 
+#ifdef __APPLE__
+// MSVC's _itoa: radix 10 keeps the sign, every other radix prints the two's complement bits.
+static char* _itoa(int value, char* buf, int radix)
+{
+    char tmp[34];
+    int n = 0;
+    bool neg = radix == 10 && value < 0;
+    unsigned u = neg ? 0u - (unsigned)value : (unsigned)value;
+    do
+    {
+        unsigned d = u % (unsigned)radix;
+        tmp[n++] = (char)(d < 10 ? '0' + d : 'a' + d - 10);
+        u /= (unsigned)radix;
+    } while (u);
+    char* p = buf;
+    if (neg)
+        *p++ = '-';
+    while (n)
+        *p++ = tmp[--n];
+    *p = 0;
+    return buf;
+}
+#endif
+
 /******************** BIT ********************/
 int ROL(int a, int n)
 {
@@ -198,11 +222,11 @@ int open_string(lua_State *L)
 /******************** MATH ********************/
 std::random_device ndrng;
 std::mt19937 intgen;
-std::uniform_real<float> float_random_01;
+std::uniform_real_distribution<float> float_random_01;
 
 int gen_random_in_range(int a1, int a2)
 {	//unsigned?
-    std::uniform_int<> dist(a1, a2);
+    std::uniform_int_distribution<> dist(a1, a2);
     return dist(intgen);
 }
 
