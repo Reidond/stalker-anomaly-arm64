@@ -81,6 +81,6 @@ void CRenderTarget::phase_dof()
 
 	//Resolve RT
 #if defined(USE_DX10) || defined(USE_DX11)
-	HW.pContext->CopyResource(rt_Generic_0->pTexture->surface_get(), dest_rt->pTexture->surface_get());
+	HW.pContext->CopyResource(rt_Generic_0->pSurface, dest_rt->pSurface);
 #endif
 };
