@@ -48,6 +48,33 @@ void AppleQueueScreenshot(LPCSTR name, int delay)
 		xr_strcpy(g_apple_shot.name, sizeof(g_apple_shot.name), name);
 }
 
+// ---- load_shots: the loading screen while a level loads ----------------------------------------------------------------
+// load_shots <prefix>: a screenshot (<prefix>_<n>.png) of every loading-screen frame that shows a new load stage; "" switches it off.
+// The load blocks the main loop for many seconds, so a script step cannot ask for these.
+namespace
+{
+string64 g_load_shots = "";
+int g_load_shots_last = -1;
+int g_load_shots_count = 0;
+} // namespace
+
+void AppleSetLoadShots(LPCSTR prefix)
+{
+	xr_strcpy(g_load_shots, prefix ? prefix : "");
+	g_load_shots_last = -1;
+	g_load_shots_count = 0;
+}
+
+void AppleLoadScreenshot(int stage, int max_stage)
+{
+	if (!g_load_shots[0] || stage == g_load_shots_last)
+		return;
+	g_load_shots_last = stage;
+	string_path name;
+	xr_sprintf(name, "%s_%02d_stage%d_of_%d", g_load_shots, g_load_shots_count++, stage, max_stage);
+	AppleQueueScreenshot(name, 0);
+}
+
 // ---- rt_dump: look at intermediate render targets -------------------------------------------------------------------
 // rt_dump <target> <file> [stage] [mode] [lo hi]
 //   target: a render target name ($user$accum, $user$position, ...), `depth` (the scene depth-stencil), `smap` (the shadow map)
@@ -111,6 +138,14 @@ void AppleRTDumpHook(const char* stage)
 		res = rt->pSurface;
 	if (!res)
 	{
+		// a texture that is not loaded yet (a loading-screen texture, asked for before the load): look again at the next frames
+		static int s_retries = 0;
+		if (!strncmp(g_rt_dump.target, "tex:", 4) && s_retries++ < 3000)
+		{
+			g_rt_dump.pending = true;
+			return;
+		}
+		s_retries = 0;
 		Msg("! rt_dump: no render target '%s'", g_rt_dump.target);
 		return;
 	}

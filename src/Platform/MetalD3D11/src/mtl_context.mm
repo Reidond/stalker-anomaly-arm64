@@ -1355,8 +1355,8 @@ void Context::traceDraw()
     if (rs_ && rs_->desc.ScissorEnable)
         snprintf(sc, sizeof sc, " scissor(%d,%d,%d,%d)%s", int(scissor_.left), int(scissor_.top), int(scissor_.right),
                  int(scissor_.bottom), scissorSet_ ? "" : "[unset]");
-    Log("trace draw: vs=%s ps=%s |%s| zs=%s %s | blend %s | cull %d | vp %.0fx%.0f z %.2f-%.2f%s |%s", vs_->debugName.c_str(),
-        ps_ ? ps_->debugName.c_str() : "-", rts.c_str(), z.c_str(), ds, bl, rs_ ? int(rs_->desc.CullMode) : 3, viewport_.Width,
+    Log("trace draw: vs=%s ps=%s topo %d |%s| zs=%s %s | blend %s | cull %d | vp %.0fx%.0f z %.2f-%.2f%s |%s", vs_->debugName.c_str(),
+        ps_ ? ps_->debugName.c_str() : "-", int(topology_), rts.c_str(), z.c_str(), ds, bl, rs_ ? int(rs_->desc.CullMode) : 3, viewport_.Width,
         viewport_.Height, viewport_.MinDepth, viewport_.MaxDepth, sc, tex.c_str());
 }
 

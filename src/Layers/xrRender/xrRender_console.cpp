@@ -705,6 +705,22 @@ public:
 	}
 };
 
+void AppleSetLoadShots(LPCSTR prefix);
+
+// load_shots <prefix>: screenshots of the loading screen at every load stage (r__screenshot.cpp)
+class CCC_LoadShots : public IConsole_Command
+{
+public:
+	CCC_LoadShots(LPCSTR N) : IConsole_Command(N) { bEmptyArgsHandled = true; }
+	virtual void Execute(LPCSTR args)
+	{
+		string64 prefix = "";
+		sscanf(args, "%63s", prefix);
+		AppleSetLoadShots(prefix);
+		Msg("* load_shots: %s", prefix[0] ? prefix : "off");
+	}
+};
+
 class CCC_RTDump : public IConsole_Command
 {
 public:
@@ -1342,6 +1358,7 @@ void xrRender_initconsole()
 #if defined(XR_PLATFORM_APPLE)
 	CMD1(CCC_RTDump, "rt_dump");
 	CMD1(CCC_MtlTrace, "mtl_trace");
+	CMD1(CCC_LoadShots, "load_shots");
 #endif
 
 	//	Igor: just to test bug with rain/particles corruption
