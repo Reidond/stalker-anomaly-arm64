@@ -178,11 +178,20 @@ bool RunScript(App& app)
             xr_engine::ExecuteConsole(step.args.c_str());
         else if (step.command == "key")
         {
-            std::istringstream a(step.args);
-            std::string name;
-            std::getline(a, name, ' ');
+            // `Left Shift 200`: only a trailing number is the duration, the rest (with its spaces) is the SDL key name
+            std::string name = step.args;
             double ms = 80;
-            a >> ms;
+            const size_t last_space = name.find_last_of(' ');
+            if (last_space != std::string::npos)
+            {
+                char* end = nullptr;
+                const double value = strtod(name.c_str() + last_space + 1, &end);
+                if (end && end != name.c_str() + last_space + 1 && *end == '\0')
+                {
+                    ms = value;
+                    name.resize(last_space);
+                }
+            }
             PushKey(name, true);
             ScriptStep release;
             release.args = name;

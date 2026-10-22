@@ -54,7 +54,8 @@ struct Paths
 
     // The Monolith gamedata overlay (scripts, configs and shaders the engine build ships next to the game data): the bundle's
     // Resources/overlay folder, or --overlay <dir> / ANOMALY_OVERLAY. Empty when there is none. It is packed into
-    // overlay_archive_dir/monolith_overlay.db0 (caches/overlay) at startup and mounted by the generated fsgame.ltx.
+    // overlay_archive_dir/monolith_overlay.db0 (caches/overlay) at startup and mounted by the generated fsgame.ltx;
+    // overlay_archive_dir is cleared when nothing was packed, and nothing is mounted then.
     std::string overlay_source;
     std::string overlay_archive_dir;
 
