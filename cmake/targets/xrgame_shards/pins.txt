@@ -10,3 +10,12 @@ ai-monsters-a xrGame/ai/monsters/controller/*
 # Windows registry access (CD key, installer paths): used by the multiplayer code only (M1-AUDIT section 4).
 mp-stub xrGame/RegistryFuncs.cpp
 mp-stub xrGame/RegistryFuncs.h
+# Multiplayer-only sources the include graph put into single-player shards: the MP game UIs (artefact hunt, the MP base) and the capture-the-artefact artefact.
+mp-stub xrGame/UIGameAHunt.cpp
+mp-stub xrGame/UIGameAHunt.h
+mp-stub xrGame/UIGameMP.cpp
+mp-stub xrGame/UIGameMP.h
+mp-stub xrGame/cta_game_artefact.cpp
+mp-stub xrGame/cta_game_artefact.h
+mp-stub xrGame/cta_game_artefact_activation.cpp
+mp-stub xrGame/cta_game_artefact_activation.h

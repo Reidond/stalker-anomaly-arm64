@@ -254,13 +254,9 @@ xrGame/UIDialogHolder.cpp
 xrGame/UIDialogHolder.h
 xrGame/UIDosimeter.cpp
 xrGame/UIDosimeter.h
-xrGame/UIGameAHunt.cpp
-xrGame/UIGameAHunt.h
 xrGame/UIGameCustom.cpp
 xrGame/UIGameCustom.h
 xrGame/UIGameCustom_script.cpp
-xrGame/UIGameMP.cpp
-xrGame/UIGameMP.h
 xrGame/UIGameSP.cpp
 xrGame/UIGameSP.h
 xrGame/UIStaticItem.cpp
