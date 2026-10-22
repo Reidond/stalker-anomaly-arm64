@@ -41,6 +41,7 @@ void CSE_ALifeObject::spawn_supplies(LPCSTR ini_string)
 	// Usage: to create random weapon loadouts
 	LPCSTR loadout_section = "spawn_loadout";
 	u8 iItr = 1;
+	string32 buf; // outlives the loop: loadout_section points into it (was declared in the loop body, a dangling pointer)
 	while (ini.section_exist(loadout_section))
 	{
 		LPCSTR itmSection, V;
@@ -137,7 +138,6 @@ void CSE_ALifeObject::spawn_supplies(LPCSTR ini_string)
 		}
 
 		iItr++;
-		string32 buf;
 		loadout_section = strconcat(sizeof(buf), buf, "spawn_loadout", std::to_string(iItr).c_str());
 	}
 	//-Alundaio 
