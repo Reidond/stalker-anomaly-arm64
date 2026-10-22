@@ -14,6 +14,7 @@
 #include <cstring>
 #include <fstream>
 #include <sstream>
+#include <vector>
 
 namespace AppleShell
 {
@@ -332,13 +333,36 @@ bool Init(const InitParams& params)
             preset = "ipad";
 #endif
             bool reset = false;
-            for (int i = 1; params.argv && i + 1 < params.argc; ++i)
+            // `--device-preset <reset|none|ipad>` from commandline.txt (the engine reads the same file; iPad: Documents/, Mac: the
+            // app support folder), then from the command line, which wins
+            std::vector<std::string> words;
             {
-                if (strcmp(params.argv[i], "--device-preset") != 0)
+                std::istringstream file(ReadFile(
+#if TARGET_OS_IOS
+                    p.shell_dir
+#else
+                    p.app_support
+#endif
+                    + "/commandline.txt"));
+                std::string line;
+                while (std::getline(file, line))
+                {
+                    const size_t first = line.find_first_not_of(" \t\r");
+                    if (first == std::string::npos || line[first] == '#')
+                        continue;
+                    std::istringstream tokens(line);
+                    for (std::string word; tokens >> word;)
+                        words.push_back(word);
+                }
+            }
+            for (int i = 1; params.argv && i < params.argc; ++i)
+                words.push_back(params.argv[i]);
+            for (size_t i = 0; i + 1 < words.size(); ++i)
+            {
+                if (words[i] != "--device-preset")
                     continue;
-                const std::string mode = params.argv[i + 1];
-                reset = mode == "reset";
-                preset = mode == "none" ? "" : "ipad";
+                reset = words[i + 1] == "reset";
+                preset = words[i + 1] == "none" ? "" : "ipad";
             }
             Internal::ApplyDevicePreset(preset, reset, p.appdata, p.app_support);
         }

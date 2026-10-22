@@ -87,7 +87,7 @@ case $cmd in
         ;;
     put)
         dc device copy to --device "$device" --domain-type appDataContainer --domain-identifier "$bundle" \
-            --source "$1" --destination "$2"
+            --source "$1" --destination "Documents/${2:?destination under Documents/}"
         ;;
     get)
         dc device copy from --device "$device" --domain-type appDataContainer --domain-identifier "$bundle" \
