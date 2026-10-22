@@ -38,6 +38,9 @@ add_subdirectory(src/Platform/GameInput)
 add_subdirectory(src/Platform/ShaderXlat)
 add_subdirectory(src/Platform/MetalD3D11)
 
+# The game: every module linked statically into one app (needs ANOMALY_BUILD_ALL_MODULES).
+add_subdirectory(src/Platform/App)
+
 # Host-side smoke tests of the engine libraries; the iOS build only checks that the libraries compile.
 if(NOT ANOMALY_IOS)
     add_subdirectory(tools/ode_smoke)
