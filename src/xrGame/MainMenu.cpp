@@ -251,7 +251,7 @@ void CMainMenu::Activate(bool bActivate)
 			Console->Show();
 		}
 
-		if (m_startDialog->IsShown())
+		if (m_startDialog && m_startDialog->IsShown()) // destroyed by restart_all() while the menu was up
 			m_startDialog->HideDialog();
 
 		CleanInternals();
@@ -602,7 +602,13 @@ void CMainMenu::SwitchToMultiplayerMenu()
 void CMainMenu::DestroyInternal(bool bForce)
 {
 	if (m_startDialog && ((m_deactivated_frame < Device.dwFrame + 4) || bForce))
+	{
+		// restart_all() destroys it with the menu up (a load from the game-over screen): the dialog is still in this holder's
+		// input-receiver and render lists, which then point at freed memory. ReloadUI() does the same two steps.
+		if (m_startDialog->IsShown())
+			m_startDialog->HideDialog();
 		xr_delete(m_startDialog);
+	}
 }
 
 void CMainMenu::OnNewPatchFound(LPCSTR VersionName, LPCSTR URL)
