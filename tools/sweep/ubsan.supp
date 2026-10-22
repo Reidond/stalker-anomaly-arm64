@@ -1,0 +1,2 @@
+# UBSan suppressions for the crash-sweep runs (docs/ios-port/SANITIZERS.md). One line per suppression, with the reason.
+# Format: <check>:<source file pattern>. Entries are added only after the report was read and judged to be noise.

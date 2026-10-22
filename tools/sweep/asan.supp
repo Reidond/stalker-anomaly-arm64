@@ -1,0 +1,6 @@
+# ASan suppressions for the crash-sweep runs (docs/ios-port/SANITIZERS.md). Format: <kind>:<module or function pattern>.
+# Added only after the report was read and judged to be noise; every entry says why.
+
+# The SwiftUI launcher window decodes a PDF asset image: CoreGraphics' PDF lexer calls strndup with a length longer than the
+# source string (the real strndup stops at the NUL, ASan's interceptor checks the whole count). Apple code, not ours.
+interceptor_via_lib:CoreGraphics
