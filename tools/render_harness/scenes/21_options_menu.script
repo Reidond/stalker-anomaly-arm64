@@ -1,7 +1,12 @@
 # standalone
-# The options menu (docs/ios-port/SETTINGS.md): Settings from the main menu, then the Video page.
+# The options menu (docs/ios-port/SETTINGS.md): Settings from the main menu, the Visual / Basic page, then Modded Exes.
+# The menu cursor follows motion deltas and starts in the middle of the screen when a dialog opens, so a `move` after the first click is
+# relative to where the script's own pointer was left (764 662): this is for a 3024x1964 window.
 1 console r_screenshot_mode png
 5 move 764 662
 6 click 764 662
-9 console screenshot 21_options_a
-12 quit
+9 console screenshot 21_options_basic
+10 move 149 468
+11 click 149 468
+14 console screenshot 21_options_modded_exes
+16 quit

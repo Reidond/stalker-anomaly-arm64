@@ -12,7 +12,7 @@
 #
 # Environment: HARNESS_COLD_SHADERS=1 (empty shader cache), HARNESS_ENV="VAR=value ..." (passed to the app), HARNESS_ARGS="..." (more
 # app arguments; `-p preset` already adds `--graphics-profile none`),
-# HARNESS_FOOTPRINT=1 (writes footprint.txt: `footprint` of the app at about 40 s; tools/render_harness/perf_report.sh reads it).
+# HARNESS_STATE=<dir> (use that state root instead of a fresh one), HARNESS_FOOTPRINT=1 (writes footprint.txt: `footprint` of the app at about 40 s; tools/render_harness/perf_report.sh reads it).
 set -euo pipefail
 
 root=$(cd "$(dirname "$0")/../.." && pwd)
@@ -53,7 +53,8 @@ for scene in "${scenes[@]}"; do
     [ -f "$src" ] || { echo "no scene $src" >&2; exit 2; }
     run=$out/$tag/$scene
     rm -rf "$run"
-    state=$run/state
+    mkdir -p "$run"
+    state=${HARNESS_STATE:-$run/state} # HARNESS_STATE=<dir>: a state root that outlives the run (settings that must survive a restart)
     appdata=$state/Application\ Support/Anomaly/appdata
     mkdir -p "$appdata/savedgames" "$state/Caches/Anomaly" "$state/Logs/Anomaly"
     # the shader cache is shared with the player's by default (translating the whole shader set takes minutes);

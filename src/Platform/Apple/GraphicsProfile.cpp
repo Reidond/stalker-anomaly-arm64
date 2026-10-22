@@ -59,14 +59,14 @@ constexpr int kUserDefaultsVersion = 1;
 // is what the stock game starts with), a stale value in user.ltx is ignored, and nothing can change them while the locks are on.
 const char* const kLockedWithoutValue[] = {
     "_preset", "vid_monitor", "rs_fullscreen", "rs_borderless",
-    "r2_slight_fade", "r2_gloss_factor", "r2_gloss_min", "r2_sunshafts_value", "r2_sunshafts_min", "r2_sun_far", "r2_sun_near",
+    "r2_slight_fade", "r2_gloss_factor", "r2_gloss_min", "r2_sunshafts_value", "r2_sunshafts_min", "r2_sun_near",
     "r2_sun_focus", "r2_sun_tsm", "r2_sun_static", "r2_tonemap", "r2_zfill", "r2_ls_bloom_fast", "r2_parallax_h", "r2_ssao_blur",
     "r2_ssao_opt_data", "r2_ssao_half_data", "r2_minmax_sm", "r3_minmax_sm", "r3_msaa_alphatest", "r3_msaa_opt", "r3_msaa_hybrid",
     "r3_use_dx10_1", "r3_dynamic_wet_surfaces_near", "r3_dynamic_wet_surfaces_far",
     "r__tf_mipbias", "r__optimize_static_geom", "r__optimize_dynamic_geom", "r__optimize_shadow_geom", "r__detail_height",
     "r__enable_grass_shadow", "r__actor_shadow", "r__geometry_lod_pow", "r__no_ram_textures", "r__ssa_glod_start",
-    "r__ssa_glod_end", "r2_ssa_lod_a", "r2_ssa_lod_b", "r__wallmark_ttl", "g_wallmark_range_static", "g_wallmark_range_skeleton",
-    "particle_update_mod", "step_particle_distance", "r2_dof_enable", "ai_use_torch_dynamic_lights", "r2_mt", "r2_wait_sleep",
+    "r__ssa_glod_end", "r2_ssa_lod_a", "r2_ssa_lod_b",
+    "r2_dof_enable", "r2_mt", "r2_wait_sleep",
     "r2_qsync", "rs_hom_depth_draw", "r2_shadow_cascede_zcul", "r2_shadow_cascede_old", "r4_wireframe", "rs_skeleton_update",
     "shader_param_1", "shader_param_2", "shader_param_3", "shader_param_4", "shader_param_5", "shader_param_6", "shader_param_7",
     "shader_param_8", "pfx_volumetric_mode",
@@ -99,6 +99,9 @@ const std::vector<Entry> kApple = {
     {"r__lens_flares", "on"},
     {"r2_sunshafts_mode", "screen_space"},
     {"r2_sunshafts_quality", "st_opt_low"},
+    {"particle_update_mod", "1"},
+    {"r2_sun_far", "100"}, // shadow distance in metres
+    {"ai_use_torch_dynamic_lights", "on"}, // NPC flashlights are light sources
 };
 
 const std::vector<Entry> kIpad = {
@@ -107,11 +110,21 @@ const std::vector<Entry> kIpad = {
     {"vid_mode", "native", When::WithUpscaler},
     {"snd_cache_size", "32"},
     {"r__tf_aniso", "4"},
+    // decal and particle budget: the stock Low preset's wallmark life, shorter decal ranges, footstep particles nearer
+    {"r__wallmark_ttl", "30"},
+    {"g_wallmark_range_static", "60"},
+    {"g_wallmark_range_skeleton", "30"},
+    {"step_particle_distance", "40"},
 };
 
 const std::vector<Entry> kMac = {
     // The window and the display mode are the player's: a desktop OS has windows. Everything that costs GPU time is locked.
     {"r__tf_aniso", "8"},
+    // decal and particle budget: the stock Default preset's
+    {"r__wallmark_ttl", "50"},
+    {"g_wallmark_range_static", "100"},
+    {"g_wallmark_range_skeleton", "50"},
+    {"step_particle_distance", "50"},
 };
 
 // The measured classes. Numbers in SETTINGS.md ("Measurements").
@@ -128,7 +141,8 @@ const std::vector<ProfileDef> kProfiles = {
          {"r__detail_radius", "35"}, {"rs_vis_distance", "0.8"}, {"r__render_scale", "0.5", When::WithUpscaler}, {"r__upscaler", "metalfx", When::WithUpscaler}},
         // Performance: a smaller render size and no AO, for a frame that never drops under 60
         {{"r2_sun_quality", "st_opt_low"}, {"r2_ls_squality", "0.5"}, {"r2_ssao", "st_opt_off"}, {"r__detail_density", "0.4"},
-         {"r__detail_radius", "30"}, {"rs_vis_distance", "0.75"}, {"vid_mode", "1152x864", When::WithoutUpscaler},
+         {"r__detail_radius", "30"}, {"rs_vis_distance", "0.75"}, {"r2_sun_far", "80"}, {"r__wallmark_ttl", "20"}, {"ai_use_torch_dynamic_lights", "off"},
+         {"vid_mode", "1152x864", When::WithoutUpscaler},
          {"r__render_scale", "0.42", When::WithUpscaler}, {"r__upscaler", "metalfx", When::WithUpscaler}},
         60, 60},
     {"ipad-16gb", "iPad, 12 and 16 GB (extrapolated)", "ipad-8gb", false,
@@ -230,12 +244,12 @@ bool Applies(When when, bool has_upscaler)
     return when == When::Always || (when == When::WithUpscaler) == has_upscaler;
 }
 
-// Resolves a profile into key/value pairs. `keep_all`: documentation form (upscaler entries kept, tagged).
 struct NoProbe : CommandProbe
 {
     bool HasCommand(const char*) const override { return false; }
 };
 
+// Resolves a profile into key/value pairs. `keep_all`: documentation form (upscaler entries kept, tagged).
 std::vector<Setting> Resolve(const ProfileDef* leaf, Mode mode, const CommandProbe* probe, const Hardware& hw, bool keep_all)
 {
     const bool has_upscaler = probe && probe->HasCommand("r__render_scale");

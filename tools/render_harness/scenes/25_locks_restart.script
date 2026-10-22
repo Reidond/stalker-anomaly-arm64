@@ -1,0 +1,15 @@
+# standalone
+# Second half of tools/render_harness/lock_restart.sh: the values of locked and player settings at the start after a user.ltx full of
+# stale values. Read the "- name value" lines of the engine log.
+2 console r2_sun_quality
+3 console texture_lod
+4 console r4_enable_tessellation
+5 console r3_msaa
+6 console r2_ssao
+7 console r3_dynamic_wet_surfaces
+8 console r__detail_radius
+9 console r2_mblur_enabled
+10 console fov
+11 console gfx_mode
+12 console gfx_fps
+13 quit

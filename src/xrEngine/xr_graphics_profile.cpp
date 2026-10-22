@@ -10,6 +10,7 @@
 #include <Platform/Apple/GraphicsProfile.h>
 #include <Platform/Apple/Shell.h>
 
+#include <algorithm>
 #include <cmath>
 #include <fstream>
 #include <set>
@@ -211,13 +212,16 @@ bool Refuse(const char* command, const char* args)
     const std::string name = LowerName(command);
     if (g_user_config)
     {
-        if (g_stale_in_user.insert(name).second && Gfx::HasProfileValue(command))
+        g_stale_in_user.insert(name);
+        if (Gfx::HasProfileValue(command))
         {
+            // every line counts, not only the first: a later line of the same setting wins in an unlocked engine
             std::string value = args ? args : "";
             while (!value.empty() && (value.back() == ' ' || value.back() == '\r'))
                 value.pop_back();
-            if (!SameValue(value, Gfx::ProfileValue(command)))
-                g_differing.push_back(name + " " + value);
+            const std::string setting = name + " " + value;
+            if (!SameValue(value, Gfx::ProfileValue(command)) && std::find(g_differing.begin(), g_differing.end(), setting) == g_differing.end())
+                g_differing.push_back(setting);
         }
         return true;
     }
