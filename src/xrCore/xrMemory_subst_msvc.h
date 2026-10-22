@@ -154,12 +154,21 @@ IC T* xr_new(const P1& p1, const P2& p2, const P3& p3, const P4& p4, const P5& p
 #endif // DEBUG_MEMORY_NAME
 
 #include <fast_dynamic_cast/fast_dynamic_cast.hpp>
+#if defined(XR_PLATFORM_APPLE)
+#include <type_traits>
+#endif
 
 template <bool _is_pm, typename T>
 struct xr_special_free
 {
 	IC void operator()(T*& ptr)
 	{
+#if defined(XR_PLATFORM_APPLE)
+		// The destructor of an abstract class is the complete-object one, which clang compiles to a trap when the class has
+		// no virtual destructor (MSVC ran the base destructor). Give the class a virtual destructor.
+		static_assert(!std::is_abstract<T>::value || std::has_virtual_destructor<T>::value,
+			"xr_delete of an abstract class without a virtual destructor traps at run time");
+#endif
 		void* _real_ptr = fast_dynamic_cast<void*>(ptr);
 		ptr->~T();
 		Memory.mem_free(_real_ptr);
