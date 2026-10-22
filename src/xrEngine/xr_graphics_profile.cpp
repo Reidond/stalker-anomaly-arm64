@@ -26,7 +26,8 @@ bool g_user_config = false;    // user.ltx is being read
 bool g_applied = false;        // the profile has been applied once (mode changes re-apply from then on)
 std::set<std::string> g_refused;       // commands already reported
 std::set<std::string> g_stale_in_user; // locked commands user.ltx set (all of them: cfg_save writes every setting)
-std::vector<std::string> g_differing;  // those among them the profile gives another value
+std::vector<std::pair<std::string, std::string>> g_user_lines; // name and value of each of them the profile has a value for (compared at the end:
+                                                               // the mode that decides the value is a line of the same file)
 
 struct Bypass
 {
@@ -215,13 +216,10 @@ bool Refuse(const char* command, const char* args)
         g_stale_in_user.insert(name);
         if (Gfx::HasProfileValue(command))
         {
-            // every line counts, not only the first: a later line of the same setting wins in an unlocked engine
             std::string value = args ? args : "";
             while (!value.empty() && (value.back() == ' ' || value.back() == '\r'))
                 value.pop_back();
-            const std::string setting = name + " " + value;
-            if (!SameValue(value, Gfx::ProfileValue(command)) && std::find(g_differing.begin(), g_differing.end(), setting) == g_differing.end())
-                g_differing.push_back(setting);
+            g_user_lines.emplace_back(name, value);
         }
         return true;
     }
@@ -261,7 +259,7 @@ void BeginUserConfig()
 {
     g_user_config = Gfx::LocksActive();
     g_stale_in_user.clear();
-    g_differing.clear();
+    g_user_lines.clear();
 }
 
 void EndUserConfig()
@@ -269,11 +267,19 @@ void EndUserConfig()
     g_user_config = false;
     if (!Gfx::Enabled())
         return;
+    // every line counts, not only the first: a later line of the same setting wins in an unlocked engine
+    std::vector<std::string> differing;
+    for (const auto& line : g_user_lines)
+    {
+        const std::string setting = line.first + " " + line.second;
+        if (!SameValue(line.second, Gfx::ProfileValue(line.first.c_str())) && std::find(differing.begin(), differing.end(), setting) == differing.end())
+            differing.push_back(setting);
+    }
     if (!g_stale_in_user.empty())
     {
         std::string list;
         size_t shown = 0;
-        for (const std::string& setting : g_differing)
+        for (const std::string& setting : differing)
         {
             if (++shown > 12)
             {
@@ -283,10 +289,10 @@ void EndUserConfig()
             list += (list.empty() ? "" : ", ") + setting;
         }
         Report("* graphics: user.ltx has %zu locked settings, ignored (the %s profile applies); %zu of them differ from the profile%s%s",
-            g_stale_in_user.size(), Gfx::ProfileId().c_str(), g_differing.size(), list.empty() ? "" : ": ", list.c_str());
+            g_stale_in_user.size(), Gfx::ProfileId().c_str(), differing.size(), list.empty() ? "" : ": ", list.c_str());
     }
     g_stale_in_user.clear();
-    g_differing.clear();
+    g_user_lines.clear();
 
     // the player's own starting values, once per version
     const std::string want = "defaults " + std::to_string(Gfx::UserDefaultsVersion());

@@ -89,7 +89,8 @@ STAT = re.compile(r"^\[\s*([\d.]+)\] anomaly: ([\d.]+) fps \((\d+) frames in ([\
                   r"footprint (\d+) MB \(peak (\d+)\), available (\d+) MB, thermal (\w+)")
 METAL = re.compile(r"^\[\s*([\d.]+)\] anomaly: metal: gpu ([\d.]+) ms/frame, cpu ([\d.]+) ms/frame \(blocked ([\d.]+)\), (\d+) draws, ([\d.]+) passes/frame; "
                    r"textures (\d+) MB \(render targets (\d+) MB\), buffers (\d+) MB, allocated (\d+) MB")
-MARK = re.compile(r"^\[\s*([\d.]+)\] anomaly: script: MEAS (\w+) (\w+) (begin|end)")
+# the marker is logged twice ("script t=161.0 log MEAS ..." and "script: MEAS ..."); a log line from another thread can split one of them
+MARK = re.compile(r"^\[\s*([\d.]+)\] anomaly: script(?: t=[\d.]+ log|:) MEAS (\w+) (\w+) (begin|end)")
 
 
 def mean(xs):

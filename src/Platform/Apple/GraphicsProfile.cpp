@@ -137,28 +137,29 @@ const std::vector<ProfileDef> kProfiles = {
     {"ipad-8gb", "iPad, 8 GB (iPad Air M3 measured)", "ipad", true,
         "Measured on the iPad Air 13-inch (M3, 8 GB, 60 Hz). Also the target of other 8 GB iPads with an M-series chip.", "-smap1536",
         {{"texture_lod", "1"}, {"r3_dynamic_wet_surfaces", "off"}, {"r2_ssao_mode", "hdao"}, {"r__geometry_lod", "1.0"}},
-        // Quality: the first preset's settings and its render size, a notch smaller (1280x960, 1.23 Mpixel) so that the Rookie village,
-        // which was 49 to 55 fps at 1366x1024 (GPU 15.2 to 16.2 ms, about 10 ms per Mpixel), has 15 % of a frame to spare
+        // Quality: the first preset's settings at 1152x864 (1.0 Mpixel, 2.4x upscaled to the panel). At 1280x960 the rain scene measured 54.6 fps
+        // (frame time about 15 ms per Mpixel), so 1.0 Mpixel leaves 10 % of the frame. With MetalFX the render size is the output size
+        // times r__render_scale, whose floor is 0.5: the same render size from a smaller output
         {{"r2_sun_quality", "st_opt_low"}, {"r2_ls_squality", "0.5"}, {"r2_ssao", "st_opt_low"}, {"r__detail_density", "0.4"},
-         {"r__detail_radius", "35"}, {"rs_vis_distance", "0.8"}, {"vid_mode", "1280x960", When::WithoutUpscaler},
-         {"r__render_scale", "0.5", When::WithUpscaler}, {"r__upscaler", "metalfx", When::WithUpscaler}},
-        // Performance: a smaller render size (1152x864, 1.0 Mpixel) and no AO, for a frame that never drops under 60 when the iPad is warm
+         {"r__detail_radius", "35"}, {"rs_vis_distance", "0.8"}, {"vid_mode", "1152x864", When::WithoutUpscaler},
+         {"vid_mode", "2304x1728", When::WithUpscaler}, {"r__render_scale", "0.5", When::WithUpscaler}, {"r__upscaler", "metalfx", When::WithUpscaler}},
+        // Performance: 1024x768 (0.79 Mpixel), no AO, shorter distances: 25 % of the frame to spare, for a warm iPad
         {{"r2_sun_quality", "st_opt_low"}, {"r2_ls_squality", "0.5"}, {"r2_ssao", "st_opt_off"}, {"r__detail_density", "0.4"},
          {"r__detail_radius", "30"}, {"rs_vis_distance", "0.75"}, {"r2_sun_far", "80"}, {"r__wallmark_ttl", "20"}, {"ai_use_torch_dynamic_lights", "off"},
-         {"vid_mode", "1152x864", When::WithoutUpscaler}, {"r__render_scale", "0.5", When::WithUpscaler}, {"r__upscaler", "metalfx", When::WithUpscaler}},
+         {"vid_mode", "1024x768", When::WithoutUpscaler}, {"vid_mode", "2048x1536", When::WithUpscaler}, {"r__render_scale", "0.5", When::WithUpscaler},
+         {"r__upscaler", "metalfx", When::WithUpscaler}},
         60, 60},
     {"ipad-16gb", "iPad, 12 and 16 GB (extrapolated)", "ipad-8gb", false,
         "Not measured. The 8 GB profile with the memory headroom spent on textures, and a GPU a third faster (M4 Pro iPads) spent on render size.", "-smap2048",
         {{"texture_lod", "0"}},
-        {{"vid_mode", "1366x1024", When::WithoutUpscaler}, {"r__render_scale", "0.55", When::WithUpscaler}},
-        {{"vid_mode", "1280x960", When::WithoutUpscaler}, {"r__render_scale", "0.5", When::WithUpscaler}},
+        {{"vid_mode", "1280x960", When::WithoutUpscaler}, {"vid_mode", "2560x1920", When::WithUpscaler}},
+        {{"vid_mode", "1152x864", When::WithoutUpscaler}, {"vid_mode", "2304x1728", When::WithUpscaler}},
         60, 60},
     {"ipad-6gb", "iPad, 6 GB or less, or an A-series chip (extrapolated)", "ipad-8gb", false,
         "Not measured. One step down from the 8 GB profile in textures, render size and distances.", "-smap1024",
         {{"texture_lod", "2"}},
-        {{"vid_mode", "1152x864", When::WithoutUpscaler}, {"r__render_scale", "0.5", When::WithUpscaler}, {"r__detail_radius", "25"},
-         {"rs_vis_distance", "0.7"}},
-        {{"vid_mode", "1024x768", When::WithoutUpscaler}, {"r__render_scale", "0.5", When::WithUpscaler}, {"r2_ssao", "st_opt_off"},
+        {{"vid_mode", "1024x768", When::WithoutUpscaler}, {"vid_mode", "2048x1536", When::WithUpscaler}, {"r__detail_radius", "25"}, {"rs_vis_distance", "0.7"}},
+        {{"vid_mode", "896x672", When::WithoutUpscaler}, {"vid_mode", "1792x1344", When::WithUpscaler}, {"r2_ssao", "st_opt_off"},
          {"r__detail_radius", "20"}, {"rs_vis_distance", "0.65"}},
         60, 60},
 

@@ -13,7 +13,7 @@
 # Needs the iPad connected and unlocked. It restores user.ltx as it found it. Never uses the Simulator.
 set -euo pipefail
 here=${0:A:h}
-repo=${here:h}
+repo=${0:A:h:h:h}
 ipad=$here/ipad.sh
 save=ipad_test
 install=0
