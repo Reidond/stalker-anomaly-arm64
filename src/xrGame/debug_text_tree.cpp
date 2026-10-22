@@ -76,7 +76,7 @@ namespace debug
 		{
 			void operator ()(const char* s, int num_siblings)
 			{
-				Msg(s);
+				Msg("%s", s);
 			}
 		};
 	} // namespace detail

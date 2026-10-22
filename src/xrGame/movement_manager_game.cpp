@@ -22,7 +22,7 @@
 #include "level_path_builder.h"
 #include "detail_path_builder.h"
 #include "mt_config.h"
-#include "../../script_game_object.h"
+#include "script_game_object.h"
 
 void CMovementManager::show_game_path_info()
 {
@@ -143,7 +143,7 @@ void CMovementManager::process_game_path()
 
                 if (!ai().level_graph().valid_vertex_id(dest_level_vertex_id))
                 {
-                    Msg("! [CMovementManager::process_game_path::ePathStateBuildLevelPath] cannot build path, invalid dest_level_vertex_id %lu, object %s", dest_level_vertex_id, object().cName().c_str());
+                    Msg("! [CMovementManager::process_game_path::ePathStateBuildLevelPath] cannot build path, invalid dest_level_vertex_id %u, object %s", dest_level_vertex_id, object().cName().c_str());
                     break;
                 }
 
@@ -158,7 +158,7 @@ void CMovementManager::process_game_path()
 
                 if (!ai().level_graph().valid_vertex_id(dest_level_vertex_id))
                 {
-                    Msg("! [CMovementManager::process_game_path::ePathStateBuildLevelPath] cannot build path after accessible_nearest check, invalid dest_level_vertex_id %lu, object %s", dest_level_vertex_id, object().cName().c_str());
+                    Msg("! [CMovementManager::process_game_path::ePathStateBuildLevelPath] cannot build path after accessible_nearest check, invalid dest_level_vertex_id %u, object %s", dest_level_vertex_id, object().cName().c_str());
                     break;
                 }
 

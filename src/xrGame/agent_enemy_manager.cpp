@@ -561,10 +561,10 @@ void CAgentEnemyManager::assign_wounded()
 				iterator			E = m_enemies.end();
 				for ( ; I != E; ++I)
 					Msg				(
-						"  [%s][0x%08x][0x%08x][%.2f]",
+						"  [%s][0x%08llx][0x%08llx][%.2f]",
 						*(*I).m_object->cName(),
-						(*I).m_mask.get(),
-						(*I).m_distribute_mask.get(),
+						(unsigned long long)(*I).m_mask.get(),
+						(unsigned long long)(*I).m_distribute_mask.get(),
 						(*I).m_probability
 					);
 			}
@@ -575,10 +575,10 @@ void CAgentEnemyManager::assign_wounded()
 				const_iterator		E = object().member().combat_members().end();
 				for ( ; I != E; ++I)
 					Msg				(
-						"  [%s][0x%08x][0x%08x]",
+						"  [%s][0x%08llx][%p]",
 						*(*I)->object().cName(),
-						object().member().mask(&(*I)->object()),
-						(*I)->selected_enemy()
+						(unsigned long long)object().member().mask(&(*I)->object()),
+						(void*)(*I)->selected_enemy()
 					);
 			}
 		}

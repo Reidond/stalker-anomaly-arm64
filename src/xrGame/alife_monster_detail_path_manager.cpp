@@ -61,16 +61,14 @@ void CALifeMonsterDetailPathManager::target(const GameGraph::_GRAPH_ID& game_ver
 
 void CALifeMonsterDetailPathManager::target(const CALifeSmartTerrainTask& task)
 {
-	if (&task == NULL)
-	{
-		return;
-	}
 	target(task.game_vertex_id(), task.level_vertex_id(), task.position());
 }
 
 void CALifeMonsterDetailPathManager::target(const CALifeSmartTerrainTask* task)
 {
 	//	Msg								("[%6d][%s][%s]",Device.dwTimeGlobal,object().name_replace(),*task->patrol_path_name());
+	if (!task)
+		return;
 	target(*task);
 }
 
