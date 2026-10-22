@@ -123,16 +123,33 @@ void faultHandler(int sig, siginfo_t* info, void* ctx)
     }
 }
 
-// Each thread needs its own alternate stack so a runaway recursion can also be caught.
+// Each thread needs its own alternate stack so a runaway recursion can also be caught. A thread that already has one (a
+// sanitizer runtime or a crash reporter installed it) keeps it; one this guard installed is removed and freed with the thread.
 struct AltStack
 {
+    void* mem = nullptr;
     AltStack()
     {
+        stack_t cur = {};
+        if (sigaltstack(nullptr, &cur) == 0 && !(cur.ss_flags & SS_DISABLE))
+            return;
         stack_t ss = {};
         ss.ss_size = 64 * 1024;
-        ss.ss_sp = std::malloc(ss.ss_size);
-        if (ss.ss_sp)
-            sigaltstack(&ss, nullptr);
+        ss.ss_sp = mem = std::malloc(ss.ss_size);
+        if (ss.ss_sp && sigaltstack(&ss, nullptr) != 0)
+        {
+            std::free(mem);
+            mem = nullptr;
+        }
+    }
+    ~AltStack()
+    {
+        if (!mem)
+            return;
+        stack_t ss = {};
+        ss.ss_flags = SS_DISABLE;
+        sigaltstack(&ss, nullptr);
+        std::free(mem);
     }
 };
 
