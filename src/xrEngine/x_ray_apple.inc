@@ -249,6 +249,12 @@ void Shutdown()
 
 bool IsRunning() { return g_app.running; }
 
+void HandleEvent(const SDL_Event& event)
+{
+	if (g_app.core_ready)
+		xr_window::DispatchEvent(event);
+}
+
 void ExecuteConsole(const char* command)
 {
 	if (Console && command)

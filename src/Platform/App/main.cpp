@@ -62,6 +62,8 @@ struct App
     Uint64 engine_start_ns = 0;
     int exit_code = 0;
 
+    // where the scripted pointer is, window points: motion events carry the position and the delta
+    float pointer_x = 0, pointer_y = 0;
     std::vector<ScriptStep> script;
     size_t script_next = 0;
     std::vector<ScriptStep> pending_releases;
@@ -120,7 +122,7 @@ void PushKey(const std::string& name, bool down)
     SDL_PushEvent(&e);
 }
 
-void PushMotion(float x, float y, float xrel, float yrel)
+void PushMotion(App& app, float x, float y)
 {
     SDL_Event e{};
     e.type = SDL_EVENT_MOUSE_MOTION;
@@ -128,8 +130,10 @@ void PushMotion(float x, float y, float xrel, float yrel)
     e.motion.windowID = EngineWindowID();
     e.motion.x = x;
     e.motion.y = y;
-    e.motion.xrel = xrel;
-    e.motion.yrel = yrel;
+    e.motion.xrel = x - app.pointer_x;
+    e.motion.yrel = y - app.pointer_y;
+    app.pointer_x = x;
+    app.pointer_y = y;
     SDL_PushEvent(&e);
 }
 
@@ -187,12 +191,12 @@ bool RunScript(App& app)
         else if (step.command == "keyup")
             PushKey(step.args, false);
         else if (step.command == "move" && sscanf(step.args.c_str(), "%f %f", &x, &y) == 2)
-            PushMotion(x, y, 0, 0);
+            PushMotion(app, x, y);
         else if (step.command == "relmove" && sscanf(step.args.c_str(), "%f %f", &x, &y) == 2)
-            PushMotion(0, 0, x, y);
+            PushMotion(app, app.pointer_x + x, app.pointer_y + y);
         else if (step.command == "click" && sscanf(step.args.c_str(), "%f %f %d", &x, &y, &button) >= 2)
         {
-            PushMotion(x, y, 0, 0);
+            PushMotion(app, x, y);
             PushButton(button, true, x, y);
             PushButton(button, false, x, y);
         }
@@ -221,6 +225,13 @@ bool StartEngine(App& app)
         return false;
     }
     app.engine_start_ns = SDL_GetTicksNS();
+    {
+        // the engine's UI cursor starts in the middle of the window and follows motion deltas (relative mouse mode)
+        int w = 0, h = 0;
+        SDL_GetWindowSize(static_cast<SDL_Window*>(xr_engine::WindowHandle()), &w, &h);
+        app.pointer_x = float(w) * 0.5f;
+        app.pointer_y = float(h) * 0.5f;
+    }
     AppleShell::Log("anomaly: engine up in %.2f s", double(app.engine_start_ns - t0) * 1e-9);
     app.engine_up = true;
     return true;
@@ -334,7 +345,11 @@ SDL_AppResult SDL_AppEvent(void* appstate, SDL_Event* event)
 {
     auto* app = static_cast<App*>(appstate);
     if (app->engine_up)
-        return SDL_APP_CONTINUE; // xr_engine::Frame() drains the SDL queue itself
+    {
+        // SDL3's callback loop has already taken the event out of the queue the engine would pump
+        xr_engine::HandleEvent(*event);
+        return SDL_APP_CONTINUE;
+    }
     if (event->type == SDL_EVENT_QUIT)
         return SDL_APP_SUCCESS;
     if (!app->launcher)

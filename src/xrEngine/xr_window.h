@@ -106,6 +106,10 @@ typedef void (*EventHandler)(const SDL_Event& event, void* user);
 ENGINE_API void AddEventHandler(EventHandler handler, void* user);
 ENGINE_API void RemoveEventHandler(EventHandler handler, void* user);
 ENGINE_API void PumpEvents();
+// Hands one event, already taken out of the SDL queue, to the handlers and the device: what PumpEvents does per event.
+// An app that runs on SDL3's callbacks gets its events through SDL_AppEvent before the engine's frame runs and forwards
+// them here (xr_engine::HandleEvent).
+ENGINE_API void DispatchEvent(const SDL_Event& event);
 // True once the window was closed or the OS asked the app to quit (the engine has queued KERNEL:quit by then).
 ENGINE_API bool QuitRequested();
 ENGINE_API void RequestQuit();

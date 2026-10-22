@@ -15,3 +15,16 @@ add_executable(anomaly main.cpp)
 target_include_directories(anomaly PRIVATE "${PROJECT_SOURCE_DIR}/src")
 target_link_libraries(anomaly PRIVATE xrEngine xrGame xrRender_R4 anomaly_apple_shell)
 anomaly_configure_game_app(anomaly DISPLAY_NAME "Anomaly")
+
+# The Monolith gamedata overlay (the repository's gamedata/: scripts, configs and shaders the engine build needs next to the
+# game data) rides in the bundle; the shell packs it into an archive at startup (src/Platform/Apple/Overlay.cpp).
+if(ANOMALY_IOS)
+    set(anomaly_resources_dir "$<TARGET_BUNDLE_CONTENT_DIR:anomaly>")
+else()
+    set(anomaly_resources_dir "$<TARGET_BUNDLE_CONTENT_DIR:anomaly>/Resources")
+endif()
+file(GLOB_RECURSE anomaly_overlay_files CONFIGURE_DEPENDS "${PROJECT_SOURCE_DIR}/gamedata/*")
+add_custom_command(TARGET anomaly POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E rm -rf "${anomaly_resources_dir}/overlay"
+    COMMAND ${CMAKE_COMMAND} -E copy_directory "${PROJECT_SOURCE_DIR}/gamedata" "${anomaly_resources_dir}/overlay"
+    COMMENT "anomaly: copying the Monolith gamedata overlay into the bundle")
