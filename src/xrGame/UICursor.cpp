@@ -42,7 +42,7 @@ void CUICursor::InitInternal()
 	m_static->SetTextureRect(rect);
 	Fvector2 sz;
 	sz.set(rect.rb);
-	sz.x *= UI().get_current_kx();
+	sz.x *= ui_core::get_current_kx(); // static; UI() is still null while ui_core constructs its cursor
 
 	m_static->SetWndSize(sz);
 	m_static->SetStretchTexture(true);
