@@ -1,7 +1,7 @@
 // The Anomaly app: SDL3 callbacks around xr_engine::Init / Frame / Shutdown (src/xrEngine/xr_engine_app.h).
 //
 //   anomaly [--data-root <path>] [--exit-after <seconds>] [--script <file>] [--show-launcher]
-//           [--unattended [--size <w>x<h>]] [--foreground] [engine flags...]
+//           [--unattended [--size <w>x<h>] [--show-window]] [--foreground] [engine flags...]
 //
 // Everything that is not one of the app's own flags goes to the engine as its command line (the same flags the Windows
 // build takes, e.g. -nointro, -ltx, -start, -nosound), after the contents of commandline.txt (xrEngine, XRENGINE.md).
@@ -10,8 +10,8 @@
 //
 // --unattended (implied by --script and --exit-after, unless --foreground is given) is for runs nobody watches, on a Mac
 // somebody is working on: the app stays in the background (SDL's MAC_BACKGROUND_APP and ACTIVATE_WHEN_* hints, set before
-// SDL_Init: no dock icon, no focus, no new Space), the engine runs windowed at --size (default 1280x720 pixels) and does not
-// pause when unfocused, sound goes to OpenAL Soft's null device, and App Nap is off so frame pacing stays real. The engine
+// SDL_Init: no dock icon, no focus, no new Space), the engine renders offscreen at --size (default 1280x720 pixels; no window
+// is ever shown, --show-window gives it a windowed one in the background), does not pause when unfocused, sound goes to OpenAL Soft's null device, and App Nap is off so frame pacing stays real. The engine
 // reads its settings from appdata/unattended.ltx (a copy of user.ltx plus those overrides, written at start) and saves them
 // there, so the player's user.ltx is left alone.
 //
@@ -81,6 +81,7 @@ struct App
     std::vector<ScriptStep> pending_releases;
 
     bool unattended = false;
+    bool show_window = false; // --show-window: unattended, but with a (background) window instead of offscreen rendering
     int unattended_width = 1280, unattended_height = 720; // pixels
     std::vector<std::string> engine_args; // argv plus what unattended mode adds
     std::vector<char*> engine_argv;
@@ -294,6 +295,7 @@ bool StartEngine(App& app)
     params.argc = app.argc;
     params.argv = app.argv;
     params.background = app.unattended;
+    params.offscreen = app.unattended && !app.show_window;
     std::string error;
     const Uint64 t0 = SDL_GetTicksNS();
     const xr_engine::InitResult result = xr_engine::Init(params, error);
@@ -365,6 +367,8 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char** argv)
             unattended_flag = true;
         else if (!strcmp(argv[i], "--foreground"))
             foreground = true;
+        else if (!strcmp(argv[i], "--show-window"))
+            app->show_window = true;
         else if (!strcmp(argv[i], "--size") && i + 1 < argc)
             sscanf(argv[++i], "%dx%d", &app->unattended_width, &app->unattended_height);
         else if (!strcmp(argv[i], "--exit-after") && i + 1 < argc)

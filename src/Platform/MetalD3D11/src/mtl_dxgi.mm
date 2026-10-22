@@ -3,6 +3,7 @@
 #import "mtl_swapchain.h"
 
 #include <map>
+#include <set>
 
 namespace mtl_d3d11
 {
@@ -13,6 +14,12 @@ std::map<void*, void*>& layerRegistry()
 {
     static std::map<void*, void*> m;
     return m;
+}
+
+std::set<void*>& offscreenWindows()
+{
+    static std::set<void*> s;
+    return s;
 }
 
 struct DisplayConfig
@@ -156,15 +163,17 @@ public:
                                    const DXGI_SWAP_CHAIN_FULLSCREEN_DESC*, IDXGIOutput*, IDXGISwapChain1** pp) override
     {
         void* layer = nullptr;
+        bool offscreen = false;
         {
             std::lock_guard<std::mutex> lk(g_layerMutex);
             auto it = layerRegistry().find(hwnd);
             if (it != layerRegistry().end())
                 layer = it->second;
+            offscreen = offscreenWindows().count(hwnd) != 0;
         }
-        if (!layer && hwnd && [(__bridge id)hwnd isKindOfClass:[CAMetalLayer class]])
+        if (!layer && !offscreen && hwnd && [(__bridge id)hwnd isKindOfClass:[CAMetalLayer class]])
             layer = hwnd;
-        if (!layer)
+        if (!layer && !offscreen)
         {
             Log("CreateSwapChainForHwnd: window %p has no registered CAMetalLayer (call RegisterWindowLayer)", hwnd);
             return E_INVALIDARG;
@@ -174,6 +183,7 @@ public:
             return E_INVALIDARG;
         SwapChainDesc sc;
         sc.metalLayer = layer;
+        sc.offscreen = layer == nullptr;
         sc.width = d->Width;
         sc.height = d->Height;
         sc.format = d->Format;
@@ -199,6 +209,12 @@ void RegisterWindowLayer(void* hwnd, void* layer)
 {
     std::lock_guard<std::mutex> lk(g_layerMutex);
     layerRegistry()[hwnd] = layer;
+}
+
+void RegisterOffscreenWindow(void* hwnd)
+{
+    std::lock_guard<std::mutex> lk(g_layerMutex);
+    offscreenWindows().insert(hwnd);
 }
 
 HRESULT CreateFactory(MtlREFIID riid, void** pp)
