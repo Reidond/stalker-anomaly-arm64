@@ -293,6 +293,7 @@ bool StartEngine(App& app)
     xr_engine::InitParams params;
     params.argc = app.argc;
     params.argv = app.argv;
+    params.background = app.unattended;
     std::string error;
     const Uint64 t0 = SDL_GetTicksNS();
     const xr_engine::InitResult result = xr_engine::Init(params, error);
@@ -383,6 +384,7 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char** argv)
         SDL_SetHint(SDL_HINT_WINDOW_ACTIVATE_WHEN_RAISED, "0");
         setenv("ALSOFT_DRIVERS", "null", 0); // OpenAL Soft's silent device, read when the engine opens its first one
         anomaly_app::BeginUnattendedActivity();
+        anomaly_app::SetBackgroundActivationPolicy(); // before SDL creates the NSApplication and its first window
     }
 
     if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS | SDL_INIT_GAMEPAD))

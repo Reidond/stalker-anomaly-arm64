@@ -28,6 +28,13 @@
 # define XR_INPUT_USE_XR_WINDOW 1
 #endif
 
+// unattended runs must not grab or warp the user's mouse (xr_window::SetBackground)
+#if defined(XR_INPUT_USE_XR_WINDOW)
+# define XR_INPUT_BACKGROUND() xr_window::IsBackground()
+#else
+# define XR_INPUT_BACKGROUND() false
+#endif
+
 #include <algorithm>
 #include <cmath>
 
@@ -148,7 +155,8 @@ struct XrInputSdl : public gameinput::IEngineInputSink
     void ApplyCapture()
     {
         SDL_Window* win = Window();
-        const bool want = captured && app_active && !suspended;
+        // a background (unattended) run must never grab the user's mouse: no relative mode, scripted motion still arrives
+        const bool want = captured && app_active && !suspended && !XR_INPUT_BACKGROUND();
         if (!win)
         {
             relative_on = false;
@@ -625,7 +633,7 @@ void CInput::iSetMousePos(const Ivector2& p)
     sdl->py = float(p.y) * wh / ch;
     sdl->have_pos = true;
     sdl->ClampPointer();
-    if (!sdl->relative_on)
+    if (!sdl->relative_on && !XR_INPUT_BACKGROUND())
         SDL_WarpMouseInWindow(win, sdl->px, sdl->py);
 }
 
