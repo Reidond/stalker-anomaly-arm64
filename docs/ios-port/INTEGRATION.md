@@ -250,6 +250,8 @@ copy of the overlay; archive access (`pread`, no `extended-virtual-addressing` w
 
 ## iOS (compile and link only)
 
+**Update:** the target now runs on the iPad, see [IPAD.md](IPAD.md). The section below is the original compile-and-link check.
+
 The same target configures and links for `ios-arm64`, unsigned, nothing run on a device:
 
 ```bash
