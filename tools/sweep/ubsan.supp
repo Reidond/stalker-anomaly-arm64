@@ -15,3 +15,9 @@ pointer-overflow:*rt_lzo*
 # `&*v.begin()` and `&v[0]` on an empty xr_vector: the engine's way to say "pointer to the data, or null", never dereferenced.
 # libc++ reports the reference binding. Real null dereferences are reported at their own line, not here.
 null:*wrap_iter.h
+
+# --- known, not fixed here --------------------------------------------------------------------------------------------------
+# xrCore/FTimer.h CTimer::GetElapsed_ticks: the u64 delta wraps when the counter read on another thread is behind m_real_ticks
+# (the ALife update thread), and the double -> u64 conversion of the wrapped value is out of range. Harmless in effect (about one
+# tick too little); fixing it edits an xrCore header that every module includes, so it is listed in the PR instead.
+float-cast-overflow:*FTimer.h

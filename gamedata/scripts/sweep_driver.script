@@ -101,6 +101,22 @@ local function spot(dist, ang)
 	return level.vertex_position(lvid), lvid
 end
 
+-- the transition spot of a level is next to its level changer; a fight there ends in a level change (autosave, disconnect)
+local function move_inland(dist)
+	local best, best_d = nil, 0
+	for i = 0, 7 do
+		local pos, lvid = spot(dist, i * 0.785)
+		local d = db.actor:position():distance_to(pos)
+		if d > best_d then
+			best, best_d = pos, d
+		end
+	end
+	if best then
+		db.actor:set_actor_position(best)
+		say("moved %s m inland", tostring(math.floor(best_d)))
+	end
+end
+
 local function spawn_near(section, dist, ang)
 	local pos, lvid = spot(dist, ang)
 	local se = alife_create(section, pos, lvid, db.actor:game_vertex_id())
@@ -520,7 +536,9 @@ local phases = {
 			if not wait_for("the Garbage", 240000, function() return level_is("l02_garbage") end) then return { quit = true } end
 			enable_ui()
 			pause(8000)
-			say("in garbage at %s", tostring(db.actor:position()))
+			say("in garbage")
+			try("inland", function() move_inland(120) end)
+			pause(4000)
 			gear_up()
 			arm()
 			combat()
@@ -569,6 +587,79 @@ local phases = {
 			return { quit = true }
 		end,
 	},
+	-- die, then load the last save the way the game-over screen's "Load last save" does
+	die_reload = {
+		function()
+			wait_for("actor", 240000, actor_ready); enable_ui()
+			pause(8000)
+			save_here("sweep_die")
+			try("die", function() god(false); db.actor:kill(db.actor) end)
+			finish_game_over()
+			return { reload = "last" }
+		end,
+		function()
+			wait_for("the reload", 240000, actor_ready); enable_ui()
+			pause(8000)
+			say("alive again: %s", tostring(db.actor:alive()))
+			return { quit = true }
+		end,
+	},
+	-- quit from a state: reach it on sweep_base, then ask the engine to quit with the state still up
+	quit_level = { function() wait_for("actor", 240000, actor_ready); enable_ui(); pause(3000); return { quit = true } end },
+	quit_inventory = {
+		function()
+			wait_for("actor", 240000, actor_ready); enable_ui()
+			pause(12000)
+			for attempt = 1, 4 do
+				try("open inventory", function() press(key_bindings.kINVENTORY, 150) end)
+				if wait_for("the inventory", 6000, ui_open) then break end
+			end
+			pause(2000)
+			say("inventory open: %s", tostring(ui_open()))
+			return { quit = true }
+		end,
+	},
+	quit_pda = {
+		function()
+			wait_for("actor", 240000, actor_ready); enable_ui()
+			pause(5000)
+			try("give pda", function() give("device_pda", 1) end)
+			try("open pda", function() ActorMenu.get_pda_menu():ShowDialog(true) end)
+			pause(3000)
+			say("pda open: %s", tostring(ui_open()))
+			return { quit = true }
+		end,
+	},
+	quit_dialog = {
+		function()
+			wait_for("actor", 240000, actor_ready); enable_ui()
+			pause(5000)
+			local trader = get_story_object("esc_m_trader")
+			db.actor:set_actor_position(trader:position())
+			pause(4000)
+			trader = get_story_object("esc_m_trader")
+			try("talk", function() db.actor:run_talk_dialog(trader, false) end)
+			pause(4000)
+			say("talk open: %s", tostring(ui_open()))
+			return { quit = true }
+		end,
+	},
+	quit_combat = {
+		function()
+			wait_for("actor", 240000, actor_ready); enable_ui()
+			pause(5000)
+			god(true)
+			gear_up()
+			arm()
+			for i, sec in ipairs({ "sim_default_bandit_0", "sim_default_bandit_1", "boar_normal" }) do
+				pcall(spawn_near, sec, 10 + i * 2, i * 1.3)
+			end
+			pause(6000)
+			return { quit = true }
+		end,
+	},
+	quit_dead = { function() wait_for("actor", 240000, actor_ready); enable_ui(); pause(5000); try("die", function() god(false); db.actor:kill(db.actor) end); pause(6000); return { quit = true } end },
+	quit_surge = { function() wait_for("actor", 240000, actor_ready); enable_ui(); pause(5000); surge_start_only(); pause(8000); return { quit = true } end },
 	saveload = {
 		function()
 			wait_for("actor", 240000, actor_ready); enable_ui()
