@@ -26,8 +26,10 @@
 99 pad circle              # the touchpad clicks while the PDA is up (menu context); Circle closes it
 101 paddown l1
 107 padup l1
-109 paddown r1
-115 padup r1
+109 paddown r1           # the PDA left the hands empty: pick slot 3 (the AK-74, on the right of the wheel) to take it out again
+111 padaxis rx 1
+114 padup r1              # release R1 while the stick is still pushed: a pick lasts only 0.3 s after the stick is back at the centre
+114.1 padaxis rx 0
 118 padaxis l2 1
 120 padaxis r2 1
 123 padaxis r2 0

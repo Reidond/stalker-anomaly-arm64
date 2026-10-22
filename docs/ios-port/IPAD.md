@@ -184,14 +184,17 @@ Both ended with exit code 0: no crash, no memory warning, no lifecycle event, th
 - **Soak 1**: walks west from the village for 10 minutes (220 m), then stands against the edge of the walkable area for 16 more, so it is mostly one scene. 162
   samples of the 10 s line: 60.0 fps on average (one 52 fps window while the level was still streaming in), GPU 14.4 ms (max 16.5), footprint 3.94 to 4.10 GB
   (about 100 MB of growth after the first 3 minutes, 4 MB a minute), at least 4.09 GB available, thermal Nominal the whole time.
-- **Soak 2**: teleports to eight spots in turn, re-equips the AK-74 with the combat wheel, walks, fires, opens the PDA and the inventory. 125 samples: 55.2 fps on
+- **Soak 2**: teleports to eight spots in turn, walks, opens the PDA and the inventory, and (in the script as run) was meant to re-equip the AK-74 with the combat
+  wheel and fire. The wheel part failed because of the script, not the game: it let the stick go 1 s before R1 and a pick lasts 0.3 s after the stick is back at the
+  centre, so the hands stayed empty after the first PDA and nothing fired. The script is fixed, `pad_test.txt` shows the whole path (PDA, Circle, R1 pick of slot 3,
+  R2 empties the magazine). 125 samples: 55.2 fps on
   average, 45 at worst, footprint 3.96 to 4.07 GB. The frame rate depends on the place and repeats from lap to lap: the open field is 56 to 60 fps, the
   village is 49 to 55 (GPU 15.2 to 16.2 ms against a 16.7 ms frame, max 22). So the preset is not a flat 60: the heaviest spots are GPU bound just under it.
 - **Thermal**: Nominal to Serious after 4.6 minutes in soak 2 (the iPad had been run for an hour), and it stayed Serious for the remaining 16. The same spot
   gave the same frame rate before and after (village 51.9 Nominal, then 55.6 and 55.1 Serious; the next spot 49.1, then 51.6 and 50.9), and the GPU time did not
   move, so no throttling shows at Serious. Soak 1 started cool and never left Nominal. Critical was never seen.
 - Four more runs with `MallocGuardEdges`, `MallocScribble` and `MallocStackLogging` (`ANOMALY_LAUNCH_ENV`) loaded the save, played a minute and exited cleanly:
-  the heap abort of Known issues did not show in them or in the two soaks (about 3 hours of play in all).
+  the heap abort of Known issues did not show in them or in the two soaks, but one later run (a plain 100 s script) aborted in `CloseLog` at a normal quit (Known issues).
 
 ## Launch arguments
 
@@ -221,8 +224,11 @@ fps, CPU ms inside `Frame()`, GPU ms, footprint (peak), available memory and the
 - The Load game list was not screenshotted again after the colour fix (it uses the same Lua colours as the inventory list, which was). In a script the virtual
   pad's analog stick moves the cursor sprite but the menu does not see a hover or a click from it; the D-pad nudge (96 UI units a step) does click.
 - The save screenshot (`.dds`) next to a save is black (the Load game preview shows black or noise).
-- Three `SIGABRT`s from libmalloc (`pointer being freed was not allocated`) in about 35 runs, at different places (vkd3d, `CloseLog` at shutdown): a
-  double free or a foreign pointer somewhere, passed to the crash-sweep session.
+- Four `SIGABRT`s from libmalloc (`pointer being freed was not allocated`) in about 90 runs, at different places (vkd3d; `CloseLog` at shutdown, twice): a
+  double free or a foreign pointer somewhere, passed to the crash-sweep session. The latest, with the merged tree: `pick.txt`-style 100 s run, normal `quit`,
+  `anomaly: script asked to quit`, then `xr_engine::Shutdown` -> `xrCore::_destroy` -> `CLocatorAPI::_destroy` -> `CloseLog` -> `LogFile.clear()` frees a bad
+  block (`libsystem_malloc` abort). `clear()` walks every log line's string, so it trips over a heap corruption made anywhere earlier. Also worth a guard:
+  `AddOne` does `LogFile.erase(LogFile.end()-1)` for a repeated line, which is undefined if the `clear_log` console command emptied the vector first.
 
 ## Controller
 
@@ -247,7 +253,9 @@ depends on the motion.
 
 Two things that look like bugs and are not. The touchpad opens the PDA from the game, but while the PDA is up the pad is in the menu context, where the
 touchpad press is a click: **Circle** (`ESC`) closes it (Create does the same for the inventory). And closing the PDA leaves the hands empty, as in stock Anomaly
-(the PDA is the held item of slot 8): take the weapon out again with the combat wheel (R1, pick slot 3) or its slot key. `pad_test.txt` and the soaks do both.
+(the PDA is the held item of slot 8): take the weapon out again with the combat wheel (R1, push the stick to slot 3, release R1) or its slot key. A wheel pick lasts
+0.3 s after the stick is back at the centre, so flick and release R1 together, or release R1 while still pushing. Pressing the key of the slot that is already
+in hand puts the weapon away (stock). `pad_test.txt` does the PDA, Circle, the pick and the shooting; `pick` runs of knife, AK-74 and pistol by wheel all took effect.
 
 Not done: the Controls screen has no Gamepad column. A game started by script leaves the PDA and the outfit in the backpack (`slots(true)` moves the PDA to its
 slot; a normal new game from the menu was not checked), and the 3D PDA only rises from its slot.

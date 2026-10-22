@@ -9,8 +9,8 @@
 56 console run_string ipad_debug.state("soak2 0")
 57 paddown r1
 58 padaxis rx 1
-60 padaxis rx 0
 61 padup r1
+61.1 padaxis rx 0
 63 padaxis ly -1
 73 padaxis ly 0
 74 padaxis rx 1
@@ -31,8 +31,8 @@
 116 console run_string ipad_debug.state("soak2 1")
 117 paddown r1
 118 padaxis rx 1
-120 padaxis rx 0
 121 padup r1
+121.1 padaxis rx 0
 123 padaxis ly -1
 133 padaxis ly 0
 134 padaxis rx -1
@@ -53,8 +53,8 @@
 176 console run_string ipad_debug.state("soak2 2")
 177 paddown r1
 178 padaxis rx 1
-180 padaxis rx 0
 181 padup r1
+181.1 padaxis rx 0
 183 padaxis ly -1
 193 padaxis ly 0
 194 padaxis rx 1
@@ -75,8 +75,8 @@
 236 console run_string ipad_debug.state("soak2 3")
 237 paddown r1
 238 padaxis rx 1
-240 padaxis rx 0
 241 padup r1
+241.1 padaxis rx 0
 243 padaxis ly -1
 253 padaxis ly 0
 254 padaxis rx -1
@@ -97,8 +97,8 @@
 296 console run_string ipad_debug.state("soak2 4")
 297 paddown r1
 298 padaxis rx 1
-300 padaxis rx 0
 301 padup r1
+301.1 padaxis rx 0
 303 padaxis ly -1
 313 padaxis ly 0
 314 padaxis rx 1
@@ -119,8 +119,8 @@
 356 console run_string ipad_debug.state("soak2 5")
 357 paddown r1
 358 padaxis rx 1
-360 padaxis rx 0
 361 padup r1
+361.1 padaxis rx 0
 363 padaxis ly -1
 373 padaxis ly 0
 374 padaxis rx -1
@@ -141,8 +141,8 @@
 416 console run_string ipad_debug.state("soak2 6")
 417 paddown r1
 418 padaxis rx 1
-420 padaxis rx 0
 421 padup r1
+421.1 padaxis rx 0
 423 padaxis ly -1
 433 padaxis ly 0
 434 padaxis rx 1
@@ -163,8 +163,8 @@
 476 console run_string ipad_debug.state("soak2 7")
 477 paddown r1
 478 padaxis rx 1
-480 padaxis rx 0
 481 padup r1
+481.1 padaxis rx 0
 483 padaxis ly -1
 493 padaxis ly 0
 494 padaxis rx -1
@@ -185,8 +185,8 @@
 536 console run_string ipad_debug.state("soak2 8")
 537 paddown r1
 538 padaxis rx 1
-540 padaxis rx 0
 541 padup r1
+541.1 padaxis rx 0
 543 padaxis ly -1
 553 padaxis ly 0
 554 padaxis rx 1
@@ -207,8 +207,8 @@
 596 console run_string ipad_debug.state("soak2 9")
 597 paddown r1
 598 padaxis rx 1
-600 padaxis rx 0
 601 padup r1
+601.1 padaxis rx 0
 603 padaxis ly -1
 613 padaxis ly 0
 614 padaxis rx -1
@@ -229,8 +229,8 @@
 656 console run_string ipad_debug.state("soak2 10")
 657 paddown r1
 658 padaxis rx 1
-660 padaxis rx 0
 661 padup r1
+661.1 padaxis rx 0
 663 padaxis ly -1
 673 padaxis ly 0
 674 padaxis rx 1
@@ -251,8 +251,8 @@
 716 console run_string ipad_debug.state("soak2 11")
 717 paddown r1
 718 padaxis rx 1
-720 padaxis rx 0
 721 padup r1
+721.1 padaxis rx 0
 723 padaxis ly -1
 733 padaxis ly 0
 734 padaxis rx -1
@@ -273,8 +273,8 @@
 776 console run_string ipad_debug.state("soak2 12")
 777 paddown r1
 778 padaxis rx 1
-780 padaxis rx 0
 781 padup r1
+781.1 padaxis rx 0
 783 padaxis ly -1
 793 padaxis ly 0
 794 padaxis rx 1
@@ -295,8 +295,8 @@
 836 console run_string ipad_debug.state("soak2 13")
 837 paddown r1
 838 padaxis rx 1
-840 padaxis rx 0
 841 padup r1
+841.1 padaxis rx 0
 843 padaxis ly -1
 853 padaxis ly 0
 854 padaxis rx -1
@@ -317,8 +317,8 @@
 896 console run_string ipad_debug.state("soak2 14")
 897 paddown r1
 898 padaxis rx 1
-900 padaxis rx 0
 901 padup r1
+901.1 padaxis rx 0
 903 padaxis ly -1
 913 padaxis ly 0
 914 padaxis rx 1
@@ -339,8 +339,8 @@
 956 console run_string ipad_debug.state("soak2 15")
 957 paddown r1
 958 padaxis rx 1
-960 padaxis rx 0
 961 padup r1
+961.1 padaxis rx 0
 963 padaxis ly -1
 973 padaxis ly 0
 974 padaxis rx -1
@@ -361,8 +361,8 @@
 1016 console run_string ipad_debug.state("soak2 16")
 1017 paddown r1
 1018 padaxis rx 1
-1020 padaxis rx 0
 1021 padup r1
+1021.1 padaxis rx 0
 1023 padaxis ly -1
 1033 padaxis ly 0
 1034 padaxis rx 1
@@ -383,8 +383,8 @@
 1076 console run_string ipad_debug.state("soak2 17")
 1077 paddown r1
 1078 padaxis rx 1
-1080 padaxis rx 0
 1081 padup r1
+1081.1 padaxis rx 0
 1083 padaxis ly -1
 1093 padaxis ly 0
 1094 padaxis rx -1
@@ -405,8 +405,8 @@
 1136 console run_string ipad_debug.state("soak2 18")
 1137 paddown r1
 1138 padaxis rx 1
-1140 padaxis rx 0
 1141 padup r1
+1141.1 padaxis rx 0
 1143 padaxis ly -1
 1153 padaxis ly 0
 1154 padaxis rx 1
@@ -427,8 +427,8 @@
 1196 console run_string ipad_debug.state("soak2 19")
 1197 paddown r1
 1198 padaxis rx 1
-1200 padaxis rx 0
 1201 padup r1
+1201.1 padaxis rx 0
 1203 padaxis ly -1
 1213 padaxis ly 0
 1214 padaxis rx -1
