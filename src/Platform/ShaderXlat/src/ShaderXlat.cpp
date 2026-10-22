@@ -156,5 +156,5 @@ Result retarget(const Result& translated, const Options& options)
     return result;
 }
 
-const char* version() { return "ShaderXlat 0.1 (vkd3d-shader 2.1, SPIRV-Cross vulkan-sdk-1.4.363.0)"; }
+const char* version() { return "ShaderXlat 0.2 (vkd3d-shader 2.1, SPIRV-Cross vulkan-sdk-1.4.363.0)"; }
 } // namespace shaderxlat
