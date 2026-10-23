@@ -414,8 +414,8 @@ static std::string lua_cache_dir()
 void CScriptStorage::set_bytecode_cache(bool on)
 {
 #ifdef XR_PLATFORM_APPLE
-	// the read-ahead thread is opt-in (-lua_prefetch): see docs/ios-port/LUA-PERF.md
-	script_cache::set_directory(on ? lua_cache_dir().c_str() : "", strstr(Core.Params, "-lua_prefetch") != nullptr);
+	// the cache reads its entries ahead on a thread (-no_lua_prefetch turns that off): see docs/ios-port/LUA-PERF.md
+	script_cache::set_directory(on ? lua_cache_dir().c_str() : "", strstr(Core.Params, "-no_lua_prefetch") == nullptr);
 #endif
 }
 

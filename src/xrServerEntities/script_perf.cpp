@@ -101,8 +101,13 @@ Period g_period;
 u64 g_last_frame_ns = 0;
 double g_interval_s = 30; // a period report without a mark every so many seconds; 0 = only at marks
 std::map<std::string, Watch> g_watch;   // totals of the period, keyed "path" or "path:first argument"
-std::vector<std::pair<std::string, bool>> g_watch_paths; // functions to wrap (path, keyed by first argument)
-bool g_watch_installed = false;
+struct WatchPath
+{
+	std::string path;
+	bool by_arg;
+	bool installed; // wrapped in the current Lua state
+};
+std::vector<WatchPath> g_watch_paths; // functions to wrap
 u64 g_watch_try_ns = 0;
 
 // ---- script loads ----------------------------------------------------------------------------------------------------------------
@@ -209,7 +214,8 @@ int l_add(lua_State* L)
 }
 
 const char* const kWatchChunk =
-	"local now, add, path, by_arg = ...\n"
+	"local now, add, path, by_arg, undo = ...\n"
+	"if undo[path] then return true end\n"
 	"local t = _G\n"
 	"local parts = {}\n"
 	"for p in string.gmatch(path, '[^%.]+') do parts[#parts + 1] = p end\n"
@@ -217,12 +223,36 @@ const char* const kWatchChunk =
 	"local name = parts[#parts]\n"
 	"local f = t[name]\n"
 	"if type(f) ~= 'function' then return false end\n"
+	"local w\n"
 	"if by_arg then\n"
-	"\tt[name] = function(a, ...) local t0 = now(); local r1, r2, r3, r4 = f(a, ...); add(path .. ':' .. tostring(a), t0); return r1, r2, r3, r4 end\n"
+	"\tw = function(a, ...) local t0 = now(); local r1, r2, r3, r4 = f(a, ...); add(path .. ':' .. tostring(a), t0); return r1, r2, r3, r4 end\n"
 	"else\n"
-	"\tt[name] = function(...) local t0 = now(); local r1, r2, r3, r4 = f(...); add(path, t0); return r1, r2, r3, r4 end\n"
+	"\tw = function(...) local t0 = now(); local r1, r2, r3, r4 = f(...); add(path, t0); return r1, r2, r3, r4 end\n"
 	"end\n"
+	"t[name] = w\n"
+	"undo[path] = { t = t, name = name, f = f, w = w }\n"
 	"return true\n";
+
+// puts every wrapped function back (if a script has not replaced the wrapper since)
+const char* const kUnwatchChunk =
+	"local undo = ...\n"
+	"for path, u in pairs(undo) do\n"
+	"\tif u.t[u.name] == u.w then u.t[u.name] = u.f end\n"
+	"\tundo[path] = nil\n"
+	"end\n";
+
+// The table of what is wrapped, in the registry of the current Lua state.
+void push_undo_table(lua_State* L)
+{
+	lua_getfield(L, LUA_REGISTRYINDEX, "lua_perf_undo");
+	if (!lua_istable(L, -1))
+	{
+		lua_pop(L, 1);
+		lua_newtable(L);
+		lua_pushvalue(L, -1);
+		lua_setfield(L, LUA_REGISTRYINDEX, "lua_perf_undo");
+	}
+}
 
 bool install_watch(lua_State* L, const std::string& path, bool by_arg)
 {
@@ -234,17 +264,38 @@ bool install_watch(lua_State* L, const std::string& path, bool by_arg)
 		lua_pushcfunction(L, l_add);
 		lua_pushstring(L, path.c_str());
 		lua_pushboolean(L, by_arg);
-		if (lua_pcall(L, 4, 1, 0) == 0)
+		push_undo_table(L);
+		if (lua_pcall(L, 5, 1, 0) == 0)
 			ok = lua_toboolean(L, -1) != 0;
 	}
 	lua_settop(L, top);
 	return ok;
 }
 
-// The functions are defined by scripts that load after the engine starts: retry until they all exist.
+void uninstall_watches(lua_State* L)
+{
+	if (!L)
+		return;
+	const int top = lua_gettop(L);
+	if (luaL_loadbuffer(L, kUnwatchChunk, strlen(kUnwatchChunk), "=lua_perf_unwatch") == 0)
+	{
+		push_undo_table(L);
+		lua_pcall(L, 1, 0, 0);
+	}
+	lua_settop(L, top);
+	for (auto& w : g_watch_paths)
+		w.installed = false;
+}
+
+// The functions are defined by scripts that load after the engine starts: retry the paths that are not wrapped yet, once a second.
 void try_install_watches()
 {
-	if (g_watch_installed || g_watch_paths.empty() || !g_on)
+	if (g_watch_paths.empty() || !g_on)
+		return;
+	bool pending = false;
+	for (const auto& w : g_watch_paths)
+		pending = pending || !w.installed;
+	if (!pending)
 		return;
 	const u64 now = now_ns();
 	if (now - g_watch_try_ns < 1000000000ull)
@@ -253,11 +304,9 @@ void try_install_watches()
 	lua_State* L = ai().script_engine().lua();
 	if (!L)
 		return;
-	bool all = true;
 	for (auto& w : g_watch_paths)
-		if (!install_watch(L, w.first, w.second))
-			all = false;
-	g_watch_installed = all;
+		if (!w.installed)
+			w.installed = install_watch(L, w.path, w.by_arg);
 }
 
 // ---- the sampling profiler ---------------------------------------------------------------------------------------------------------
@@ -508,8 +557,7 @@ void set_on(bool on)
 		g_last_frame_ns = 0;
 		luabind::set_call_hooks(enter, leave);
 		if (g_watch_paths.empty())
-			g_watch_paths.emplace_back("SendScriptCallback", true);
-		g_watch_installed = false;
+			g_watch_paths.push_back({"SendScriptCallback", true, false});
 		Msg("* [lua-perf] timers on (periods of %.0f s, `lua_perf mark <label>` starts one)", g_interval_s);
 	}
 	else
@@ -517,6 +565,7 @@ void set_on(bool on)
 		print_period("off");
 		g_on = false;
 		luabind::set_call_hooks(nullptr, nullptr);
+		uninstall_watches(ai().script_engine().lua());
 		Msg("* [lua-perf] timers off");
 	}
 }
@@ -560,11 +609,14 @@ public:
 		{
 			char path[160] = {}, arg[16] = {};
 			sscanf(rest, "%159s %15s", path, arg);
-			g_watch_paths.emplace_back(path, !strcmp(arg, "arg"));
-			g_watch_installed = false;
+			g_watch_paths.push_back({path, !strcmp(arg, "arg"), false});
 		}
 		else if (!strcmp(cmd, "unwatch"))
+		{
+			uninstall_watches(ai().script_engine().lua());
 			g_watch_paths.clear();
+			g_watch.clear();
+		}
 		else
 			InvalidSyntax();
 	}
@@ -783,7 +835,8 @@ void init(lua_State* L)
 	// a new Lua state: the profiler of the old one is gone
 	g_prof_on = false;
 	g_prof_state = nullptr;
-	g_watch_installed = false;
+	for (auto& w : g_watch_paths)
+		w.installed = false; // a new Lua state has no wrappers
 	const char* params = Core.Params ? Core.Params : "";
 	if (strstr(params, "-lua_perf"))
 		set_on(true);

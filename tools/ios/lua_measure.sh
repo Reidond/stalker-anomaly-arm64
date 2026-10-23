@@ -69,21 +69,30 @@ run() { # name script [args]: a launch, its console output, the shell log and th
     # No `--console`: a launch with the console attached failed with error 10002 (EINVAL) most of the time after the first one. The script is copied to
     # Documents, the app is started on its own and polled until it is gone; a launch that fails ("pid could not be determined") is tried up to three times.
     $ipad put "$script" "${script:t}" >> "$out/$name.out" 2>&1 || true
-    local attempt tries
-    for attempt in 1 2 3; do
-        $ipad start --script "${script:t}" >> "$out/$name.out" 2>&1 || true
-        for tries in {1..15}; do (( $(running) > 0 )) && break; sleep 2; done
-        (( $(running) > 0 )) && break
-        echo "   launch failed (attempt $attempt)"; sleep 10
+    local attempt tries round limit started=0 ever_started=0
+    for round in 1 2; do
+        started=0
+        for attempt in 1 2 3; do
+            $ipad start --script "${script:t}" >> "$out/$name.out" 2>&1 || true
+            for tries in {1..15}; do (( $(running) > 0 )) && break; sleep 2; done
+            if (( $(running) > 0 )); then started=1; ever_started=1; break; fi
+            echo "   launch failed (attempt $attempt)"; sleep 10
+        done
+        # no launch succeeded: the logs on the device belong to an earlier run and must not be collected
+        (( started )) || { echo "   $name: the app could not be started (round $round)" >&2; continue; }
+        limit=0
+        while (( $(running) > 0 )); do
+            (( limit >= 2400 )) && { echo "   the run did not end in 40 minutes: terminating it" >&2; $ipad kill; break; }
+            sleep 5; limit=$((limit + 5))
+        done
+        rm -rf "$out/$name.logs" "$out/$name.shell.log"; mkdir -p "$out/$name.logs"
+        copy_from "$appdata/logs" "$out/$name.logs"
+        copy_from "Documents/anomaly-shell.log" "$out/$name.shell.log"
+        # a run that ends without reaching its `quit` (a crash: the report is in the engine logs) is repeated once
+        grep -q "script asked to quit" "$out/$name.shell.log" 2>/dev/null && break
+        echo "   the run ended early (crash?), round $round"
     done
-    local limit=0
-    while (( $(running) > 0 )); do
-        (( limit >= 2400 )) && { echo "   the run did not end in 40 minutes: terminating it" >&2; $ipad kill; break; }
-        sleep 5; limit=$((limit + 5))
-    done
-    mkdir -p "$out/$name.logs"
-    copy_from "$appdata/logs" "$out/$name.logs"
-    copy_from "Documents/anomaly-shell.log" "$out/$name.shell.log"
+    (( ever_started )) || { rm -rf "$out/$name.logs" "$out/$name.shell.log"; echo "   $name: skipped, the app never started" >&2; }
 }
 engine_log() { find "$out/$1.logs" -name "xray_*.log" -not -name "*.bkp" 2>/dev/null | head -1; }
 report=$out/loads.md

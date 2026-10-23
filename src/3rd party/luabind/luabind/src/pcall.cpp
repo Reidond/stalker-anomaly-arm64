@@ -23,26 +23,46 @@
 #include <luabind/detail/pcall.hpp>
 #include <luabind/error.hpp>
 #include <luabind/lua_include.hpp>
+#include <atomic>
 
 namespace luabind
 {
 	namespace
 	{
-		call_enter_fun call_enter = 0;
-		call_leave_fun call_leave = 0;
+		std::atomic<call_enter_fun> call_enter(0);
+		std::atomic<call_leave_fun> call_leave(0);
 
+		// The leave hook is the one seen on entry: the hooks can be switched off by another thread while a call is in flight.
 		struct call_timer
 		{
 			unsigned long long stamp;
-			call_timer() : stamp(call_enter ? call_enter() : 0) {}
-			~call_timer() { if ( stamp && call_leave ) call_leave(stamp); }
+			call_leave_fun leave;
+			call_timer() : stamp(0), leave(0)
+			{
+				call_enter_fun e = call_enter.load(std::memory_order_acquire);
+				call_leave_fun l = call_leave.load(std::memory_order_acquire);
+				if ( e && l )
+				{
+					stamp = e();
+					leave = l;
+				}
+			}
+			~call_timer() { if ( stamp && leave ) leave(stamp); }
 		};
 	}
 
 	void set_call_hooks(call_enter_fun enter, call_leave_fun leave)
 	{
-		call_enter = enter;
-		call_leave = leave;
+		if ( enter )
+		{
+			call_leave.store(leave, std::memory_order_release); // leave first: an entered call always finds its leave
+			call_enter.store(enter, std::memory_order_release);
+		}
+		else
+		{
+			call_enter.store(0, std::memory_order_release);
+			call_leave.store(leave, std::memory_order_release);
+		}
 	}
 }
 
