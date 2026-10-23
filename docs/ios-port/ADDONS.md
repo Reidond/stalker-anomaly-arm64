@@ -10,7 +10,13 @@ app, in which order the game reads them, what cannot work, how much memory a tex
 > so the Files steps below are the ones the iPadOS Files app documents, not something we filmed. Where a statement is about addons in general
 > and not something the test set shows, it says so.
 
-## The short version
+Two routes put an addon into the game. **The mod manager in the app** ([MOD-MANAGER.md](MOD-MANAGER.md)) imports `.zip`, `.7z` and `.rar` files and
+FOMOD installers from the Files app or a download, keeps every mod in its own folder under `Documents/Mods`, and lets the player switch mods
+on and off and change their order, without ever copying over another mod's files. **By hand**, files are copied into the game folder with
+the Files app; this is what the rest of this guide describes (and what a mod that comes as a plain folder or a single `.db0` file needs when the
+manager is not used). Both end up in the same file system for the engine: [Order](#order-what-overrides-what).
+
+## The short version (by hand)
 
 1. Open **Files → On My iPad → Anomaly → Anomaly**. This is the game folder (`Documents/Anomaly` of the app): it holds `db/`,
    `gamedata/`, `fsgame.ltx`.
@@ -27,7 +33,7 @@ app, in which order the game reads them, what cannot work, how much memory a tex
 | Files shows | Is | Holds |
 |---|---|---|
 | On My iPad → Anomaly → Anomaly | the app's `Documents/Anomaly` | `db/` (the game's archives), `gamedata/` (loose files: addons, `configs/axr_options.ltx` that the game writes), `fsgame.ltx` (rewritten at every start, do not edit) |
-| On My iPad → Anomaly | the app's `Documents` | the game folder, `commandline.txt`, the logs |
+| On My iPad → Anomaly | the app's `Documents` | the game folder, `Mods/` (the mod manager's library: one folder per mod, `modlist.json`), `commandline.txt`, the logs |
 
 Saves, `user.ltx` and the shader cache are in the app's `Library`, which Files does not show. They are not part of addon installs.
 
@@ -38,7 +44,7 @@ Saves, `user.ltx` and the shader cache are in the app's `Library`, which Files d
 Most addons are a zip with a `gamedata` folder in it (some wrap it in one more folder, some also have `db`, `bin`, a readme, an installer).
 
 1. Unzip: tap the `.zip` in Files; a folder appears next to it. A `.7z` or `.rar` needs an app that can open it (any archive app from the App
-   Store that shares into Files); do the unpacking there and move the result back.
+   Store that shares into Files; or the mod manager, which reads them itself); do the unpacking there and move the result back.
 2. Look inside for the folder called `gamedata` (case does not matter). What is inside it (`scripts`, `configs`, `textures`, `shaders`,
    `meshes`, `sounds`, ...) is what goes into the game's `gamedata`.
 3. Put it there. **Files does not merge folders**: when a folder of the same name exists, it offers *Keep Both*, *Replace* or *Skip*,
@@ -76,14 +82,15 @@ An addon that *writes* into its own folder (a settings file it creates) writes l
 
 ### Mod Organizer, FOMOD, installers
 
-- **FOMOD** (an `fomod/ModuleConfig.xml` in the zip, the installer asks questions) and **Mod Organizer 2** (a `mods/<name>` folder per addon
-  and a virtual file system) are Windows programs. Run them on a PC against an empty folder, then take the finished `gamedata` folder (or
-  pack it as above) to the iPad.
-- Addons with an `.exe` installer: the installer does nothing here. Run it on a PC the same way, pointing it at an empty folder.
+- **FOMOD** (an `fomod/ModuleConfig.xml` in the zip: the installer asks questions) is run by the mod manager's install wizard. By hand it cannot be run:
+  do it on a PC against an empty folder, then take the finished `gamedata` folder (or pack it as above) to the iPad.
+- **Mod Organizer 2** (a `mods/<name>` folder per addon, a virtual file system) is a Windows program; its mod folders are ordinary addons: each `mods/<name>` folder with a
+  `gamedata` inside is one addon here. Install them one at a time, in the order of MO's list (lowest first), or import each into the mod manager and set the same order.
+- Addons with an `.exe` installer: the installer does nothing on the iPad (and the mod manager refuses to install a `.exe`). Run it on a PC against an empty folder.
 
 ## Order: what overrides what
 
-When two layers have the same file, the later one wins. The game reads these, in this order (`docs/ios-port/INTEGRATION.md`, "The Monolith overlay"):
+When two layers have the same file, the later one wins. The game reads these, in this order ([INTEGRATION.md](INTEGRATION.md), "The Monolith overlay"; [MOD-MANAGER.md](MOD-MANAGER.md), "Mount order"):
 
 | # | Layer | Where |
 |---|---|---|
@@ -91,7 +98,8 @@ When two layers have the same file, the later one wins. The game reads these, in
 | 2 | the Monolith engine's files | packed from the app bundle at every start (scripts, configs and shaders the engine build needs: `axr_main.script`, `pda_dynamic_tabs.script`, `mod_system_*.ltx`, ...) |
 | 3 | `db/patches` | archives, in the order of their names |
 | 4 | `db/addons` | archives, in the order of their names |
-| 5 | loose files in `gamedata/` | always win |
+| 5 | the mod manager's enabled mods | `Documents/Mods`, in the list's order: a mod's archives (`content/db`), then its loose files (`content/gamedata`) |
+| 6 | loose files in `gamedata/` | a manual install and the files the game writes itself (`configs/axr_options.ltx`): win over everything |
 
 - Archives inside one folder are read in the order of their names, compared character by character with capitals before small letters
   (`ZZ_a.db0` comes before `aa.db0`). The later one wins. Name them `01_x.db0`, `02_y.db0` if the order matters.
@@ -129,11 +137,62 @@ When two layers have the same file, the later one wins. The game reads these, in
 
 ## Memory: texture packs on an 8 GB iPad
 
-TO BE FILLED IN FROM THE MEASUREMENTS.
+iPadOS ends an app that uses more than its memory budget, without a warning screen. With the `increased-memory-limit` entitlement the app's budget
+is **7.99 GB** (`device ... memory budget 7.99 GiB` in the shell log), and what counts is the app's footprint: textures, render targets and Metal
+buffers included. At the iPad profile ([IPAD.md](IPAD.md)) the Cordon runs at about **3.8 GB**, a level load peaks near 4.3 GB, and the engine itself
+counts about 1.45 GB of that as textures. That leaves roughly 3.5 GB; keep at least 1.5 GB of it free for the load peak, level changes and the slow
+creep (about 10 MB a minute), so **a pack should add no more than about 2 GB of textures to what one level has loaded.**
+
+What a texture costs on the GPU (with its mip chain, 4/3 of the top level):
+
+| Size | DXT1 / BC1 (0.5 byte per pixel) | DXT5 / BC3 (1 byte) | uncompressed 32 bit (4 bytes) |
+|---|---:|---:|---:|
+| 1024 x 1024 | 0.67 MiB | 1.33 MiB | 5.3 MiB |
+| 2048 x 2048 | 2.7 MiB | 5.3 MiB | 21.3 MiB |
+| 4096 x 4096 | 10.7 MiB | 21.3 MiB | 85.3 MiB |
+
+2 GB is about 190 4K DXT1 textures, 95 4K DXT5, 380 2K DXT5, or 24 uncompressed 4K ones. The stock game is mostly 1K and 2K DXT1/DXT5.
+
+- **Pack as DXT1/DXT5 with the mip chain.** Uncompressed textures cost four to eight times as much and are what makes a "4K" pack not fit. A DDS without mips
+  is smaller but shimmers.
+- **The profile does not shrink textures.** `texture_lod 1` (the iPad profile, locked) loads every texture at full size except the ones named in
+  `[reduce_lod_texture_list]` of `system.ltx`, which lose one level. A 4K pack is loaded as 4K.
+- **Only what a level uses is loaded.** A pack of 2000 textures costs memory for those the current level and the HUD touch, plus the disk space for
+  all of them. A pack for weapons, characters or one kind of surface is cheap; a full retexture at 4K is not.
+- **Measured** (`tools/addons_test`, scenario `texpack`, same menu, same start, Mac with the same profile type): replacing the 24 big UI atlases (1K DXT5) by
+  4K DXT1 with mips (10.7 MiB each) raised the engine's texture counter from 1336 MB to 1452 MB and the process footprint from 2345 MB to 2456 MB in a new game.
+  Twelve of the 24 are loaded in a new game, 12 x (10.7 - 1.33) MiB = 112 MiB: the table above is what the engine pays, and the footprint grows by the
+  same amount.
+- If a pack is too big the game is killed by the system while loading a level or a few minutes after, and the next start logs
+  `previous session ended unexpectedly` ([Logs](#logs)). Remove textures, or turn the 4K ones into 2K, until it stays up.
+
 
 ## Logs
 
-TO BE FILLED IN FROM THE MEASUREMENTS.
+| Log | Where in Files (On My iPad → Anomaly) | What it says |
+|---|---|---|
+| shell log | `anomaly-shell.log` (`anomaly-shell.prev.log`: the run before) | paths, device, graphics profile (and what it locks), `volume: file names are case-sensitive`, the Monolith overlay, memory and thermal events, `previous session ended unexpectedly` after a crash or a kill |
+| crash report of the shell | `anomaly-crash.log`, `anomaly-crash.prev.log` | stack of a crash in the app itself |
+| engine log of the **previous** run | `anomaly-engine.prev.log` | everything the engine and the Lua scripts logged: **this is where addon errors are** |
+| engine crash report of the previous run | `anomaly-engine-crash.prev.txt` | the engine's report when it crashed (only if there was one) |
+
+The engine writes its current log into `Library/Application Support/Anomaly/appdata/logs/xray_mobile.log`, which Files does not show; the app copies it
+to `anomaly-engine.prev.log` when it starts the next time. So: run the game, quit it, start it once more, then open `anomaly-engine.prev.log` (text, Windows-1251,
+any text viewer shows it; search for `!`).
+
+What the test set shows an addon problem looks like (these lines are verbatim from the log):
+
+| Problem | Line in the engine log |
+|---|---|
+| a script with a syntax error | `! [SCRIPT ERROR]: ...gamedata\scripts\zz_broken_script.script:3: unexpected symbol near '='` then `! [ERROR] --- Failed to load script zz_broken_script`. The game goes on without that script; the other scripts load. |
+| a runtime error in a script | a `! [LUA] ...` stack in the log; the Monolith scripts also show a "Lua fatal error" message box in the game (Disconnect / Reload save / Continue). *This one was not provoked by the test set.* |
+| a setting the profile locks | `! graphics: 'r2_ssao st_opt_off' refused: locked by the ipad-8gb profile. Further attempts on r2_ssao are not logged.` |
+| a shader that does not compile | `* ShaderXlat: N shaders requested, M from the translation cache, F failed ...` at the end of the log, and the line of the failed shader above it |
+| a texture that is not found | `! Can't find texture 'ui\...'` |
+
+Check an addon quickly: the log lists `* loading script <name>.script` for every script the engine loaded (an addon script that is missing there was not seen:
+wrong folder, or in a sub-folder of `db/addons`), and `Init FileSystem` / `FS: N files cached M archives` near the top says how many archives were mounted.
+
 
 ## How this was tested
 
