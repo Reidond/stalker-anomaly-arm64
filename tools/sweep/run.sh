@@ -165,8 +165,8 @@ open -g -j -W -n "${env_args[@]}" --stdout "$out/stdout.txt" --stderr "$out/stde
     --args --data-root "$data_root" --script "$script" --exit-after "$hard_stop" --size "$size" -dbg &
 opid=$!
 if [ -n "${SWEEP_LLDB:-}" ]; then
-    # SWEEP_LLDB=1: attach lldb to the app as soon as it is up (batch mode: it continues, and on a stop, an exit() or an abort() prints
-    # every thread's stack to lldb.txt). For a run that ends with no report at all.
+    # SWEEP_LLDB=1: attach lldb to the app as soon as it is up (batch mode: it continues ten times, and every stop - a sanitizer
+    # report, exit(), abort() - prints every thread's stack to lldb.txt). For a run that ends with no report at all.
     (
         pid=""
         for _ in $(seq 1 300); do
@@ -175,8 +175,10 @@ if [ -n "${SWEEP_LLDB:-}" ]; then
             sleep 0.2
         done
         [ -n "$pid" ] && lldb -b -p "$pid" -o 'process handle SIGBUS SIGSEGV SIGABRT SIGILL -n true -p true -s true' \
-            -o 'breakpoint set -n _exit' -o 'breakpoint set -n exit' -o 'breakpoint set -n abort' -o continue \
-            -o 'bt all' -o 'process status' -o 'process kill' > "$out/lldb.txt" 2>&1
+            -o 'breakpoint set -n _exit' -o 'breakpoint set -n exit' -o 'breakpoint set -n abort' \
+            -o 'target stop-hook add -o "thread backtrace all"' \
+            -o continue -o continue -o continue -o continue -o continue -o continue -o continue -o continue -o continue -o continue \
+            -o 'process status' -o 'process kill' > "$out/lldb.txt" 2>&1
     ) &
 fi
 # the watchdog: `open -W` does not end by itself if the app hangs; find the app by its unique --script argument

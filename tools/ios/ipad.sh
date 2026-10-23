@@ -1,7 +1,7 @@
 #!/bin/zsh
 # Build-free helpers for the signed `anomaly` app on a USB-connected iPad (never the Simulator).
 #
-#   tools/ios/ipad.sh build [config]          xcodebuild the anomaly scheme (default config: RelWithDebInfo), signed
+#   tools/ios/ipad.sh build [config]          xcodebuild the anomaly scheme (default config: RelWithDebInfo), signed; XCODEBUILD_JOBS=n caps the jobs
 #   tools/ios/ipad.sh install                 install the built app over com.andriishafar.anomaly (Documents stay)
 #   tools/ios/ipad.sh run [app args...]       launch with --console (Ctrl-C detaches; the app keeps running)
 #   tools/ios/ipad.sh start [app args...]     launch without attaching the console
@@ -54,8 +54,10 @@ app_for() { echo "$build_dir/src/Platform/App/$1-iphoneos/anomaly.app"; }
 case $cmd in
     build)
         config=${1:-RelWithDebInfo}
+        # XCODEBUILD_JOBS=<n> caps the parallel jobs (the default is one per core)
+        jobs_args=(); [[ -n ${XCODEBUILD_JOBS:-} ]] && jobs_args=(-jobs $XCODEBUILD_JOBS)
         xcodebuild -project "$build_dir/AnomalyPort.xcodeproj" -scheme anomaly -configuration "$config" \
-            -destination 'generic/platform=iOS' -allowProvisioningUpdates build
+            -destination 'generic/platform=iOS' -allowProvisioningUpdates "${jobs_args[@]}" build
         ;;
     install)
         app=$(app_for ${ANOMALY_CONFIG:-RelWithDebInfo})
