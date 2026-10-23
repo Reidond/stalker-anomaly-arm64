@@ -55,7 +55,7 @@ function equip()
 	printf("%s", "SLOT activate_slot " .. tostring(ok) .. " " .. tostring(err))
 end
 
--- One line of state for the log: position, the item in hand and its magazine, which dialogs are open.
+-- Two lines of state for the log: position, the item in hand and its magazine (STATE), the view and what the pad actions change (VIEW).
 function state(tag)
 	local a = db.actor
 	local p = a:position()
@@ -71,12 +71,10 @@ function state(tag)
 		local dir = d.cam_dir
 		local cp = d.cam_pos
 		local top = d.cam_top
-		local function shown(f) local ok2, w = pcall(f) return ok2 and w and w:IsShown() and "1" or "0" end
-		local dialogs = "inv" .. shown(ActorMenu.get_actor_menu) .. " pda" .. shown(ActorMenu.get_pda_menu)
-			.. " paused" .. (device():is_paused() and "1" or "0")
-		return string.format("VIEW %s yaw %.1f pitch %.1f eye %.2f fov %.1f roll %.3f torch %s nv %s health %.2f dialog %s",
+		local dialogs = "paused" .. (device():is_paused() and "1" or "0") -- which dialog is up: the `pad ui: dialog up / closed` lines of pad_feedback_log
+		return string.format("VIEW %s yaw %.1f pitch %.1f eye %.2f fov %.1f roll %.3f torch %s nv %s health %.2f %s",
 			tag or "", math.deg(math.atan2(dir.x, dir.z)), math.deg(math.asin(math.max(-1, math.min(1, dir.y)))), cp.y - p.y,
-			d.fov, top.x, tostring(a:torch_enabled()), tostring(a:night_vision_enabled()), a.health, ui and ui:GetWindowName() or "-")
+			d.fov, top.x, tostring(a:torch_enabled()), tostring(a:night_vision_enabled()), a.health, dialogs)
 	end)
 	printf("%s", ok and extra or ("VIEW error " .. tostring(extra)))
 end
