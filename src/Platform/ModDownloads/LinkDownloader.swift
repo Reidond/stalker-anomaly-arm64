@@ -29,10 +29,7 @@ public final class LinkDownloader: Sendable {
     /// keeps the partial file for a later resume.
     public func download(_ url: URL, to dir: URL, progress: @escaping (Double) -> Void) async throws -> URL {
         let sink = UncheckedSendable(progress)
-        let file = try await downloadFile(url, to: dir) { p in
-            let fraction = p.fraction
-            DispatchQueue.main.async { sink.value(fraction) }
-        }
+        let file = try await downloadFile(url, to: dir) { p in sink.value(p.fraction) } // already on the main queue
         return file.fileURL
     }
 
@@ -46,9 +43,11 @@ public final class LinkDownloader: Sendable {
         } catch {
             throw LinkDownloadError.fileSystem("Cannot use the downloads folder: \(error.localizedDescription)")
         }
+        let sink = UncheckedSendable(progress)
+        let onMain: @Sendable (DownloadProgress) -> Void = { p in DispatchQueue.main.async { sink.value(p) } }
         var allowResume = true
         for _ in 0..<2 {
-            let transfer = Transfer(url: url, dir: dir, allowResume: allowResume, reserveBytes: reserveBytes, freeSpace: freeSpace, progress: progress)
+            let transfer = Transfer(url: url, dir: dir, allowResume: allowResume, reserveBytes: reserveBytes, freeSpace: freeSpace, progress: onMain)
             do {
                 return try await transfer.run()
             } catch is Transfer.RestartFresh {

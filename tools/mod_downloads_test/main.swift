@@ -1,9 +1,12 @@
 // Host tests of ModDownloads. Exit code 0 when every check passes.
 //   mod_downloads_test              all tests
 //   mod_downloads_test <substring>  only the tests whose name contains it
+import AppKit
 import CryptoKit
 import Foundation
 @testable import ModDownloads
+
+NSApplication.shared.setActivationPolicy(.prohibited)
 
 // MARK: - Tiny test runner
 
@@ -36,7 +39,7 @@ let filter = CommandLine.arguments.dropFirst().first
 final class Counter: @unchecked Sendable { var value = 0 }
 let testCount = Counter()
 
-func test(_ name: String, _ body: () async throws -> Void) async {
+func test(_ name: String, _ body: @MainActor () async throws -> Void) async {
     if let filter, !name.contains(filter) { return }
     testCount.value += 1
     results.currentTest = name
@@ -217,6 +220,24 @@ let server = try TestServer { req, conn in
         serve(FileRoute(body: fileBody, ranges: false, chunk: 10_000, delay: 0.004, dropAfter: n == 1 ? 100_000 : nil), req, conn)
     case "/slow.zip":
         serve(FileRoute(body: slowBody, chunk: 16_384, delay: 0.03), req, conn)
+    case "/dl.zip":
+        serve(FileRoute(body: fileBody, extra: [("Content-Disposition", "attachment; filename=\"mod.zip\"")]), req, conn)
+    case "/dl-r1":
+        conn.respond(302, [("Location", "\(base)/dl.zip")])
+    case "/dl-slow.zip":
+        serve(FileRoute(body: slowBody, extra: [("Content-Disposition", "attachment; filename=\"slow.zip\"")], chunk: 16_384, delay: 0.03), req, conn)
+    case "/plain.html":
+        conn.respond(200, [("Content-Type", "text/html; charset=utf-8")], body: Data("<!DOCTYPE html><html><head><title>Plain page</title></head><body><p>hello</p></body></html>".utf8))
+    case "/auto-download.html":
+        // a page that clicks a download link by itself, without any tap
+        conn.respond(200, [("Content-Type", "text/html; charset=utf-8")], body: Data("<!DOCTYPE html><html><head><title>Auto</title></head><body><a id=x href=\"/dl.zip\" download>get</a><script>document.getElementById('x').click();</script></body></html>".utf8))
+    case "/auto-redirect.html":
+        conn.respond(200, [("Content-Type", "text/html; charset=utf-8")], body: Data("<!DOCTYPE html><html><head><title>Auto2</title></head><body><script>setTimeout(function(){ location.href = '/dl.zip'; }, 100);</script></body></html>".utf8))
+    case "/ftp-link.html":
+        conn.respond(200, [("Content-Type", "text/html; charset=utf-8")], body: Data("<!DOCTYPE html><html><head><title>Ftp</title></head><body><script>location.href = 'ftp://example.invalid/a.zip';</script></body></html>".utf8))
+    case "/octet.bin":
+        // a type WebKit cannot show, no Content-Disposition
+        serve(FileRoute(body: fileBody, type: "application/x-anomaly-test", etag: nil, ranges: false), req, conn)
     case "/huge.bin":
         conn.head(200, [("Content-Type", "application/octet-stream"), ("Content-Length", "4398046511104")])
     default:
@@ -574,6 +595,310 @@ final class ProgressLog: @unchecked Sendable {
     private var items: [DownloadProgress] = []
     func add(_ p: DownloadProgress) { lock.lock(); items.append(p); lock.unlock() }
     func snapshot() -> [DownloadProgress] { lock.lock(); defer { lock.unlock() }; return items }
+}
+
+// MARK: - Pure logic: gate, address field, bookmarks, controller mapping
+
+await test("gate-tap-window-and-one-download-per-tap") {
+    var gate = DownloadGate()
+    check(!gate.isOpen(at: 100), "closed before any tap")
+    check(!gate.consume(at: 100), "nothing to consume")
+    gate.noteTap(at: 100)
+    check(gate.isOpen(at: 100) && gate.isOpen(at: 129.9), "open for the tap window")
+    check(!gate.isOpen(at: 130.1), "closed after it")
+    check(!gate.isOpen(at: 99), "a tap from the future does not count")
+    check(gate.consume(at: 110), "the first download passes")
+    check(!gate.consume(at: 111), "one tap pays for one download")
+    gate.noteTap(at: 200)
+    check(gate.consume(at: 205), "a new tap opens it again")
+}
+
+await test("gate-typed-navigation") {
+    var gate = DownloadGate()
+    gate.noteTypedNavigation(at: 50)
+    check(gate.isOpen(at: 60), "a typed link may be a file")
+    gate.pageDisplayed()
+    check(!gate.isOpen(at: 60), "once it showed a page, a script in that page cannot reuse it")
+    gate.noteTypedNavigation(at: 70)
+    check(!gate.isOpen(at: 90.5), "typed window is shorter than the tap window")
+    check(gate.consume(at: 75), "typed navigation that ends in a file passes")
+    check(!gate.consume(at: 76), "once")
+    gate.noteTap(at: 80)
+    gate.noteTypedNavigation(at: 81)
+    gate.pageDisplayed()
+    check(gate.isOpen(at: 82), "a page tap survives the page the mirror shows (ModDB's redirect page)")
+}
+
+await test("address-input") {
+    func url(_ s: String) -> AddressInput.Result { .url(URL(string: s)!) }
+    checkEqual(AddressInput.resolve("   "), .empty, "blank")
+    checkEqual(AddressInput.resolve("https://www.moddb.com/mods/stalker-anomaly/addons\n"), url("https://www.moddb.com/mods/stalker-anomaly/addons"), "pasted with newline")
+    checkEqual(AddressInput.resolve("http://example.com/a.zip"), url("http://example.com/a.zip"), "http")
+    checkEqual(AddressInput.resolve("github.com/Reidond"), url("https://github.com/Reidond"), "bare host gets https")
+    checkEqual(AddressInput.resolve("localhost:8000/x.zip"), url("http://localhost:8000/x.zip"), "localhost with port")
+    checkEqual(AddressInput.resolve("192.168.1.5:8080"), url("http://192.168.1.5:8080"), "LAN address")
+    checkEqual(AddressInput.resolve("javascript:alert(1)"), .unsupported(scheme: "javascript"), "javascript")
+    checkEqual(AddressInput.resolve("file:///etc/passwd"), .unsupported(scheme: "file"), "file")
+    checkEqual(AddressInput.resolve("itms-apps://apps.apple.com/x"), .unsupported(scheme: "itms-apps"), "app store")
+    checkEqual(AddressInput.resolve("data:text/html,hi"), .unsupported(scheme: "data"), "data")
+    if case .search(let search) = AddressInput.resolve("stalker anomaly addons") {
+        checkEqual(search.host, "duckduckgo.com", "search host")
+        check(search.absoluteString.contains("q=stalker%20anomaly%20addons") || search.absoluteString.contains("q=stalker+anomaly+addons"), "query kept: \(search)")
+    } else { check(false, "words are a search") }
+    if case .search = AddressInput.resolve("anomaly") { check(true, "a single word is a search") } else { check(false, "a single word is a search") }
+    check(AddressInput.httpLink("https://example.com/a.zip") != nil, "httpLink accepts https")
+    check(AddressInput.httpLink("example.com/a.zip") != nil, "httpLink accepts a bare host")
+    check(AddressInput.httpLink("two words") == nil, "httpLink refuses a search")
+    check(AddressInput.httpLink("ftp://example.com/a.zip") == nil, "httpLink refuses ftp")
+}
+
+await test("bookmarks") {
+    let suite = "mod_downloads_test.\(UUID().uuidString)"
+    let defaults = UserDefaults(suiteName: suite)!
+    defer { defaults.removePersistentDomain(forName: suite) }
+    let store = BookmarkStore(defaults: defaults)
+    checkEqual(store.all.count, 2, "two built-in bookmarks and nothing else")
+    check(store.all.first?.url.host == "www.moddb.com" && store.all.first?.url.path == "/mods/stalker-anomaly/addons", "ModDB addons first")
+    check(store.all.last?.url.host == "github.com", "GitHub search second")
+    check(store.isBookmarked(URL(string: "https://www.moddb.com/mods/stalker-anomaly/addons")), "built-ins count as bookmarked")
+    check(store.add(title: "Mod A", url: URL(string: "https://example.com/a")!), "add")
+    check(store.add(title: "", url: URL(string: "https://example.com/b")!), "add without a title")
+    check(!store.add(title: "dup", url: URL(string: "https://example.com/a")!), "duplicate refused")
+    check(!store.add(title: "dup", url: URL(string: "https://www.moddb.com/mods/stalker-anomaly/addons")!), "built-in duplicate refused")
+    check(!store.add(title: "ftp", url: URL(string: "ftp://example.com/a")!), "ftp refused")
+    check(!store.add(title: "js", url: URL(string: "javascript:alert(1)")!), "javascript refused")
+    checkEqual(store.user.map(\.title), ["Mod A", "example.com"], "titles")
+    store.rename(id: store.user[0].id, to: "  Renamed ")
+    store.move(from: IndexSet(integer: 1), to: 0)
+    checkEqual(store.user.map(\.title), ["example.com", "Renamed"], "rename and move")
+    let again = BookmarkStore(defaults: defaults)
+    checkEqual(again.user.map(\.title), ["example.com", "Renamed"], "kept across launches")
+    again.remove(id: again.user[0].id)
+    checkEqual(BookmarkStore(defaults: defaults).user.map(\.title), ["Renamed"], "removal is saved")
+    check(BookmarkStore.builtIn.count == 2 && BookmarkStore(defaults: defaults).all.count == 3, "built-ins cannot be removed")
+}
+
+await test("controller-mapping") {
+    let dead = ControllerMapping.shape(x: 0.1, y: 0.1)
+    check(dead.x == 0 && dead.y == 0, "inside the deadzone nothing moves")
+    let full = ControllerMapping.shape(x: 1, y: 0)
+    check(abs(full.x - 1) < 1e-6 && full.y == 0, "full push is full speed")
+    let half = ControllerMapping.shape(x: 0.59, y: 0)
+    check(half.x > 0 && half.x < 0.3, "gentle push is slow (got \(half.x))")
+    let up = ControllerMapping.scrollDelta(x: 0, y: 1, dt: 0.1)
+    check(up.dy < 0 && abs(up.dy + 110) < 1e-6 && up.dx == 0, "stick up scrolls up (\(up.dy))")
+    let right = ControllerMapping.scrollDelta(x: 1, y: 0, dt: 0.1)
+    check(right.dx > 0, "stick right scrolls right")
+    var cursor = (x: 0.5, y: 0.5)
+    for _ in 0..<100 { cursor = ControllerMapping.movedCursor(cursor, stickX: 1, stickY: 1, dt: 0.1) }
+    check(cursor.x == 1 && cursor.y == 0, "cursor stays inside the page (up-right corner: \(cursor))")
+    let center = ControllerMapping.movedCursor((0.5, 0.5), stickX: 0, stickY: 0, dt: 0.1)
+    check(center == (0.5, 0.5), "cursor holds still")
+}
+
+// MARK: - The web view (headless: a WKWebView with no window)
+
+@MainActor
+func makeWebModel() -> (model: DownloadsModel, dir: URL, files: FinishedLog) {
+    let dir = freshDir()
+    let suite = UserDefaults(suiteName: "mod_downloads_test.\(UUID().uuidString)")!
+    let model = DownloadsModel(dir: dir, browser: BrowserModel(dataStore: .nonPersistent()), bookmarks: BookmarkStore(defaults: suite))
+    let log = FinishedLog()
+    model.onDownloadedFile = { log.files.append($0) }
+    model.onDownloaded = { log.urls.append($0) }
+    return (model, dir, log)
+}
+
+final class FinishedLog: @unchecked Sendable {
+    var files: [DownloadedFile] = []
+    var urls: [URL] = []
+}
+
+@MainActor
+func waitUntil(_ seconds: Double = 15, _ condition: () -> Bool) async -> Bool {
+    let deadline = Date().addingTimeInterval(seconds)
+    while Date() < deadline {
+        if condition() { return true }
+        try? await Task.sleep(nanoseconds: 50_000_000)
+    }
+    return condition()
+}
+
+await test("web-page-loads-without-a-download") {
+    let (model, dir, log) = makeWebModel()
+    defer { model.shutdown() }
+    model.browser.load(url("/plain.html"))
+    let loaded = await waitUntil { model.browser.pageTitle == "Plain page" }
+    check(loaded, "the page loaded (title \"\(model.browser.pageTitle)\")")
+    check(model.items.isEmpty, "a page is not a download")
+    checkEqual(model.browser.addressText, url("/plain.html").absoluteString, "address field follows the page")
+    checkEqual(visibleFiles(in: dir), [], "nothing saved")
+    check(log.files.isEmpty, "no callback")
+}
+
+await test("web-typed-link-to-a-file-downloads") {
+    let (model, dir, log) = makeWebModel()
+    defer { model.shutdown() }
+    model.browser.load(url("/dl-r1")) // the user typed a link that redirects to an attachment
+    let done = await waitUntil { model.items.first?.state == .finished }
+    check(done, "download finished (state \(String(describing: model.items.first?.state)))")
+    guard let item = model.items.first, let file = item.file else { return }
+    checkEqual(file.fileName, "mod.zip", "name from Content-Disposition")
+    checkEqual(file.sha256, sha256(fileBody), "sha256")
+    checkEqual(file.size, Int64(fileBody.count), "size")
+    checkEqual(file.kind, .browser, "kind")
+    checkEqual(file.finalURL, url("/dl.zip"), "final URL after the redirect")
+    check(file.originalURL == url("/dl-r1") || file.originalURL == url("/dl.zip"), "original URL is the first request (got \(file.originalURL))")
+    let webOnDisk = try Data(contentsOf: file.fileURL)
+    checkEqual(webOnDisk, fileBody, "content")
+    checkEqual(file.fileURL.deletingLastPathComponent().standardizedFileURL, dir.standardizedFileURL, "in the downloads folder")
+    checkEqual(visibleFiles(in: dir), ["mod.zip"], "folder contents")
+    checkEqual(hiddenFiles(in: dir), [], "no .wk part left")
+    checkEqual(log.files.count, 1, "onDownloadedFile once")
+    checkEqual(log.urls.count, 1, "onDownloaded once")
+    checkEqual(log.urls.first?.standardizedFileURL, file.fileURL.standardizedFileURL, "same file")
+}
+
+await test("web-page-cannot-start-a-download-by-itself") {
+    let (model, dir, log) = makeWebModel()
+    defer { model.shutdown() }
+    for path in ["/auto-download.html", "/auto-redirect.html"] {
+        model.browser.load(url(path)) // the user opens the page; its script then starts a download on its own
+        let blocked = await waitUntil { model.items.contains { $0.state == .awaitingApproval } }
+        check(blocked, "\(path): the attempt is held for approval")
+        try? await Task.sleep(nanoseconds: 500_000_000)
+        checkEqual(visibleFiles(in: dir), [], "\(path): nothing saved")
+        checkEqual(hiddenFiles(in: dir), [], "\(path): nothing partial")
+        check(log.files.isEmpty, "\(path): no callback")
+        if let item = model.items.first(where: { $0.state == .awaitingApproval }) { model.remove(item) }
+    }
+}
+
+await test("web-blocked-download-can-be-allowed") {
+    let (model, dir, log) = makeWebModel()
+    defer { model.shutdown() }
+    model.browser.load(url("/auto-download.html"))
+    _ = await waitUntil { model.items.contains { $0.state == .awaitingApproval } }
+    guard let item = model.items.first(where: { $0.state == .awaitingApproval }) else { check(false, "no blocked item"); return }
+    checkEqual(item.sourceURL, url("/dl.zip"), "the blocked URL")
+    check(model.notice != nil, "the user is told")
+    model.approve(item)
+    let done = await waitUntil { item.state == .finished }
+    check(done, "allowed download finishes (state \(item.state))")
+    checkEqual(item.file?.sha256, sha256(fileBody), "content")
+    checkEqual(visibleFiles(in: dir), ["mod.zip"], "saved after the user's Allow")
+    checkEqual(log.files.count, 1, "callback once")
+}
+
+await test("web-tap-in-page-allows-one-download") {
+    let (model, dir, _) = makeWebModel()
+    defer { model.shutdown() }
+    model.browser.load(url("/plain.html"))
+    _ = await waitUntil { model.browser.pageTitle == "Plain page" }
+    // a page's own scripted click is not a tap: its event is not trusted, so the user script says nothing
+    _ = try? await model.browser.webView.evaluateJavaScript("document.dispatchEvent(new MouseEvent('click', {bubbles: true}))")
+    try? await Task.sleep(nanoseconds: 300_000_000)
+    check(!model.browser.gate.isOpen(at: DownloadGate.now), "a scripted click does not open the gate")
+    // the message the user script sends for a trusted click (a real tap cannot be made without a window)
+    _ = try? await model.browser.webView.evaluateJavaScript("window.webkit.messageHandlers.userGesture.postMessage(1)", in: nil, contentWorld: .defaultClient)
+    let opened = await waitUntil(5) { model.browser.gate.isOpen(at: DownloadGate.now) }
+    check(opened, "a trusted tap message opens the gate")
+    model.browser.webView.load(URLRequest(url: url("/dl.zip"))) // the navigation the tap led to
+    let done = await waitUntil { model.items.first?.state == .finished }
+    check(done, "download after a tap finishes")
+    check(!model.browser.gate.isOpen(at: DownloadGate.now), "the tap is used up")
+    model.browser.webView.load(URLRequest(url: url("/dl.zip")))
+    let second = await waitUntil { model.items.contains { $0.state == .awaitingApproval } }
+    check(second, "a second download needs a second tap")
+    checkEqual(visibleFiles(in: dir), ["mod.zip"], "only the first was saved")
+}
+
+await test("web-unknown-type-without-disposition-is-a-download") {
+    let (model, _, _) = makeWebModel()
+    defer { model.shutdown() }
+    model.browser.load(url("/octet.bin"))
+    let done = await waitUntil { model.items.first?.state == .finished }
+    check(done, "a type WebKit cannot show is downloaded when the user typed the link (state \(String(describing: model.items.first?.state)))")
+    checkEqual(model.items.first?.file?.fileName, "octet.bin", "name from the URL")
+}
+
+await test("web-only-http-and-https") {
+    let (model, _, _) = makeWebModel()
+    defer { model.shutdown() }
+    model.browser.addressText = "javascript:alert(1)"
+    model.browser.submitAddress()
+    check(model.browser.errorMessage?.contains("javascript") == true, "address field refuses javascript: (\(String(describing: model.browser.errorMessage)))")
+    model.browser.errorMessage = nil
+    model.browser.load(url("/ftp-link.html")) // a page that navigates to ftp://
+    let refused = await waitUntil { model.browser.errorMessage != nil }
+    check(refused, "the page's ftp link is refused")
+    check(model.items.isEmpty, "no download from it")
+}
+
+await test("web-cancel-and-retry") {
+    let (model, dir, _) = makeWebModel()
+    defer { model.shutdown() }
+    server.clearRequests()
+    model.browser.load(url("/dl-slow.zip"))
+    let started = await waitUntil { (model.items.first?.receivedBytes ?? 0) >= 60_000 }
+    check(started, "download is running (\(model.items.first?.receivedBytes ?? 0) bytes)")
+    guard let item = model.items.first else { return }
+    model.cancel(item)
+    check(item.state == .cancelled, "cancelled")
+    try? await Task.sleep(nanoseconds: 500_000_000)
+    check(item.state == .cancelled, "stays cancelled after WebKit reports the cancel")
+    checkEqual(visibleFiles(in: dir), [], "no finished file")
+    print("   resume data after cancel: \(item.resumeData.map { "\($0.count) bytes" } ?? "none")")
+    model.retry(item)
+    let done = await waitUntil(30) { item.state == .finished }
+    check(done, "retry finishes (state \(item.state))")
+    checkEqual(item.file?.sha256, sha256(slowBody), "the file is complete and identical")
+    checkEqual(visibleFiles(in: dir), ["slow.zip"], "one file")
+    checkEqual(hiddenFiles(in: dir), [], "no part left")
+    print("   requests for /dl-slow.zip: \(server.requests(for: "/dl-slow.zip").map { $0.headers["range"] ?? "full" })")
+}
+
+await test("web-download-list-actions") {
+    let (model, dir, _) = makeWebModel()
+    defer { model.shutdown() }
+    model.browser.load(url("/dl.zip"))
+    _ = await waitUntil { model.items.first?.state == .finished }
+    check(model.activeCount == 0 && model.waitingCount == 0, "counts")
+    model.clearFinished()
+    check(model.items.isEmpty, "clearFinished empties the list")
+    checkEqual(visibleFiles(in: dir), ["mod.zip"], "the file stays for the importer")
+}
+
+await test("link-item-states") {
+    let (model, dir, log) = makeWebModel()
+    defer { model.shutdown() }
+    check(!model.downloadLink("two words"), "not a link")
+    check(model.notice != nil, "told why")
+    check(model.downloadLink(url("/file.zip").absoluteString), "link accepted")
+    let done = await waitUntil { model.items.first?.state == .finished }
+    check(done, "link download finishes")
+    checkEqual(model.items.first?.origin, .link, "origin")
+    checkEqual(log.files.first?.kind, .link, "kind")
+    checkEqual(visibleFiles(in: dir), ["file.zip"], "saved")
+    // a web page link: reported, and the browser opens it
+    check(model.downloadLink(url("/plain.html").absoluteString), "page link accepted")
+    let reported = await waitUntil { model.items.first?.state == .openedInBrowser }
+    check(reported, "the page is reported as not a file")
+    let opened = await waitUntil { model.browser.pageTitle == "Plain page" }
+    check(opened, "and opened in the browser")
+    // cancel and retry of a link download
+    check(model.downloadLink(url("/slow.zip").absoluteString), "slow link accepted")
+    let moving = await waitUntil { (model.items.first?.receivedBytes ?? 0) > 50_000 }
+    check(moving, "slow link running")
+    guard let slow = model.items.first else { return }
+    model.cancel(slow)
+    let cancelled = await waitUntil { slow.state == .cancelled }
+    check(cancelled, "cancelled")
+    model.retry(slow)
+    let resumed = await waitUntil(30) { slow.state == .finished }
+    check(resumed, "retried and finished (state \(slow.state))")
+    checkEqual(slow.file?.sha256, sha256(slowBody), "resumed content is identical")
+    check(model.items.allSatisfy { $0.state != .downloading }, "nothing left running")
 }
 
 // MARK: - Done
