@@ -1320,6 +1320,7 @@ SDL_AppResult SDL_AppIterate(void* appstate)
             // (SDL window, Metal layer), in this same process.
             AppleShell::Log("anomaly: Play pressed in the launcher, starting the engine");
             CloseLauncher(*app);
+            AppleShell::WriteFsGameLtx(); // the mod list changed since the shell started: the engine mounts what this file says
             return StartEngine(*app) ? SDL_APP_CONTINUE : SDL_APP_FAILURE;
         case ANOMALY_LAUNCHER_QUIT:
             return SDL_APP_SUCCESS;
