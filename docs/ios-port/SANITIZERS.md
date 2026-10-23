@@ -70,6 +70,10 @@ tools/sweep/run.sh newgame       # once: new game from the menu, saves sweep_bas
 tools/sweep/run.sh smoke         # about 5 minutes (see below)
 tools/sweep/run.sh combat        # one scenario each from sweep_base: combat inventory pda trade surge anomalies sleep transition saveload die_reload
 tools/sweep/run.sh quit_dialog   # quit from a state: quit_menu quit_loading quit_level quit_inventory quit_pda quit_dialog quit_combat quit_dead quit_surge
+tools/sweep/run.sh quit_background_level   # the app goes to the background (the iPad's lifecycle events), then quits; quit_background does it in the menu
+tools/sweep/quit_runs.sh -n 30 --plain quit_menu quit_level quit_loading   # a quit plan repeated: hangs, crashes and the quit time of each
+SWEEP_TERM_AT=100 SWEEP_QUIT_AT=900 tools/sweep/run.sh quit_background_level   # SIGTERM to the app 100 s after the launch instead of the script's quit
+SWEEP_LLDB=1 tools/sweep/run.sh ...        # lldb attached in batch mode: every sanitizer stop, exit() and abort() prints all threads' stacks to lldb.txt
 ```
 
 `run.sh` writes `build/sweep-runs/<time>-<plan>/` with `stderr.txt` (every sanitizer report, with stacks), `engine.log`, `shell.log`,
@@ -211,7 +215,7 @@ Run on `macos-arm64-tsan` (`tools/sweep/run.sh --tsan --scale 3`, `tools/sweep/q
 
 Without `tsan.supp` the same `smoke` run reports 477 races in 66 places. 301 are `CRandom::randI` (the one global generator, advanced by every thread);
 the rest are the by-design overlap of the secondary thread with the render phase (below). None is a container or a lifetime: those were the ones
-fixed in findings 29 to 37 (the first TSan runs, before the fixes, also had them: `CModelPool::Delete` and `CBlender_Compile` against the
+fixed in findings 29 to 38 (the first TSan runs, before the fixes, also had them: `CModelPool::Delete` and `CBlender_Compile` against the
 prefetcher's thread, `s_bones_array_const`, and `FS.dwOpenCounter` from the texture loader's GCD workers).
 
 `tools/sweep/tsan.supp` names every function it hides and why. The by-design class: the secondary thread (`mt_Thread`: `Device.seqParallel`,
@@ -280,6 +284,7 @@ The sweep's fixes, in the order they were made. Module is the commit prefix.
 | 35 | xrCore, xrEngine, xrGame, Metal shim | data race (formal) | Plain integers that several threads change: `shared_str`'s reference count (Apple: `__atomic` add and sub), `mt_bMustExit` and `mt_Thread_marker` (the secondary thread's hand-shake), `Memory.stat_calls` (every allocation of every thread: all of the first 21 TSan reports), `CPU::qpc_counter`, `FS.dwOpenCounter` (the disk icon), and the Metal shim's poll of `Query::done` (set by the completion handler's thread) outside the lock that guards it. |
 | 36 | ShaderXlat | guard | The translation hook holds a mutex: vkd3d-shader and SPIRV-Cross are reentrant and the resource manager already serialises shader creation (`creationGuard`), so this is insurance against a second caller. |
 | 37 | xrCore | infinite recursion in the crash handler | After the static destructors have run, `Msg` locks a destroyed `std::recursive_mutex`, which throws `std::system_error`; nothing catches it, `std::terminate` calls the engine's `terminate_handler`, which reports with `Msg`, which throws: for ever, deeper and deeper (`sample` of a process that aborted at exit showed `terminate_handler` > `Msg` > `AddOne` > `recursive_mutex::lock` > `__cxa_throw` > `terminate` > ... 896 samples of the same cycle). This is the crash handler "spinning for minutes". `terminate_handler` reports once and `_exit`s the second time; `AddOne` and `FlushLog` write to stderr / return once the log's statics are gone (an object defined after them sets a flag as the first of them to be destroyed). |
+| 38 | App | quit takes 31 s while the app is in the background (systems check, iPad) | A SIGTERM (`devicectl ... terminate`, the system) or a quit event while `AppleShell::IsPaused()`: the engine is paused, does not run its event queue (the disconnect and quit it would act on are queued there) and may not render, and SDL only turns SIGTERM into an event when its pump runs, which a backgrounded app's display link does not do at its pace; the app lived until the system's SIGKILL. The app now installs a main-queue SIGTERM source and handles `SDL_EVENT_QUIT` itself while paused: it logs, runs `SDL_AppQuit` (`xr_engine::Shutdown()`) and exits at once, without the disconnect; the game was saved at the background transition (`SaveForBackground`). In the foreground SIGTERM still goes through SDL and the engine. Mac, with the script's `lifecycle background`: a quit from a level 2 s -> 0.35 s, SIGTERM 0.37 s, the `ipad_autosave` written in 0.2 s before; foreground SIGTERM 0.35 s. |
 
 ### Suppressions
 
