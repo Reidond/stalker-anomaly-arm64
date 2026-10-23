@@ -1,5 +1,5 @@
 #!/bin/bash
-# Level-load and new-game times on the Mac with the script bytecode cache off, cold (empty) and warm (docs/ios-port/LUA-PERF.md).
+# Level-load and new-game times on the Mac with the script bytecode cache off (the default), cold (empty), warm and warm with the read-ahead (docs/ios-port/LUA-PERF.md).
 #
 #   tools/render_harness/lua_load.sh [-t tag] [-n runs] [-g] [-a "app args"]
 #
@@ -9,8 +9,8 @@
 #   -N        the new game only
 #   -a args   more app arguments
 # The new game clicks Start at the point tools/sweep/run.sh computes for the unattended 1280x720 window (390, 317).
-# Each configuration runs on one state root (build/render-harness/<tag>/state): `off` is -no_lua_cache, `cold` empties the cache directory
-# before every launch, `warm` keeps it (one launch before the measured ones fills it). Prints a table: the seconds from the load command to
+# Each configuration runs on one state root (build/render-harness/<tag>/state): `off` is no flag, `cold` (-lua_cache) empties the cache directory
+# before every launch, `warm` (-lua_cache) keeps it (one launch before the measured ones fills it), `prefetch` is warm with -lua_prefetch. Prints a table: the seconds from the load command to
 # `level ready` (shell log) and the engine's `[lua-load]` line of that load.
 set -euo pipefail
 root=$(cd "$(dirname "$0")/../.." && pwd)
@@ -62,8 +62,10 @@ report=$out/summary.md
 one() { # kind script config run
     local kind=$1 script=$2 config=$3 n=$4 name=$1_$3_$4 args=(-lua_perf)
     case $config in
-        off) args+=(-no_lua_cache);;
-        cold) rm -rf "$cache";;
+        off) ;;
+        cold) args+=(-lua_cache); rm -rf "$cache";;
+        warm) args+=(-lua_cache);;
+        prefetch) args+=(-lua_prefetch);;
     esac
     cp "$script" "$out/$name.script"
     local size=()
@@ -78,7 +80,7 @@ kinds=(load)
 for kind in "${kinds[@]}"; do
     script=$load_script
     [ "$kind" = newgame ] && script=$new_script
-    for config in off cold warm; do
+    for config in off cold warm prefetch; do
         [ "$config" = warm ] && one "$kind" "$script" warm 0 > /dev/null # fills the cache; its row is dropped below
         for n in $(seq 1 "$runs"); do
             echo "== $kind $config $n"

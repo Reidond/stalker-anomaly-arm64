@@ -76,7 +76,7 @@ Console and command-line summary:
 |---|---|
 | `-lua_perf`, `lua_perf on\|off\|mark <label>\|report\|reset\|interval <s>\|watch <path> [arg]\|unwatch` | the timers |
 | `-lua_profile [-lua_profile_ms <n>]`, `lua_profile on [ms]\|off\|report [top]\|reset [label]` | the profiler (2 ms samples) |
-| `-no_lua_cache`, `-no_lua_prefetch`, `lua_cache info\|on\|off\|clear\|warm` | the bytecode cache and its read-ahead (both on by default) |
+| `-lua_cache`, `-lua_prefetch` (implies the cache), `-no_lua_cache` (wins), `lua_cache info\|on\|off\|clear\|warm` | the bytecode cache and its read-ahead: **both off by default** |
 
 ## Bytecode cache
 
@@ -95,17 +95,19 @@ Console and command-line summary:
   **corrupt**; the VM's own bytecode loader has the last word (`luaL_loadbuffer` of the bytecode fails: corrupt).
 - **Any miss compiles from the text** and stores the entry again (a temporary file, then `rename`: two launches never see half an entry). Any
   failure to read, write or create the directory gives the same result as no cache. The result of `load` is always that of `luaL_loadbuffer(text)`.
-- **Read-ahead (on by default, `-no_lua_prefetch` turns it off).** Opening and reading ~475 small files is most of the time of a hit (49 of 57 ms on the iPad, 59 to 91 ms on the Mac), more than
+- **Read-ahead (`-lua_prefetch`; implies the cache).** Opening and reading ~475 small files is most of the time of a hit (49 of 57 ms on the iPad, 59 to 91 ms on the Mac), more than
   decoding the bytecode (6 ms on the iPad) and as much as parsing the text (66 ms). `set_directory` starts a thread that reads the directory's entries into memory; a load takes its entry from there
   (once) and reads the file only when the thread has not got to it. The engine calls `set_directory` again at every new Lua state, which refills the read-ahead. An entry read ahead is checked like
   any other, so one that was replaced or damaged afterwards is a stale or corrupt entry, never a wrong script.
-  **Why it is on**: without it the cache gains 7 to 9 ms on the iPad (a warm load costs what the parse costs); with it a warm load is 47 ms shorter, repeatably (two sets of three launches, 270 to 273
-  against 318 to 322 ms, and 326 to 343 with the cache off), 55 to 70 ms shorter than no cache. The decision rule was: clear gain on the iPad, cache and read-ahead on; otherwise the cache off.
-  Two of the ASan smoke sweeps run with it stalled after the Cordon to Garbage level change (the game kept running at 5 to 15 fps, the sweep driver never advanced, nothing in the log). That is
-  probably not the read-ahead: the same stall happened with it off (one of four runs with the cache on, none of one with the cache off) and in 5 of 22 smoke runs of other sessions on builds without
-  any of these changes (`render-fixes`, `xrgame-triage`: 1500 to 2350 s, no `DONE plan smoke`). It is a flake of the sweep or the game, open and not looked at here.
+  **Measured, and off by default.** Without it the cache gains 7 to 9 ms on the iPad (a warm load costs what the parse costs) and costs about 120 ms on the first load; with it a warm load is 47 ms
+  shorter, repeatably (two sets of three launches, 270 to 273 against 318 to 322 ms, and 326 to 343 with the cache off): under 1 % of a 5.4 s level load, which nobody will notice, against a new
+  on-disk cache and a thread at every level load. So both stay switches until they have had more play; `-lua_cache` or `-lua_prefetch` on the command line (on the iPad in `Documents/commandline.txt`)
+  turns them on, `lua_cache on` in the console for the rest of the Lua state.
+  Two of the ASan smoke sweeps run with the read-ahead stalled after the Cordon to Garbage level change (the game kept running at 5 to 15 fps, the sweep driver never advanced, nothing in the log).
+  That is probably not the read-ahead: the same stall happened with it off (one of four runs with the cache on, none of one with the cache off) and in 5 of 22 smoke runs of other sessions on builds
+  without any of these changes (`render-fixes`, `xrgame-triage`: 1500 to 2350 s, no `DONE plan smoke`). It is a flake of the sweep or the game, open and not looked at here.
 - `lua_cache warm` runs every `*.script` of `$game_scripts$` (the stock archives, the Monolith overlay, loose addon files) through the same
-  `do_file` path without running it, so the first level load is already warm. `-no_lua_cache` turns it off.
+  `do_file` path without running it, so the first level load is already warm (the cache has to be on).
 
 `tools/lua_cache_test` checks, in fresh Lua states and directories: miss, store and hit; a stale source; the addon override and its removal; corrupt
 entries (empty, garbage, truncated at several places, extra bytes, a flipped byte, a bad magic, absurd sizes, bytecode the VM refuses); an entry of
@@ -177,10 +179,10 @@ per cache state, the quietest sets (load 12 to 15, two other games); the load ti
 
 | Cache | seconds to level ready | Lua part of the load, ms | file read | compile / cache | run main chunks |
 |---|---:|---:|---:|---:|---:|
-| off (`-no_lua_cache`) | 5.8 to 8.3 | 462 to 568 | 10 to 18 | 91 to 107 | 353 to 449 |
+| off (the default) | 5.8 to 8.3 | 462 to 568 | 10 to 18 | 91 to 107 | 353 to 449 |
 | cold (empty: compile and store 407 entries) | 5.8 to 7.4 | 588 to 698 | 9 to 19 | 235 to 301 | 344 to 405 |
-| warm, one file per script read on demand (`-no_lua_prefetch`) | 5.2 to 7.9 | 419 to 559 | 9 to 18 | 74 to 111 | 336 to 440 |
-| warm, with the read-ahead (the default) | 5.9 to 8.7 | 407 to 432 | 9 to 17 | 16 to 21 | 379 to 395 |
+| warm, one file per script read on demand (`-lua_cache`) | 5.2 to 7.9 | 419 to 559 | 9 to 18 | 74 to 111 | 336 to 440 |
+| warm, with the read-ahead (`-lua_prefetch`) | 5.9 to 8.7 | 407 to 432 | 9 to 17 | 16 to 21 | 379 to 395 |
 
 - **Without the read-ahead the cache did not shorten the load**: loading the bytecode is 10 to 15 ms, but 474 `open`+`read` pairs cost 59 to 91 ms (an endpoint-security agent on this
   Mac makes every `open` slow, 130 to 190 µs a file), so a warm load was 74 to 111 ms against 91 to 107 from the text. **With it a warm load is 16 to 21 ms**: 70 to 90 ms saved
@@ -232,10 +234,10 @@ The `ipad_test` save, three launches per cache state, redone on a free iPad (20:
 
 | Cache | seconds to level ready | Lua part of the load, ms | file read | compile / cache | run main chunks |
 |---|---:|---:|---:|---:|---:|
-| off | 5.0 to 6.6 | 326 to 343 | 13 | 66 | 247 to 263 |
-| cold | 5.3 to 5.6 | 443 to 449 | 11 to 12 | 185 to 190 (compile 67, store 106) | 247 to 248 |
-| warm, one file per script read on demand (`-no_lua_prefetch`) | 5.2 to 5.6 | 318 to 322 | 12 to 14 | 57 to 59 (file I/O 49, decode 6, hash 1) | 248 to 250 |
-| warm, with the read-ahead (the default) | 5.0 to 5.7 | 268 to 275 | 12 to 14 | 9 to 11 (473 of 474 from memory; decode 6) | 246 to 250 |
+| off (the default) | 5.0 to 6.6 | 326 to 343 | 13 | 66 | 247 to 263 |
+| cold (`-lua_cache`, empty) | 5.3 to 5.6 | 443 to 449 | 11 to 12 | 185 to 190 (compile 67, store 106) | 247 to 248 |
+| warm, one file per script read on demand (`-lua_cache`) | 5.2 to 5.6 | 318 to 322 | 12 to 14 | 57 to 59 (file I/O 49, decode 6, hash 1) | 248 to 250 |
+| warm, with the read-ahead (`-lua_prefetch`) | 5.0 to 5.7 | 268 to 275 | 12 to 14 | 9 to 11 (473 of 474 from memory; decode 6) | 246 to 250 |
 
 - A level load is about 5.5 s and the scripts are 0.27 to 0.34 s of it: **there is little to win in compiling** (66 ms of parsing, the iPad parses 100 MB/s). The bytecode loads in 6 ms, but opening
   and reading 474 small files takes 49 to 57 ms (about 105 µs a file in the app's sandbox), so a cache that reads its files on demand gains 7 to 9 ms and costs a cold start of 0.12 s once.
@@ -272,8 +274,7 @@ Limits of these numbers: the places are quiet ones (nobody fights; the player is
 ## Checks
 
 - `ctest -R lua_cache_test`: 153 checks (stale source, addon override and its removal, corrupt and foreign entries, error messages, unusable directory, warm and purge, hash, two threads, the read-ahead).
-- Lua behaviour unchanged: `tools/sweep/run.sh smoke` on the ASan+UBSan build, ten runs over the course of the work: six completed (`DONE plan smoke`, 263 to 386 s: the final configuration (cache and
-  read-ahead on) once, the cache without the read-ahead twice, the read-ahead twice before it became the default, the first version of the cache once), three stalled after the level change to Garbage
+- Lua behaviour unchanged: `tools/sweep/run.sh smoke` on the ASan+UBSan build, the plain one of the shipped configuration (cache off: `DONE plan smoke` in 537 s, 0 ASan reports, the renderer's UBSan reports only, no crash files, 0 entries written to the cache directory), and ten runs over the course of the work with the cache on: six completed (`DONE plan smoke`, 263 to 386 s: with the cache and the read-ahead three times, with the cache alone twice, the first version of the cache once), three stalled after the level change to Garbage
   (see above) and one was cut short after reaching its third phase (cache off). Every completed run has 0 ASan reports, the UBSan reports of the renderer that [SANITIZERS.md](SANITIZERS.md) lists
   (null `ShaderElement` and `Fmatrix` references, NaN into `iFloor`) and no crash files; one of the stalled runs also hit the `reprocess_spawn` use-after-free of SANITIZERS.md open item 1. The sweep
   stalls on other branches too (see above).

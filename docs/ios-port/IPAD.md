@@ -180,11 +180,11 @@ The iPad runs LuaJIT as an interpreter. Measured with the engine's own timers (`
 
 **The budget holds in both modes, so no script function was moved to C++.** The profile is flat: 22 to 24 % of the Lua time is bytecode, about half is engine functions called from scripts, a
 quarter is the collector. The collector's steps run on a second thread (3 to 4 ms per frame there, parallel to the renderer). Level load: the scripts are 0.32 to 0.34 s of the ~5.5 s (running
-their main chunks, 250 ms, is most of it; the compile is 66 ms). The bytecode cache (`Library/Caches/Anomaly/lua`) with its read-ahead thread shortens the Lua part of a
-load from 326-343 ms to 270-273 ms (without the thread, reading 474 small files takes as long as parsing them: 318-322 ms); both are on by default. New game: the Lua part is 0.34 to 0.46 s; a steady 60 fps window ends 27 to 29 s
+their main chunks, 250 ms, is most of it; the compile is 66 ms). The opt-in bytecode cache (`Library/Caches/Anomaly/lua`, `-lua_cache`) with its read-ahead thread (`-lua_prefetch`) shortens the Lua part of a
+load from 326-343 ms to 270-273 ms (the cache alone does not: reading 474 small files takes as long as parsing them, 318-322 ms); under 1 % of the load, so both are off by default. New game: the Lua part is 0.34 to 0.46 s; a steady 60 fps window ends 27 to 29 s
 after Start. The Time Profiler figure in "Performance: where the time goes" (`lua_pcall` about 1.4 ms per frame at the 60 fps preset) agrees: the field is 1.0 ms in Performance and 2.6 ms in Quality (a Quality frame covers two frames of game time).
 
-Switches: `-lua_perf`, `-lua_profile`, `-no_lua_cache`, `-no_lua_prefetch` in `Documents/commandline.txt`; console `lua_perf`, `lua_profile`, `lua_cache` (with `-dbg`). `tools/ios/lua_measure.sh` repeats the whole set (about 45 minutes).
+Switches: `-lua_perf`, `-lua_profile`, `-lua_cache`, `-lua_prefetch` in `Documents/commandline.txt`; console `lua_perf`, `lua_profile`, `lua_cache` (with `-dbg`). `tools/ios/lua_measure.sh` repeats the whole set (about 45 minutes).
 
 ## Long runs: stability and thermal
 

@@ -666,6 +666,11 @@ public:
 			Msg("* [lua-cache] %zu entries removed from %s", script_cache::purge(), script_cache::directory());
 		else if (!strcmp(cmd, "warm"))
 		{
+			if (!script_cache::directory()[0])
+			{
+				Msg("! lua_cache: the cache is off (start with -lua_cache, or `lua_cache on`)");
+				return;
+			}
 			const double t0 = now_ms();
 			const size_t n = ai().script_engine().warm_bytecode_cache();
 			Msg("* [lua-cache] warmed %zu scripts in %.0f ms", n, now_ms() - t0);

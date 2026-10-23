@@ -3,7 +3,7 @@
 #   - per graphics mode one launch with the engine's Lua timers: the Cordon field, the Rookie village, the Bar (a second level load),
 #     after a warm-up in the village (tools/lua_measure.py script),
 #   - one sampling-profiler launch in Quality mode (the function tables),
-#   - the level load with the bytecode cache off, cold (emptied by `lua_cache clear`) and warm, a few launches each,
+#   - the level load with the bytecode cache off (the default), cold (emptied by `lua_cache clear`), warm and warm with the read-ahead, a few launches each,
 #   - optionally (-g) the new game from the main menu with the same three cache states.
 #
 #   tools/ios/lua_measure.sh [-i] [-s save] [-o outdir] [-k lockfile] [-n loads] [-w seconds] [-g] [-q]
@@ -16,7 +16,7 @@
 #     -g           also the new-game test (about 90 s a launch)
 #     -q           the load test only (no timer or profiler runs)
 #     -P           the profiler run only
-#     -c states    cache states of the load test (default "off cold warm")
+#     -c states    cache states of the load test (default "off cold warm prefetch": off = no flag, cold and warm = -lua_cache, prefetch = -lua_prefetch)
 #     -x flags     more engine flags for every run, e.g. -lua_prefetch
 #     -T           the timer runs only
 #     -m modes     graphics modes of the timer runs (default "quality performance")
@@ -37,7 +37,7 @@ quick=0
 profonly=0
 timersonly=0
 modes="quality performance"
-states="off cold warm"
+states="off cold warm prefetch"
 extra=""
 while getopts "is:o:k:n:w:gqPTm:c:x:" opt; do
     case $opt in i) install=1;; s) save=$OPTARG;; o) out=$OPTARG;; k) lock=$OPTARG;; n) loads=$OPTARG;; w) soak=$OPTARG;; g) newgame=1;; m) modes=$OPTARG;; c) states=$OPTARG;; x) extra=$OPTARG;; T) timersonly=1;; q) quick=1;; P) profonly=1; quick=1;; *) exit 2;; esac
@@ -172,9 +172,10 @@ for kind in $kinds; do
     for config in ${=states}; do
         for n in $(seq 1 $loads); do
             case $config in
-                off) script=$out/$kind.script; args=(-dbg -lua_perf -no_lua_cache);;
-                cold) script=$out/${kind}_cold.script; args=(-dbg -lua_perf);;
-                warm) script=$out/$kind.script; args=(-dbg -lua_perf);;
+                off) script=$out/$kind.script; args=(-dbg -lua_perf);;
+                cold) script=$out/${kind}_cold.script; args=(-dbg -lua_perf -lua_cache);;
+                warm) script=$out/$kind.script; args=(-dbg -lua_perf -lua_cache);;
+                prefetch) script=$out/$kind.script; args=(-dbg -lua_perf -lua_prefetch);;
             esac
             # a warm launch needs a filled cache: the first launch after a cold one is the warm-up (its row stays, it is a warm launch)
             run ${kind}_${config}_$n "$script" $args

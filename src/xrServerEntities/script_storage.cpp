@@ -411,11 +411,17 @@ static std::string lua_cache_dir()
 }
 #endif
 
+// The bytecode cache and its read-ahead thread are opt-in (docs/ios-port/LUA-PERF.md): -lua_cache turns the cache on, -lua_prefetch turns the
+// read-ahead on and implies the cache; -no_lua_cache wins over both. The console's `lua_cache on` turns the cache on until the next new Lua state.
+static bool lua_cache_requested()
+{
+	return strstr(Core.Params, "-lua_cache") || strstr(Core.Params, "-lua_prefetch");
+}
+
 void CScriptStorage::set_bytecode_cache(bool on)
 {
 #ifdef XR_PLATFORM_APPLE
-	// the cache reads its entries ahead on a thread (-no_lua_prefetch turns that off): see docs/ios-port/LUA-PERF.md
-	script_cache::set_directory(on ? lua_cache_dir().c_str() : "", strstr(Core.Params, "-no_lua_prefetch") == nullptr);
+	script_cache::set_directory(on ? lua_cache_dir().c_str() : "", strstr(Core.Params, "-lua_prefetch") != nullptr);
 #endif
 }
 
@@ -426,7 +432,7 @@ void CScriptStorage::reinit()
 		script_perf::detach(m_virtual_machine);
 		lua_close(m_virtual_machine);
 	}
-	set_bytecode_cache(true);
+	set_bytecode_cache(lua_cache_requested());
 
 #ifdef USE_GSC_MEM_ALLOC
     m_virtual_machine = lua_newstate(lua_alloc, NULL);
