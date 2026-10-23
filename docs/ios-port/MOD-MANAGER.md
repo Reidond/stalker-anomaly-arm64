@@ -126,16 +126,23 @@ Source paths may use `\` and any case.
 ### FomodWizardView
 
 One page per step: the groups with their rule, the options, and a panel with the image and description of the option that is
-hovered, focused or, failing that, selected. The footer has Cancel, Back and Next, which is Install on the last step.
+hovered, highlighted or, failing that, selected. The footer has Cancel, Back and Next, which is Install on the last step.
 Wide layouts put the panel beside the options, narrow ones below.
 
-- Touch and mouse: tap an option, the footer buttons.
-- Focus (keyboard, controller): every option, locked ones too, can take focus, so the reason for a lock can be read; each group,
-  the option list and the footer are SwiftUI focus sections; Return or Space picks the focused option; Return is Next or Install
-  and Escape is Cancel (keyboard shortcuts); the first option of a page has focus when it opens and the page scrolls to the
-  focused option. The wizard does not read the controller itself: the launcher's controller-to-focus layer drives it like its
-  own screens. It has been rendered offscreen and its rules tested, but not tried with a controller on the iPad.
-- `FomodSession` (public) is the state behind it (steps, selections, flags, validity) and can be driven without the view.
+- Touch and mouse: tap an option or a footer button.
+- Keyboard: the arrow keys move a highlight (the cursor) over the options of the page and then the footer buttons; Return or
+  Space presses it; Escape is Back, and Cancel on the first step. The first option is highlighted when a page opens, and the page
+  scrolls to the highlight.
+- Controller: the view reads no controller. `FomodSession` (public, `ObservableObject`) holds the steps, selections, flags,
+  validity and the cursor, and takes the same commands the keyboard produces: `session.send(.up / .down / .left / .right /
+  .confirm / .back / .next)`. Whoever reads the pad (the launcher) creates the session, shows
+  `FomodWizardView(session:onFinish:onCancel:)` and forwards D-pad to the four directions, Cross to `.confirm`, Circle to `.back`
+  and R1 or Options to `.next` (press the primary button if the rules allow). `FomodWizardView(installer:onFinish:onCancel:)`
+  creates its own session and is what the touch and keyboard path needs. The highlight and the actions are the same either way,
+  so the result does not depend on which device pressed what. Rendered offscreen and covered by the session tests; not yet tried
+  with a controller on the iPad.
+- Locked options (required, not usable, SelectAll) can be highlighted, so the reason for the lock can be read, but not changed.
+- VoiceOver: every option and button has a label, a selected value and, for locked ones, a hint.
 
 ### Metadata and ids
 

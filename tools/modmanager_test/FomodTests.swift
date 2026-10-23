@@ -324,6 +324,77 @@ func registerFomodTests() {
         try expectEqual(session.choices().selections.first { $0.group == "Pack" }?.plugins, ["Hardcore"])
     }
 
+    test("fomod session: pad and keyboard commands move a cursor, pick options and press the footer") {
+        let installer = try installerFrom(Data(overhaulConfig.utf8))
+        let s = FomodSession(installer: installer)
+        var finished: FomodChoices?
+        var cancelled = 0
+        s.onFinish = { finished = $0 }
+        s.onCancel = { cancelled += 1 }
+
+        try expectEqual(s.cursor, .option(ref(0, 0, 0)), "the first option starts highlighted")
+        s.send(.up)
+        try expectEqual(s.cursor, .option(ref(0, 0, 0)), "up at the top stays")
+        s.send(.down)
+        try expectEqual(s.cursor, .option(ref(0, 0, 1)))
+        s.send(.confirm)                                    // pick Hardcore
+        try expect(s.isSelected(ref(0, 0, 1)) && !s.isSelected(ref(0, 0, 0)))
+        s.send(.down); s.send(.down); s.send(.down)         // Base tweaks, Base sounds, then off the end
+        try expectEqual(s.cursor, .primary, "down from the last option reaches the footer")
+        s.send(.down)
+        try expectEqual(s.cursor, .primary)
+        s.send(.left)
+        try expectEqual(s.cursor, .cancel, "Back is not there on the first step")
+        s.send(.right)
+        try expectEqual(s.cursor, .primary)
+        s.send(.up)
+        try expectEqual(s.cursor, .option(ref(0, 1, 1)), "up from the footer goes to the last option")
+
+        s.send(.next)                                       // R1 / Options: the primary button
+        try expectEqual(s.currentStep, 1)
+        try expectEqual(s.cursor, .option(ref(1, 0, 0)), "a new page starts at its first option")
+        s.send(.confirm)                                    // Silencers
+        try expect(s.isSelected(ref(1, 0, 0)))
+        s.send(.back)                                       // Circle: previous step
+        try expectEqual(s.currentStep, 0)
+        try expectEqual(cancelled, 0)
+        s.send(.back)                                       // on the first step it cancels
+        try expectEqual(cancelled, 1)
+
+        // footer buttons by cursor
+        s.send(.next)
+        try expectEqual(s.currentStep, 1)
+        s.cursor = .primary
+        s.send(.left)
+        try expectEqual(s.cursor, .back)
+        s.send(.confirm)
+        try expectEqual(s.currentStep, 0)
+        s.cursor = .cancel
+        s.send(.confirm)
+        try expectEqual(cancelled, 2)
+
+        // Install is only pressed when the rules hold: walk to the last step and finish
+        s.send(.next)                                       // Attachments
+        s.send(.next)                                       // Hardcore tweaks (pack = hardcore)
+        s.send(.next)                                       // Patch (Silencers = extras)
+        try expectEqual(s.currentStep, 3)
+        try expect(s.isLastStep)
+        s.cursor = .primary
+        s.send(.confirm)
+        try expectEqual(finished?.selections.last?.step, "Patch")
+        try expectEqual(finished?.selections.first { $0.group == "Pack" }?.plugins, ["Hardcore"])
+
+        // a locked option under the cursor does nothing; an invalid page cannot be left
+        let t = FomodSession(installer: installer)
+        t.send(.next)
+        t.cursor = .option(ref(1, 2, 0))                    // Alpha, the only one in "Pick some"
+        t.send(.confirm)
+        try expect(!t.isSelected(ref(1, 2, 0)))
+        try expect(!t.primaryEnabled)
+        t.send(.next)
+        try expectEqual(t.currentStep, 1, "Next is ignored while a group rule fails")
+    }
+
     test("fomod install: defaults, then the hardcore path with conditions, priorities and case-insensitive sources") {
         try await withTempDir { dir in
             let archive = dir.appendingPathComponent("Test Overhaul 1.4.zip")

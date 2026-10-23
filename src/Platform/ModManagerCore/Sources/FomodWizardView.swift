@@ -3,30 +3,83 @@ import SwiftUI
 
 /// The FOMOD installer as a wizard: one page per step, groups of options with images and descriptions, Back / Next / Install.
 ///
-/// Input: touch and mouse tap an option; with a keyboard or a controller that moves SwiftUI focus (arrows / D-pad), Return or
-/// Space (A) picks the focused option, and the footer buttons are in the same focus chain. Every option can take focus, locked
-/// ones too, so a controller user can read why they are locked. The page's first option has focus when a step opens.
+/// Input, all at once:
+/// - Touch and mouse: tap an option or a footer button.
+/// - Keyboard: the arrow keys move a highlight over the options and then the footer buttons, Return or Space presses it,
+///   Escape goes back (Cancel on the first step).
+/// - Controller: the view has no controller code of its own. The code that reads the pad creates the `FomodSession` itself,
+///   hands it to `init(session:onFinish:onCancel:)` and calls `session.send(.up / .down / .left / .right / .confirm / .back /
+///   .next)`: the same highlight, the same actions. (In the launcher: D-pad, Cross, Circle and R1.)
+///
+/// Every element has an accessibility label, value and traits, so VoiceOver and Switch Control work through the same actions.
 public struct FomodWizardView: View {
-    @StateObject private var session: FomodSession
+    private enum Source {
+        case installer(FomodInstaller, FomodEnvironment)
+        case session(FomodSession)
+    }
+
+    private let source: Source
     private let onFinish: (FomodChoices) -> Void
     private let onCancel: () -> Void
 
-    @FocusState private var focused: FomodPluginRef?
-    @State private var hovered: FomodPluginRef?
-
     public init(installer: FomodInstaller, onFinish: @escaping (FomodChoices) -> Void, onCancel: @escaping () -> Void) {
-        self.init(installer: installer, environment: FomodEnvironment(), onFinish: onFinish, onCancel: onCancel)
+        source = .installer(installer, FomodEnvironment())
+        self.onFinish = onFinish
+        self.onCancel = onCancel
     }
 
     /// `environment` answers `fileDependency` questions (is that file in the game folder or an enabled mod?).
     public init(installer: FomodInstaller, environment: FomodEnvironment, onFinish: @escaping (FomodChoices) -> Void,
                 onCancel: @escaping () -> Void) {
+        source = .installer(installer, environment)
+        self.onFinish = onFinish
+        self.onCancel = onCancel
+    }
+
+    /// For a caller that drives the wizard itself (a pad): the caller owns `session` and keeps it for as long as the wizard shows.
+    public init(session: FomodSession, onFinish: @escaping (FomodChoices) -> Void, onCancel: @escaping () -> Void) {
+        source = .session(session)
+        self.onFinish = onFinish
+        self.onCancel = onCancel
+        session.onFinish = onFinish   // a pad may press Install before the first redraw
+        session.onCancel = onCancel
+    }
+
+    public var body: some View {
+        switch source {
+        case .installer(let installer, let environment):
+            OwnedWizard(installer: installer, environment: environment, onFinish: onFinish, onCancel: onCancel)
+        case .session(let session):
+            WizardPages(session: session, onFinish: onFinish, onCancel: onCancel)
+        }
+    }
+}
+
+/// Creates the session once and keeps it across updates of the parent.
+private struct OwnedWizard: View {
+    @StateObject private var session: FomodSession
+    let onFinish: (FomodChoices) -> Void
+    let onCancel: () -> Void
+
+    init(installer: FomodInstaller, environment: FomodEnvironment, onFinish: @escaping (FomodChoices) -> Void,
+         onCancel: @escaping () -> Void) {
         _session = StateObject(wrappedValue: FomodSession(installer: installer, environment: environment))
         self.onFinish = onFinish
         self.onCancel = onCancel
     }
 
-    public var body: some View {
+    var body: some View { WizardPages(session: session, onFinish: onFinish, onCancel: onCancel) }
+}
+
+private struct WizardPages: View {
+    @ObservedObject var session: FomodSession
+    let onFinish: (FomodChoices) -> Void
+    let onCancel: () -> Void
+
+    @FocusState private var keyboardFocus: Bool
+    @State private var hovered: FomodPluginRef?
+
+    var body: some View {
         VStack(spacing: 0) {
             header
             Divider()
@@ -49,9 +102,25 @@ public struct FomodWizardView: View {
             footer
         }
         .background(.background)
-        .focusSection()
-        .onChange(of: session.currentStep) { _, _ in focusFirstOption() }
-        .onAppear { focusFirstOption() }
+        .focusable()
+        .focused($keyboardFocus)
+        .focusEffectDisabled()
+        .onKeyPress(keys: [.upArrow, .downArrow, .leftArrow, .rightArrow, .return, .space, .escape]) { press in
+            switch press.key {
+            case .upArrow: session.send(.up)
+            case .downArrow: session.send(.down)
+            case .leftArrow: session.send(.left)
+            case .rightArrow: session.send(.right)
+            case .escape: session.send(.back)
+            default: session.send(.confirm)
+            }
+            return .handled
+        }
+        .onAppear {
+            session.onFinish = onFinish
+            session.onCancel = onCancel
+            keyboardFocus = true
+        }
     }
 
     // MARK: Header and footer
@@ -75,26 +144,18 @@ public struct FomodWizardView: View {
 
     private var footer: some View {
         HStack(spacing: 12) {
-            Button("Cancel", role: .cancel, action: onCancel)
-                .keyboardShortcut(.cancelAction)
+            FooterButton(title: "Cancel", cursor: .cancel, enabled: true, prominent: false, session: session) { onCancel() }
             Spacer()
-            Button("Back") { session.back() }
-                .disabled(!session.canGoBack)
+            FooterButton(title: "Back", cursor: .back, enabled: session.canGoBack, prominent: false, session: session) { session.back() }
             if session.isLastStep {
-                Button("Install") { onFinish(session.choices()) }
-                    .buttonStyle(.borderedProminent)
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(!session.canFinish)
+                FooterButton(title: "Install", cursor: .primary, enabled: session.canFinish, prominent: true, session: session) {
+                    onFinish(session.choices())
+                }
             } else {
-                Button("Next") { session.next() }
-                    .buttonStyle(.borderedProminent)
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(!session.canGoNext)
+                FooterButton(title: "Next", cursor: .primary, enabled: session.canGoNext, prominent: true, session: session) { session.next() }
             }
         }
-        .controlSize(.large)
         .padding(16)
-        .focusSection()
     }
 
     // MARK: Options
@@ -112,9 +173,8 @@ public struct FomodWizardView: View {
                 .padding(16)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .focusSection()
-            .onChange(of: focused) { _, ref in
-                if let ref { withAnimation(.easeOut(duration: 0.15)) { proxy.scrollTo(ref, anchor: .center) } }
+            .onChange(of: session.cursor) { _, cursor in
+                if case .option(let ref)? = cursor { withAnimation(.easeOut(duration: 0.15)) { proxy.scrollTo(ref, anchor: .center) } }
             }
         }
     }
@@ -135,7 +195,6 @@ public struct FomodWizardView: View {
                 optionRow(FomodPluginRef(step: step, group: index, plugin: p), single: group.type.isSingleChoice)
             }
         }
-        .focusSection()
     }
 
     private func optionRow(_ ref: FomodPluginRef, single: Bool) -> some View {
@@ -143,8 +202,9 @@ public struct FomodWizardView: View {
         let on = session.isSelected(ref)
         let locked = session.isLocked(ref)
         let type = session.effectiveType(ref)
-        let isFocused = focused == ref
+        let highlighted = session.cursor == .option(ref)
         return Button {
+            session.cursor = .option(ref)
             session.toggle(ref)
         } label: {
             HStack(spacing: 12) {
@@ -170,12 +230,12 @@ public struct FomodWizardView: View {
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .strokeBorder(isFocused ? Color.accentColor : Color.clear, lineWidth: 3)
+                    .strokeBorder(highlighted ? Color.accentColor : Color.clear, lineWidth: 3)
             )
             .opacity(locked && !on ? 0.6 : 1)
         }
         .buttonStyle(.plain)
-        .focused($focused, equals: ref)
+        .focusable(false)
         .id(ref)
         .onHover { inside in
             if inside { hovered = ref } else if hovered == ref { hovered = nil }
@@ -188,9 +248,10 @@ public struct FomodWizardView: View {
 
     // MARK: Detail
 
+    /// What the side panel is about: the hovered option, the highlighted one, or the first selected one.
     private var shownPlugin: FomodPluginRef? {
         if let hovered, session.currentStep == hovered.step { return hovered }
-        if let focused, session.currentStep == focused.step { return focused }
+        if case .option(let ref)? = session.cursor, session.currentStep == ref.step { return ref }
         guard let step = session.currentStep, let model = session.stepModel else { return nil }
         for (g, group) in model.groups.enumerated() {
             for p in group.plugins.indices where session.isSelected(FomodPluginRef(step: step, group: g, plugin: p)) {
@@ -204,20 +265,7 @@ public struct FomodWizardView: View {
         ScrollOrFlat {
             VStack(alignment: .leading, spacing: 12) {
                 if let ref = shownPlugin {
-                    let plugin = session.plugin(ref)
-                    if let image = FomodImageCache.image(at: session.installer.imageURL(for: plugin.imagePath)) {
-                        Image(decorative: image, scale: 1)
-                            .resizable()
-                            .scaledToFit()
-                            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                            .frame(maxWidth: .infinity, maxHeight: 300)
-                    }
-                    Text(plugin.name).font(.title3.weight(.semibold))
-                    if plugin.description.isEmpty {
-                        Text("No description.").foregroundStyle(.secondary)
-                    } else {
-                        Text(plugin.description).fixedSize(horizontal: false, vertical: true)
-                    }
+                    detail(of: ref)
                 } else if let image = FomodImageCache.image(at: session.installer.imageURL(for: session.installer.moduleImagePath)) {
                     Image(decorative: image, scale: 1).resizable().scaledToFit().frame(maxWidth: .infinity)
                 } else {
@@ -229,18 +277,25 @@ public struct FomodWizardView: View {
         }
     }
 
-    // MARK: Helpers
-
-    private func focusFirstOption() {
-        guard let step = session.currentStep, let model = session.stepModel else {
-            focused = nil
-            return
+    @ViewBuilder
+    private func detail(of ref: FomodPluginRef) -> some View {
+        let plugin = session.plugin(ref)
+        if let image = FomodImageCache.image(at: session.installer.imageURL(for: plugin.imagePath)) {
+            Image(decorative: image, scale: 1)
+                .resizable()
+                .scaledToFit()
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .frame(maxWidth: .infinity, maxHeight: 300)
         }
-        for (g, group) in model.groups.enumerated() where !group.plugins.isEmpty {
-            focused = FomodPluginRef(step: step, group: g, plugin: 0)
-            return
+        Text(plugin.name).font(.title3.weight(.semibold))
+        if plugin.description.isEmpty {
+            Text("No description.").foregroundStyle(.secondary)
+        } else {
+            Text(plugin.description).fixedSize(horizontal: false, vertical: true)
         }
     }
+
+    // MARK: Helpers
 
     static func rule(for type: FomodGroupType) -> String {
         switch type {
@@ -267,6 +322,40 @@ public struct FomodWizardView: View {
     }
 }
 
+/// Cancel, Back, Next / Install: drawn by hand so the cursor ring shows on them like on the options.
+private struct FooterButton: View {
+    let title: String
+    let cursor: FomodCursor
+    let enabled: Bool
+    let prominent: Bool
+    @ObservedObject var session: FomodSession
+    let action: () -> Void
+
+    var body: some View {
+        Button {
+            session.cursor = cursor
+            if enabled { action() }
+        } label: {
+            Text(title)
+                .font(.body.weight(prominent ? .semibold : .regular))
+                .foregroundStyle(prominent && enabled ? Color.white : Color.primary)
+                .padding(.vertical, 10)
+                .padding(.horizontal, 20)
+                .background(
+                    Capsule().fill(prominent && enabled ? Color.accentColor : Color.secondary.opacity(0.18))
+                )
+                .overlay(
+                    Capsule().strokeBorder(session.cursor == cursor ? Color.accentColor : Color.clear, lineWidth: 3).padding(-3)
+                )
+                .opacity(enabled ? 1 : 0.45)
+        }
+        .buttonStyle(.plain)
+        .focusable(false)
+        .accessibilityLabel(title)
+        .accessibilityAddTraits(enabled ? [] : .isStaticText)
+    }
+}
+
 /// Decodes option images once, at screen size: installer pictures are often much larger than the panel.
 enum FomodImageCache {
     private static let cache = NSCache<NSURL, CGImageBox>()
@@ -290,7 +379,6 @@ enum FomodImageCache {
         return image
     }
 }
-
 
 /// `ImageRenderer` draws nothing inside a ScrollView, so the offscreen tests flatten the pages with this switch.
 struct FomodFlatLayoutKey: EnvironmentKey { static let defaultValue = false }

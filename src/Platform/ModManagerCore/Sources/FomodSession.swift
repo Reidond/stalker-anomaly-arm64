@@ -14,6 +14,25 @@ public struct FomodGroupRef: Hashable {
     public let group: Int
 }
 
+/// What a pad, a keyboard or the launcher's own focus layer can ask of the wizard.
+public enum FomodCommand {
+    case up, down, left, right
+    /// Cross / Return / Space: pick the option under the cursor, or press the footer button under it.
+    case confirm
+    /// Circle / Escape: the previous step, or Cancel on the first one.
+    case back
+    /// R1 / Options: the primary button (Next, or Install on the last step), if it is enabled.
+    case next
+}
+
+/// Where the wizard's cursor is: an option of the current step, or one of the footer buttons.
+public enum FomodCursor: Hashable {
+    case option(FomodPluginRef)
+    case cancel
+    case back
+    case primary
+}
+
 /// The state of one walk through an installer: which step is shown, what is selected, which steps the flags make visible.
 /// The wizard drives it with `toggle`, `next` and `back`; the importer replays saved `FomodChoices` through it headless.
 public final class FomodSession: ObservableObject {
@@ -23,6 +42,11 @@ public final class FomodSession: ObservableObject {
     /// Index into `installer.steps` of the step on screen; nil when no step is visible (nothing to ask).
     @Published public private(set) var currentStep: Int?
     @Published public private(set) var selected: Set<FomodPluginRef> = []
+    /// The highlighted element; moved by `send`, and set by a tap or a click.
+    @Published public var cursor: FomodCursor?
+    /// What Install and Cancel do; the wizard view sets them.
+    public var onFinish: ((FomodChoices) -> Void)?
+    public var onCancel: (() -> Void)?
     private var touched: Set<FomodGroupRef> = []
     private var history: [Int] = []
     private var saved: [String: [String]] = [:]
@@ -37,6 +61,7 @@ public final class FomodSession: ObservableObject {
             currentStep = first
             enter(first)
         }
+        cursor = firstCursor()
     }
 
     private static func savedKey(_ step: String, _ group: String) -> String { step + "\u{0}" + group }
@@ -73,11 +98,13 @@ public final class FomodSession: ObservableObject {
         history.append(current)
         currentStep = n
         enter(n)
+        cursor = firstCursor()
     }
 
     public func back() {
         guard let previous = history.popLast() else { return }
         currentStep = previous
+        cursor = firstCursor()
     }
 
     private func nextVisible(after index: Int, flags: [String: String]) -> Int? {
@@ -223,6 +250,70 @@ public final class FomodSession: ObservableObject {
             for i in required + recommended { out.insert(refs[i]) }
         }
         return out
+    }
+
+    // MARK: Cursor and commands
+
+    /// The options of the current step in reading order.
+    public var optionRefs: [FomodPluginRef] {
+        guard let step = currentStep else { return [] }
+        var out: [FomodPluginRef] = []
+        for (g, group) in installer.steps[step].groups.enumerated() {
+            for p in group.plugins.indices { out.append(FomodPluginRef(step: step, group: g, plugin: p)) }
+        }
+        return out
+    }
+
+    /// True when the primary button (Next, or Install on the last step) can be pressed.
+    public var primaryEnabled: Bool { isLastStep ? canFinish : canGoNext }
+
+    private func firstCursor() -> FomodCursor? { optionRefs.first.map { .option($0) } ?? .primary }
+
+    /// Moves the cursor or acts on it. Anything the current page cannot do is ignored.
+    public func send(_ command: FomodCommand) {
+        let options = optionRefs
+        switch command {
+        case .up:
+            switch cursor {
+            case .option(let ref)?:
+                if let i = options.firstIndex(of: ref), i > 0 { cursor = .option(options[i - 1]) }
+            case .cancel?, .back?, .primary?:
+                if let last = options.last { cursor = .option(last) }
+            case nil:
+                cursor = firstCursor()
+            }
+        case .down:
+            switch cursor {
+            case .option(let ref)?:
+                if let i = options.firstIndex(of: ref), i + 1 < options.count { cursor = .option(options[i + 1]) } else { cursor = .primary }
+            case nil:
+                cursor = firstCursor()
+            default:
+                break
+            }
+        case .left, .right:
+            let row: [FomodCursor] = [.cancel] + (canGoBack ? [.back] : []) + [.primary]
+            guard let current = cursor, let i = row.firstIndex(of: current) else { return }
+            let target = command == .left ? i - 1 : i + 1
+            if row.indices.contains(target) { cursor = row[target] }
+        case .confirm:
+            switch cursor {
+            case .option(let ref)?: toggle(ref)
+            case .cancel?: onCancel?()
+            case .back?: back()
+            case .primary?: pressPrimary()
+            case nil: cursor = firstCursor()
+            }
+        case .back:
+            if canGoBack { back() } else { onCancel?() }
+        case .next:
+            pressPrimary()
+        }
+    }
+
+    private func pressPrimary() {
+        guard primaryEnabled else { return }
+        if isLastStep { onFinish?(choices()) } else { next() }
     }
 
     // MARK: Results
