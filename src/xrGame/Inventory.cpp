@@ -660,7 +660,8 @@ void CInventory::Activate(u16 slot, bool bForce)
 
 PIItem CInventory::ItemFromSlot(u16 slot) const
 {
-	if (slot == NO_ACTIVE_SLOT)
+	// scripts pass any number (item_in_slot(16) read past the slot array: SIGSEGV at 0x1_0000_0130)
+	if (slot == NO_ACTIVE_SLOT || slot >= m_slots.size())
 		return nullptr;
 
 	return m_slots[slot].m_pIItem;
