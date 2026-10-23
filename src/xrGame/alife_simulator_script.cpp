@@ -450,7 +450,7 @@ CSE_Abstract* reprocess_spawn(CALifeSimulator* self, CSE_Abstract* object)
 	object->Spawn_Write(packet, FALSE);
 	self->server().FreeID(object->ID, 0);
 	// The script that passed `object` still holds it and reads its id (and more) after this returns, and the
-	// replacement has the same id: the old one stays valid for a few frames, then CALifeSimulatorBase frees it.
+	// replacement has the same id: the old one stays valid until the simulator unloads (CALifeSimulatorBase).
 	self->defer_destroy(object);
 
 	ClientID clientID;

@@ -158,15 +158,15 @@ Last run of the whole matrix on the final binary (RelWithDebInfo, ASan+UBSan); `
 | `combat` | two bandits, a boar and a dog: shooting, reloading, hits taken, bandage, medkit, kills (god mode on between the deliberate hits) | clean, 88 s |
 | `inventory` | slots, belt, repair kit, eat, drop; the window opened by key | clean, 65 s |
 | `pda` | the PDA and every tab | clean, 71 s |
-| `trade` | Sidorovich by the talk dialog's key and by `start_trade`, each with a buy and a sell (items and money both ways); a body and a stash looted; then the Bar: the Barkeep's trade and the mechanic's repair | clean, 40 checks, 0 driver FAILs, 190 s |
-| `reprocess` | `alife():register` on six unregistered items, the old object read at once and 1.5 s later | clean, 0 ASan reports, 88 s (the pre-fix build: 3 ASan reports, 2 use after free and a SEGV that ended the run) |
+| `trade` | Sidorovich by the talk dialog's key and by `start_trade`, each with a buy and a sell (items and money both ways); a body and a stash looted; then the Bar: the Barkeep's trade and the mechanic's repair | clean, 40 checks, 0 driver FAILs, 216 s |
+| `reprocess` | `alife():register` on six unregistered items, the old object read at once, 1.5 s and 15 s later | clean, 0 ASan reports, 31 checks, 116 s (the pre-fix build: 3 ASan reports, 2 use after free and a SEGV that ended the run) |
 | `surge` | forced emission: shelter or death, the blowout effects | clean, 110 s |
 | `anomalies` | the level's own anomaly zones, artefacts | clean, 75 s |
 | `sleep` | forced sleep and waiting (time acceleration) | clean, 63 s |
 | `transition` | Cordon to Garbage through the level changer | clean, 116 s |
 | `saveload` | save in the middle of a fight, load it back | clean, 122 s |
 | `die_reload` | die, the game-over tutorial, "Load last save" | clean, 85 s |
-| `smoke` | all of the above in one run (about 8 minutes from the menu) | **clean**: two runs on the final binary, 0 ASan reports, 0 driver FAILs, no crash file, `DONE plan smoke`, 307 s and 335 s (the Garbage fight included; before the fix one use after free per run, Open items 1) |
+| `smoke` | all of the above in one run (about 8 minutes from the menu) | **clean**: 0 ASan reports, 47 checks, 0 driver FAILs, no crash file, `DONE plan smoke`, 381 s on the final binary (two earlier runs with a 5 s retention of the old entities: 307 s and 335 s; the Garbage fight included; before the fix one use after free per run, Open items 1) |
 | `smoke` from the menu with a **cold shader cache** (a fresh `ANOMALY_STATE_ROOT`: every shader is translated by ShaderXlat/vkd3d during the run, 464 cache files written) | the whole plan, new game included | **clean**: 0 ASan reports, no crash file, driver reaches `DONE`, 265 s. An earlier cold run that sat on the loading screen's "press any key" for 24 minutes (the runner did not tap keys in the new-game path then; it does now) was clean too |
 | `quit_menu` `quit_loading` `quit_inventory` `quit_pda` `quit_dialog` `quit_combat` `quit_dead` `quit_surge` `quit_level` | quit from each state | all exit 0 and shut down by themselves, 20 to 60 s each, no ASan report, no crash file |
 
@@ -210,7 +210,7 @@ The sweep's fixes, in the order they were made. Module is the commit prefix.
 | 24 | xrCore | fatal handler | The SIGSEGV handler saved the game (and could spin for minutes) before it wrote the log. Writes the log first, flushes, and a 20 s `SIGALRM` watchdog ends the process. |
 | 25 | 3rd party/luabind, xrServerEntities | heap-use-after-free at `lua_close` | `weak_ref` and `lua_reference` keep the `lua_State*` they were made on, almost always a script coroutine, collected long before the reference is released (when a C++ object holding a functor dies, or when the VM closes). The release then pushes onto a freed stack. `luabind::open` makes a thread of its own, anchored in the registry, and every release goes through it (never the main thread: while it runs a coroutine its stack must not be touched). |
 | 26 | xrCore | out-of-bounds read, shift into the sign bit | `apx_InvSqrt` (unused) did `*(long*)&float` and kept the result in a `long`, which is 64 bits on Apple (four bytes past the float); `CColor::get_windows` (unused) shifted a `BYTE` promoted to `int` by 24. Same-size types and `u32` shifts. |
-| 27 | xrGame | heap-use-after-free (script) | `alife():register(se_obj)` (Alundaio's `reprocess_spawn`) writes the entity into a packet, **destroys it** and returns a new one made from the packet; the scripts that call it (`death_manager.spawn_with_condition`, `item_parts`) go on reading the object they passed (`se_outfit.id` on the next line). Reading freed memory worked on the PC by luck. `CALifeSimulatorBase::defer_destroy` now parks the old entity (same id as the new one; nothing registers it) and `flush_deferred_destroy` frees it once it is 3 frames and 5 s old, from `CALifeUpdateManager::shedule_Update`, and all of it in `unload()`/the destructor (before the registries and the script engine go: a script-derived entity releases Lua references). At most 4096 are parked; guarded by a lock (the ALife update may run on its own thread). |
+| 27 | xrGame | heap-use-after-free (script) | `alife():register(se_obj)` (Alundaio's `reprocess_spawn`) writes the entity into a packet, **destroys it** and returns a new one made from the packet; the scripts that call it (`death_manager.spawn_with_condition`, `item_parts`) go on reading the object they passed (`se_outfit.id` on the next line). Reading freed memory worked on the PC by luck. Nothing can tell when the last Lua reference to the old entity is gone (luabind holds a raw pointer), so `CALifeSimulatorBase::defer_destroy` parks it (same id as the new one; nothing registers it) for as long as the simulator lives: `unload()` and the destructor free it, before the registries and the script engine go (a script-derived entity releases Lua references), and the Lua state that could hold it ends with the simulator. At most 16384 (about 8 MB) are parked, the oldest is freed beyond that. Guarded by a lock (the ALife update may run on its own thread). |
 
 ### Suppressions
 
@@ -230,8 +230,8 @@ Compiled out instead of suppressed: `vptr`, `function` and `alignment` (see Buil
 ### Open items
 
 1. ~~Script keeps a server entity that `alife():register()` freed~~ **Fixed**, finding 27. The `reprocess` plan reproduces it at once: on the pre-fix build 3 ASan reports (two
-   use after free, one SEGV through the dangling pointer that ended the run), on the fixed one 0 with all six items registered and read before and after. A script that keeps the old
-   object longer than about 5 s still reads freed memory, as it did on the PC.
+   use after free, one SEGV through the dangling pointer that ended the run), on the fixed one 0 with all six items registered and the old objects read at once, 1.5 s and 15 s later.
+   The old entities are kept until the level (the simulator and its Lua state) goes; a script that kept one across a level change would have lost it anyway.
 2. **The quit hang M2 saw once in ten runs** (a SIGSEGV in `Log`/`std::string` under `IGame_Level::~IGame_Level` to `CResourceManager::_DumpMemoryUsage`, then the crash handler
    spinning for minutes in the game-over save) was **not reproduced**: 12 quits from the Cordon, Garbage and the menu and the 9 `quit_*` plans, all clean. The probable cause
    is finding 23 (log dedupe `erase(end() - 1)` on an empty `LogFile`; it corrupts the vector, and a line logged twice at quit is enough), and finding 24 makes the handler
@@ -260,7 +260,7 @@ Compiled out instead of suppressed: `vptr`, `function` and `alignment` (see Buil
 10. **A race between the ALife update thread and the scripts** (ASan heap-use-after-free, seen once, in the first `newgame` on the final binary, on a machine with a load average of 25; the eight runs after it (`reprocess`, four `trade`, `vendors`, two full
     `smoke`) had no ASan report). With `mtALife` on, `CALifeUpdateManager::update` runs on its own thread (`mt_Thread`); its switch step releases a squad
     (`CALifeSimulatorBase::release` to `xrServer::entity_Destroy`) while a stalker's binder script on the main thread calls `squad:commander_id()` on it. The same race exists on the PC
-    (it reads freed memory there); only a starved machine widens the window enough to see it. A fix needs either the same parking as finding 27 for every released entity or a lock around
+    (it reads freed memory there); only a starved machine widens the window enough to see it. A fix needs either the same parking as finding 27 for every released entity (`defer_destroy` is there for it) or a lock around
     the switch step. Not changed here.
 
 ## Reading a report

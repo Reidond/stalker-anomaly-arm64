@@ -62,14 +62,9 @@ protected:
 	ALife::SCHEDULE_P_VECTOR m_tpaCombatGroups[2];
 
 private:
-	struct SDeferredEntity
-	{
-		CSE_Abstract* object;
-		u32 frame;
-		u32 time;
-	};
-	xr_vector<SDeferredEntity> m_deferred_destroy;
+	xr_vector<CSE_Abstract*> m_deferred_destroy;
 	xrCriticalSection m_deferred_destroy_lock;
+	void flush_deferred_destroy();
 
 protected:
 	IC CALifeSimulatorHeader& header();
@@ -132,11 +127,11 @@ public:
 	shared_str level_name() const;
 	void on_death(CSE_Abstract* killed, CSE_Abstract* killer);
 
-	// Destroys `object` a few frames from now instead of at once, for a server entity a script may still hold
-	// (`alife():register(se_obj)` replaces the object it is given and the script goes on reading the old one).
-	// flush_deferred_destroy(false) destroys what has been parked long enough, (true) all of it (unload() does).
+	// Parks `object` instead of destroying it, for a server entity a script may still hold: `alife():register(se_obj)` replaces
+	// the object it is given and the script goes on reading the old one. Nothing can tell when the last Lua reference is gone, so
+	// a parked entity lives as long as the simulator, and with it the Lua state that could hold it (unload()), at most
+	// deferred_destroy_cap of them (the oldest goes first).
 	void defer_destroy(CSE_Abstract* object);
-	void flush_deferred_destroy(bool all);
 
 public:
 	ALife::ITEM_P_VECTOR m_temp_item_vector;

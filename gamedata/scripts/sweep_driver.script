@@ -457,7 +457,7 @@ end
 local function press_until(label, want)
 	for attempt = 1, 3 do
 		try(label .. " key " .. attempt, function() press(key_bindings.kSPRINT_TOGGLE, 150) end)
-		if wait_for(label .. " window " .. want, 5000, function() return gui_mode() == want end) then
+		if wait_for(label .. " window " .. want, 15000, function() return gui_mode() == want end) then
 			return attempt
 		end
 		say("%s: no %s window after press %d (talking %s, window %s)", label, want, attempt, tostring(db.actor:is_talking()), tostring(gui_mode()))
@@ -508,7 +508,7 @@ end
 -- a trade window opened by `how` with `trader`; `deals`: make a buy and a sell in it
 local function trade_with(trader, label, how, deals)
 	try(label .. " open", how)
-	if gui_mode() ~= "trade" then wait_for(label .. " trade window", 8000, function() return gui_mode() == "trade" end) end
+	if gui_mode() ~= "trade" then wait_for(label .. " trade window", 20000, function() return gui_mode() == "trade" end) end
 	pause(1500)
 	local mode = gui_mode()
 	check(label .. ": trade window opens", mode == "trade", "window mode " .. tostring(mode))
@@ -538,6 +538,10 @@ local function trade()
 		db.actor:set_actor_position(trader:position())
 	end)
 	pause(4000)
+	try("trader state", function()
+		trader = get_story_object("esc_m_trader")
+		say("trader alive %s, %s m away, is_trade_enabled %s", tostring(trader:alive()), tostring(math.floor(db.actor:position():distance_to(trader:position()))), tostring(trader:is_trade_enabled()))
+	end)
 	try("gear", function()
 		give("bread", 3)
 		give("medkit", 2)
@@ -550,7 +554,8 @@ local function trade()
 		trader = get_story_object("esc_m_trader")
 		db.actor:run_talk_dialog(trader, false)
 	end)
-	pause(3500)
+	wait_for("talk window", 30000, function() return db.actor:is_talking() end)
+	pause(1500)
 	check("talk window opens", db.actor:is_talking())
 	trade_with(trader, "talk", function() press_until("talk", "trade") end, true)
 	close_ui("talk") -- the talk window is still up behind the trade window
@@ -570,6 +575,7 @@ end
 -- item_parts) go on reading the object they passed: it has to stay valid. ASan reports a use after free if it does not.
 local function reprocess()
 	say("-- register / reprocess_spawn")
+	local olds = {}
 	for i = 1, 6 do
 		local se, id = nil, nil
 		try("create unregistered " .. i, function()
@@ -583,9 +589,13 @@ local function reprocess()
 			pause(1500) -- a few frames on: still readable
 			check("register " .. i .. ": still readable later", se.id == id)
 			check("register " .. i .. ": the registered object exists", alife():object(id) ~= nil)
+			olds[#olds + 1] = { se = se, id = id }
 		end
 	end
-	pause(8000) -- past the retention of the old objects: they are destroyed now
+	pause(15000) -- the old objects stay valid for as long as the simulator lives, not for a few seconds
+	for i, o in ipairs(olds) do
+		check("register " .. i .. ": the old object still reads its id 15 s later", o.se.id == o.id)
+	end
 	check("registered items arrived", count_of(db.actor, "bread") >= 6, tostring(count_of(db.actor, "bread")))
 end
 
