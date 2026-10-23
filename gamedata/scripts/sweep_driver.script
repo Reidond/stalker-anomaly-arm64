@@ -84,6 +84,16 @@ local function try(name, fn, ...)
 	return ok, err
 end
 
+-- an assertion of the plan: "ok   check <name>" or "FAIL check <name>" (run.sh counts the FAILs)
+local function check(name, cond, detail)
+	if cond then
+		say("ok   check %s", name)
+	else
+		say("FAIL check %s%s", name, detail and (" -- " .. detail) or "")
+	end
+	return cond and true or false
+end
+
 local function give(section, count, ammo)
 	for _ = 1, count or 1 do
 		if ammo then
@@ -393,6 +403,128 @@ local function pda()
 	close_ui("pda")
 end
 
+-- Anomaly's trade, loot and repair/upgrade windows are not the engine's CUIActorMenu: actor_menu_inventory's hooks
+-- (CUIActorMenu_OnMode_Trade, _DeadBodySearch, _Upgrade) hand the mode to ui_inventory (a CUIScriptWnd, ui_inventory.GUI)
+-- and return true, so the engine opens nothing. The driver looks at that window and uses its own handlers for the clicks.
+local function inv_gui()
+	return ui_inventory and ui_inventory.GUI
+end
+
+-- "inventory" / "loot" / "trade" / "repair" while the scripted window is up, else nil
+local function gui_mode()
+	local g = inv_gui()
+	if g and g:IsShown() then
+		return g.mode
+	end
+	return nil
+end
+
+local function count_of(owner, section)
+	local n = 0
+	owner:iterate_inventory(function(_, item)
+		if item:section() == section then n = n + 1 end
+	end, owner)
+	return n
+end
+
+-- items of `owner` with this section, as game objects
+local function items_of(owner, section)
+	local list = {}
+	owner:iterate_inventory(function(_, item)
+		if item:section() == section then list[#list + 1] = item end
+	end, owner)
+	return list
+end
+
+-- sections of `owner`'s inventory, the cheapest first
+local function sections_of(owner)
+	local list, seen = {}, {}
+	owner:iterate_inventory(function(_, item)
+		local sec = item:section()
+		if not seen[sec] and item:cost() > 0 then
+			seen[sec] = true
+			list[#list + 1] = { sec = sec, cost = item:cost() }
+		end
+	end, owner)
+	table.sort(list, function(a, b) return a.cost < b.cost end)
+	local out = {}
+	for _, c in ipairs(list) do out[#out + 1] = c.sec end
+	return out
+end
+
+-- the talk dialog's trade/upgrade key (kSPRINT_TOGGLE): pressed until the scripted window it leads to is up, at most 3 times
+-- (the first press can land before the dialog has the focus); returns the number of presses it took, or 0
+local function press_until(label, want)
+	for attempt = 1, 3 do
+		try(label .. " key " .. attempt, function() press(key_bindings.kSPRINT_TOGGLE, 150) end)
+		if wait_for(label .. " window " .. want, 5000, function() return gui_mode() == want end) then
+			return attempt
+		end
+		say("%s: no %s window after press %d (talking %s, window %s)", label, want, attempt, tostring(db.actor:is_talking()), tostring(gui_mode()))
+	end
+	return 0
+end
+
+-- One deal in the open trade window: an item goes to the buy (sell) list the way a double click moves it, then the Buy (Sell)
+-- button's handler runs. Items and money have to move the right way: what the actor gains the partner loses and back.
+local function trade_deal(trader, buying, sections, label)
+	local gui = inv_gui()
+	local what = label .. (buying and " buy " or " sell ")
+	local bag, list = "actor_trade_bag", "actor_trade"
+	local giver, taker = db.actor, trader
+	if buying then
+		bag, list = "npc_trade_bag", "npc_trade"
+		giver, taker = trader, db.actor
+	end
+	for _, sec in ipairs(sections) do
+		for _, item in ipairs(items_of(giver, sec)) do
+			if gui.CC[bag]:GetCell_ID(item:id()) and gui.CC[bag]:IsTradable(item) then
+				gui:Action_Move(item, bag)
+				if gui.CC[list]:GetCell_ID(item:id()) then
+					local before = { taker = count_of(taker, sec), giver = count_of(giver, sec), actor = db.actor:money(), trader = trader:money() }
+					if buying then gui:TMode_Buy() else gui:TMode_Sell() end
+					pause(2500) -- the item events go through the server
+					local after = { taker = count_of(taker, sec), giver = count_of(giver, sec), actor = db.actor:money(), trader = trader:money() }
+					say("%s%s: items %d -> %d (partner %d -> %d), money actor %d -> %d, trader %d -> %d", what, sec,
+						before.taker, after.taker, before.giver, after.giver, before.actor, after.actor, before.trader, after.trader)
+					check(what .. sec .. ": the item moved", after.taker == before.taker + 1 and after.giver == before.giver - 1,
+						string.format("taker %d -> %d, giver %d -> %d", before.taker, after.taker, before.giver, after.giver))
+					-- A character with infinite money (inf_money in its profile, Sidorovich among them) never loses any: set_money keeps the
+					-- larger value. So a sale pays out of nothing there, and the check is that his purse did not shrink by a different amount.
+					local paid = buying and (before.actor - after.actor) or (after.actor - before.actor)
+					local got = buying and (after.trader - before.trader) or (before.trader - after.trader)
+					local ok = paid > 0 and (got == paid or (not buying and after.trader == before.trader))
+					check(what .. sec .. ": the money moved the right way", ok,
+						string.format("actor %d -> %d, trader %d -> %d", before.actor, after.actor, before.trader, after.trader))
+					return true
+				end
+			end
+		end
+	end
+	check(what .. "something to move", false, "none of " .. #sections .. " sections could be put on the list")
+	return false
+end
+
+-- a trade window opened by `how` with `trader`; `deals`: make a buy and a sell in it
+local function trade_with(trader, label, how, deals)
+	try(label .. " open", how)
+	if gui_mode() ~= "trade" then wait_for(label .. " trade window", 8000, function() return gui_mode() == "trade" end) end
+	pause(1500)
+	local mode = gui_mode()
+	check(label .. ": trade window opens", mode == "trade", "window mode " .. tostring(mode))
+	if mode == "trade" and deals then
+		try(label .. " deals", function()
+			db.actor:give_money(20000)
+			trader:give_money(20000)
+			trade_deal(trader, true, sections_of(trader), label)
+			trade_deal(trader, false, { "bread", "kolbasa", "conserva", "vodka", "medkit", "bandage", "ammo_9x18_fmj", "wpn_pm" }, label)
+		end)
+		pause(1500)
+	end
+	close_ui(label)
+	check(label .. ": closes", gui_mode() == nil, "window mode " .. tostring(gui_mode()))
+end
+
 local function trade()
 	say("-- trade/dialog")
 	local trader = nil
@@ -400,25 +532,238 @@ local function trade()
 		trader = get_story_object("esc_m_trader")
 		say("trader %s", trader and trader:name() or "nil")
 	end)
-	if trader then
-		try("goto trader", function()
-			db.actor:set_actor_position(trader:position())
+	check("trader found", trader ~= nil)
+	if not trader then return end
+	try("goto trader", function()
+		db.actor:set_actor_position(trader:position())
+	end)
+	pause(4000)
+	try("gear", function()
+		give("bread", 3)
+		give("medkit", 2)
+		give("bandage", 2)
+		give("wpn_pm", 1)
+	end)
+
+	-- the player's way: talk to the trader, press the dialog's trade key
+	try("talk", function()
+		trader = get_story_object("esc_m_trader")
+		db.actor:run_talk_dialog(trader, false)
+	end)
+	pause(3500)
+	check("talk window opens", db.actor:is_talking())
+	trade_with(trader, "talk", function() press_until("talk", "trade") end, true)
+	close_ui("talk") -- the talk window is still up behind the trade window
+	check("talk window closes", not db.actor:is_talking())
+
+	-- the script's way: trader:start_trade(actor); the actor is the argument
+	try("refresh trader", function() trader = get_story_object("esc_m_trader") end)
+	trade_with(trader, "script", function() trader:start_trade(db.actor) end, true)
+
+	-- the reversed call is not a trade
+	try("reversed start_trade", function() db.actor:start_trade(trader) end)
+	pause(1500)
+	check("reversed start_trade opens nothing", gui_mode() == nil, "window mode " .. tostring(gui_mode()))
+end
+
+-- alife():register(se_obj) writes the server object out, destroys it and returns the one made from the packet; scripts (death_manager,
+-- item_parts) go on reading the object they passed: it has to stay valid. ASan reports a use after free if it does not.
+local function reprocess()
+	say("-- register / reprocess_spawn")
+	for i = 1, 6 do
+		local se, id = nil, nil
+		try("create unregistered " .. i, function()
+			se = alife_create("bread", db.actor:position(), db.actor:level_vertex_id(), db.actor:game_vertex_id(), db.actor:id(), false)
+			id = se.id
 		end)
-		pause(4000)
-		try("talk", function()
-			trader = get_story_object("esc_m_trader")
-			db.actor:run_talk_dialog(trader, false)
+		if se then
+			try("register " .. i, function() alife():register(se) end)
+			check("register " .. i .. ": the old object reads the same id", se.id == id, tostring(se.id) .. " vs " .. tostring(id))
+			check("register " .. i .. ": its section", se:section_name() == "bread")
+			pause(1500) -- a few frames on: still readable
+			check("register " .. i .. ": still readable later", se.id == id)
+			check("register " .. i .. ": the registered object exists", alife():object(id) ~= nil)
+		end
+	end
+	pause(8000) -- past the retention of the old objects: they are destroyed now
+	check("registered items arrived", count_of(db.actor, "bread") >= 6, tostring(count_of(db.actor, "bread")))
+end
+
+-- the loot window of a body or a stash: opened the way the engine's use does, everything taken with the window's own keys
+-- (Shift+T), and the items arrive
+local function loot_check(owner, label, sections)
+	local before = {}
+	for _, sec in ipairs(sections) do before[sec] = count_of(db.actor, sec) end
+	try(label .. " use", function() owner:use(db.actor) end)
+	wait_for(label .. " loot window", 8000, function() return gui_mode() == "loot" end)
+	pause(1500)
+	local mode = gui_mode()
+	check(label .. ": loot window opens", mode == "loot", "window mode " .. tostring(mode))
+	if mode == "loot" then
+		try(label .. " take all", function()
+			level.press_action(DIK_keys.DIK_LSHIFT)
+			pause(300)
+			press_dik(DIK_keys.DIK_T, 150)
+			level.release_action(DIK_keys.DIK_LSHIFT)
 		end)
-		pause(3500)
-		say("talk open: %s", tostring(ui_open()))
-		close_ui("talk")
-		try("trade", function()
-			trader = get_story_object("esc_m_trader")
-			db.actor:start_trade(trader)
+		pause(3000)
+		for _, sec in ipairs(sections) do
+			local now = count_of(db.actor, sec)
+			check(label .. ": " .. sec .. " taken", now > before[sec], tostring(before[sec]) .. " -> " .. tostring(now))
+		end
+	end
+	close_ui(label)
+	check(label .. ": closes", gui_mode() == nil, "window mode " .. tostring(gui_mode()))
+end
+
+local function loot()
+	say("-- loot")
+	-- a body: a bandit, killed, with a few things in his pockets
+	local body = nil
+	try("spawn bandit", function()
+		local se = spawn_near("sim_default_bandit_0", 6, 0.5)
+		wait_for("bandit online", 20000, function() return se and level.object_by_id(se.id) ~= nil end)
+		pause(1500)
+		body = se and level.object_by_id(se.id)
+	end)
+	check("bandit online", body ~= nil)
+	if body then
+		try("kill bandit", function() body:kill(db.actor) end)
+		pause(3000)
+		try("fill body", function()
+			alife_create_item("conserva", body)
+			alife_create_item("conserva", body)
+			alife_create_item("bandage", body)
 		end)
-		pause(3500)
-		say("trade open: %s", tostring(ui_open()))
-		close_ui("trade")
+		pause(2500)
+		loot_check(body, "body", { "conserva", "bandage" })
+	end
+
+	-- a stash
+	local box = nil
+	try("spawn stash", function()
+		local pos, lvid = spot(4, 1.0)
+		local se = alife_create("inventory_box", pos, lvid, db.actor:game_vertex_id())
+		wait_for("stash online", 20000, function() return se and level.object_by_id(se.id) ~= nil end)
+		pause(1500)
+		box = se and level.object_by_id(se.id)
+	end)
+	check("stash online", box ~= nil)
+	if box then
+		try("fill stash", function()
+			alife_create_item("kolbasa", box)
+			alife_create_item("kolbasa", box)
+			alife_create_item("medkit", box)
+		end)
+		pause(2500)
+		loot_check(box, "stash", { "kolbasa", "medkit" })
+	end
+end
+
+-- Every stalker of the whole game whose name looks like a vendor; the A-Life object is the same one on or off line.
+local function find_vendors(patterns)
+	local out = {}
+	local sim = alife()
+	for id = 1, 65534 do
+		local se = sim:object(id)
+		if se then
+			local name = se:name()
+			for _, pat in ipairs(patterns) do
+				if name:find(pat) and not name:find("awr_lamp") and (se:clsid() == clsid.script_stalker or se:clsid() == clsid.stalker) then
+					out[#out + 1] = { id = id, name = name, pos = se.position }
+					break
+				end
+			end
+		end
+	end
+	return out
+end
+
+-- go to a vendor (an A-Life object) and wait until it is online next to the actor
+local function go_to_vendor(v)
+	db.actor:set_actor_position(v.pos)
+	wait_for("vendor " .. v.name .. " online", 20000, function() return level.object_by_id(v.id) ~= nil end)
+	pause(3000)
+	return level.object_by_id(v.id)
+end
+
+-- The mechanic's repair window: opened by the script (start_upgrade), a damaged gun selected the way a click on it does, and the
+-- window's "yes" to the repair question; the gun has to be whole afterwards, for money. (The talk dialog's trade key opens the window
+-- of a character with trade enabled only; a mechanic's window comes from his dialog lines.)
+local function mechanic_check(m, label)
+	try(label .. " gear", function()
+		give("wpn_pm", 1)
+		db.actor:give_money(20000)
+		local w = db.actor:object("wpn_pm")
+		w:set_condition(0.4)
+	end)
+	pause(1500)
+	try(label .. " start_upgrade", function() m:start_upgrade(db.actor) end)
+	wait_for(label .. " repair window", 10000, function() return gui_mode() == "repair" end)
+	pause(1500)
+	local open = gui_mode() == "repair"
+	check(label .. ": repair window opens", open, "window mode " .. tostring(gui_mode()))
+	if open then
+		try(label .. " repair", function()
+			local gui = inv_gui()
+			local w = db.actor:object("wpn_pm")
+			local before = { cond = w:condition(), money = db.actor:money() }
+			local idx = gui.CC["actor_bag"]:GetCell_ID(w:id(), true)
+			gui:RMode_InitItem(w, "actor_bag", idx)
+			check(label .. ": the gun is selected", gui.upgr and gui.upgr.id == w:id())
+			gui:RMode_RepairYes()
+			pause(2500)
+			local after = { cond = db.actor:object("wpn_pm"):condition(), money = db.actor:money() }
+			say("%s repair: condition %s -> %s, money %d -> %d", label, tostring(before.cond), tostring(after.cond), before.money, after.money)
+			check(label .. ": repaired", after.cond > 0.95 and before.cond < 0.5, tostring(before.cond) .. " -> " .. tostring(after.cond))
+		end)
+	end
+	close_ui(label .. " repair")
+	check(label .. ": closes", gui_mode() == nil, "window mode " .. tostring(gui_mode()))
+end
+
+-- the Bar: the Barkeep (a trader) and the mechanic
+local function other_vendors()
+	say("-- other vendors")
+	local found = {}
+	try("find vendors", function()
+		found = find_vendors({ "barman", "trader", "mechanic", "_tech", "cardan" })
+	end)
+	-- the vendors of this level: their names start with the level's short name ("bar_" in l05_bar)
+	local short = level.name():match("^l%d+u?_(.+)$") or level.name()
+	local barkeep, mechanic = nil, nil
+	for _, v in ipairs(found) do
+		if v.name:find("^" .. short .. "_") then
+			say("vendor %s id %s", v.name, tostring(v.id))
+			if not barkeep and v.name:find("barman") then barkeep = v end
+			if not mechanic and (v.name:find("mechanic") or v.name:find("_tech") or v.name:find("cardan")) then mechanic = v end
+		end
+	end
+	check("a barkeep was found", barkeep ~= nil)
+	check("a mechanic was found", mechanic ~= nil)
+	if barkeep then
+		local o = nil
+		try("go to " .. barkeep.name, function() o = go_to_vendor(barkeep) end)
+		check("barkeep online", o ~= nil)
+		if o then
+			-- the dialog's trade key works for a character with trade enabled; the Barkeep's trade switches on with the game's story
+			local enabled = o:is_trade_enabled()
+			say("barkeep trade enabled: %s", tostring(enabled))
+			if enabled then
+				try("barkeep talk", function() db.actor:run_talk_dialog(o, false) end)
+				pause(3500)
+				check("barkeep: talk window opens", db.actor:is_talking())
+				trade_with(o, "barkeep talk", function() press_until("barkeep talk", "trade") end, true)
+				close_ui("barkeep talk")
+			end
+			trade_with(o, "barkeep script", function() o:start_trade(db.actor) end, true)
+		end
+	end
+	if mechanic then
+		local o = nil
+		try("go to " .. mechanic.name, function() o = go_to_vendor(mechanic) end)
+		check("mechanic online", o ~= nil)
+		if o then mechanic_check(o, "mechanic") end
 	end
 end
 
@@ -526,6 +871,7 @@ local phases = {
 			pause(6000)
 			say("reloaded, health %s", tostring(db.actor.health))
 			pda()
+			reprocess()
 			trade()
 			try("to garbage", function()
 				get_console():execute("jump_to_level l02_garbage")
@@ -559,7 +905,42 @@ local phases = {
 	combat = { function() wait_for("actor", 240000, actor_ready); enable_ui(); pause(5000); gear_up(); arm(); combat(); return { quit = true } end },
 	inventory = { function() wait_for("actor", 240000, actor_ready); enable_ui(); pause(12000); gear_up(); inventory(); return { quit = true } end },
 	pda = { function() wait_for("actor", 240000, actor_ready); enable_ui(); pause(5000); pda(); return { quit = true } end },
-	trade = { function() wait_for("actor", 240000, actor_ready); enable_ui(); pause(5000); trade(); return { quit = true } end },
+	reprocess = { function() wait_for("actor", 240000, actor_ready); enable_ui(); pause(5000); reprocess(); return { quit = true } end },
+	-- the Bar's vendors alone (the second phase of trade)
+	vendors = {
+		function()
+			wait_for("actor", 240000, actor_ready); enable_ui(); pause(5000)
+			get_console():execute("jump_to_level l05_bar")
+			return { next = true }
+		end,
+		function()
+			if not wait_for("the Bar", 240000, function() return level_is("l05_bar") end) then return { quit = true } end
+			enable_ui()
+			pause(10000)
+			god(true)
+			other_vendors()
+			return { quit = true }
+		end,
+	},
+	-- the actor menu's modes: Sidorovich (talk and script), a body and a stash; then the Bar for its Barkeep and the mechanic
+	trade = {
+		function()
+			wait_for("actor", 240000, actor_ready); enable_ui(); pause(5000)
+			god(true)
+			trade()
+			loot()
+			get_console():execute("jump_to_level l05_bar")
+			return { next = true }
+		end,
+		function()
+			if not wait_for("the Bar", 240000, function() return level_is("l05_bar") end) then return { quit = true } end
+			enable_ui()
+			pause(10000)
+			god(true)
+			other_vendors()
+			return { quit = true }
+		end,
+	},
 	surge = { function() wait_for("actor", 240000, actor_ready); enable_ui(); pause(5000); surge(); return { quit = true } end },
 	anomalies = { function() wait_for("actor", 240000, actor_ready); enable_ui(); pause(5000); gear_up(); anomalies(); return { quit = true } end },
 	sleep = { function() wait_for("actor", 240000, actor_ready); enable_ui(); pause(5000); sleeping(); return { quit = true } end },
