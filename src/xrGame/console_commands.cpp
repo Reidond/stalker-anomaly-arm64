@@ -22,6 +22,7 @@
 #include "script_engine.h"
 #include "script_engine_space.h"
 #include "script_process.h"
+#include "script_perf.h"
 #include "xrServer_Objects.h"
 #include "ui/UIMainIngameWnd.h"
 //#include "../xrphysics/PhysicsGamePars.h"
@@ -2632,6 +2633,7 @@ void CCC_RegisterCommands()
 #endif // MASTER_GOLD
 
 	CMD1(CCC_LuaCollectGarbage, "lua_collect_garbage");
+	script_perf::register_console();
 
     // Moved lua_gcstep outside of DEBUG to allow for easier experimentation.
 	CMD4(CCC_Integer, "lua_gcstep", &psLUA_GCSTEP, 1, 1000);

@@ -24,10 +24,33 @@
 #include <luabind/error.hpp>
 #include <luabind/lua_include.hpp>
 
+namespace luabind
+{
+	namespace
+	{
+		call_enter_fun call_enter = 0;
+		call_leave_fun call_leave = 0;
+
+		struct call_timer
+		{
+			unsigned long long stamp;
+			call_timer() : stamp(call_enter ? call_enter() : 0) {}
+			~call_timer() { if ( stamp && call_leave ) call_leave(stamp); }
+		};
+	}
+
+	void set_call_hooks(call_enter_fun enter, call_leave_fun leave)
+	{
+		call_enter = enter;
+		call_leave = leave;
+	}
+}
+
 namespace luabind { namespace detail
 {
 	int pcall(lua_State *L, int nargs, int nresults)
 	{
+		call_timer timer;
 		pcall_callback_fun e = get_pcall_callback();
 		int en = 0;
 		if ( e )

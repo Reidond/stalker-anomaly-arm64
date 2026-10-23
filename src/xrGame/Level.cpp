@@ -1,4 +1,5 @@
 #include "pch_script.h"
+#include "script_perf.h"
 #include "xrEngine/FDemoRecord.h"
 #include "xrEngine/FDemoPlay.h"
 #include "xrEngine/Environment.h"
@@ -978,6 +979,7 @@ void CLevel::MakeReconnect()
 void CLevel::OnFrame()
 {
 	PROF_EVENT("CLevel::OnFrame()");
+	script_perf::frame();
 
 #ifdef DEBUG_MEMORY_MANAGER
     debug_memory_guard __guard__;
@@ -1192,6 +1194,7 @@ void CLevel::script_gc()
 	if (!(psLua_ParallelGC && Device.LuaGC))
 	{	
 		PROF_EVENT();	
+		script_perf::GcStep perf_gc;
 		lua_gc(ai().script_engine().lua(), LUA_GCSTEP, psLUA_GCSTEP);
 	}
 }
@@ -1209,6 +1212,7 @@ bool CLevel::Load(u32 dwNum)
 // demonized: called from Device, via Device.LuaGC pointer
 int CLevel::LuaGC()
 {
+    script_perf::GcStep perf_gc;
     return lua_gc(ai().script_engine().lua(), LUA_GCSTEP, psLua_ParallelGCStep);
 }
 void CLevel::LuaGCDebug()

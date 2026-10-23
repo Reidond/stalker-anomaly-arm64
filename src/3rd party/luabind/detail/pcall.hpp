@@ -26,6 +26,16 @@
 
 struct lua_State;
 
+namespace luabind
+{
+	// Optional profiling hooks around every call into Lua made through luabind (the Apple port's script_perf): `enter` runs
+	// before the call and returns a stamp, `leave` gets that stamp after it (also when the call is left by an exception);
+	// a stamp of 0 means "not timed" and `leave` is skipped.
+	typedef unsigned long long (*call_enter_fun)();
+	typedef void (*call_leave_fun)(unsigned long long);
+	LUABIND_API void set_call_hooks(call_enter_fun enter, call_leave_fun leave);
+}
+
 namespace luabind { namespace detail
 {
 	LUABIND_API int pcall(lua_State *L, int nargs, int nresults);

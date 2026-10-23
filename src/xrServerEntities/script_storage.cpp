@@ -9,6 +9,7 @@
 #include "pch_script.h"
 #include "script_storage.h"
 #include "script_thread.h"
+#include "script_perf.h"
 #include "../xrCore/mezz_stringbuffer.h"
 #include <stdarg.h>
 #include <unordered_map>
@@ -22,6 +23,9 @@
 #endif //!DEBUG && USE_LUAJIT_ONE
 #ifndef USE_LUAJIT_ONE
 #include "lua.hpp"
+#endif
+#ifdef XR_PLATFORM_APPLE
+#include "script_bytecode_cache.h"
 #endif
 
 extern "C"
@@ -297,6 +301,7 @@ static void put_function(lua_State* state, u8 const* buffer, u32 const buffer_si
 CScriptStorage::CScriptStorage()
 {
 	m_current_thread = 0;
+	m_warm_only = false;
 
 #ifdef DEBUG
     m_stack_is_ready		= false;
@@ -314,7 +319,10 @@ CScriptStorage::CScriptStorage()
 CScriptStorage::~CScriptStorage()
 {
 	if (m_virtual_machine)
+	{
+		script_perf::detach(m_virtual_machine);
 		lua_close(m_virtual_machine);
+	}
 }
 
 extern int luaopen_lua_extensions(lua_State* L, bool IsDebug = false);
@@ -391,10 +399,33 @@ bool LoadKernelScriptToGlobal(lua_State* L, const char* name)
 };
 
 BOOL lua_debug = FALSE;
+#ifdef XR_PLATFORM_APPLE
+// The bytecode cache directory ($lua_cache$ of the app shell's fsgame.ltx), native path; empty when there is none.
+static std::string lua_cache_dir()
+{
+	if (strstr(Core.Params, "-no_lua_cache") || !FS.path_exist("$lua_cache$"))
+		return std::string();
+	string_path dir;
+	FS.update_path(dir, "$lua_cache$", "");
+	return std::string(xr_native_path(dir));
+}
+#endif
+
+void CScriptStorage::set_bytecode_cache(bool on)
+{
+#ifdef XR_PLATFORM_APPLE
+	script_cache::set_directory(on ? lua_cache_dir().c_str() : "");
+#endif
+}
+
 void CScriptStorage::reinit()
 {
 	if (m_virtual_machine)
+	{
+		script_perf::detach(m_virtual_machine);
 		lua_close(m_virtual_machine);
+	}
+	set_bytecode_cache(true);
 
 #ifdef USE_GSC_MEM_ALLOC
     m_virtual_machine = lua_newstate(lua_alloc, NULL);
@@ -722,8 +753,18 @@ bool CScriptStorage::parse_namespace(LPCSTR caNamespaceName, LPSTR b, u32 const 
 	return (true);
 }
 
+// luaL_loadbuffer, through the bytecode cache for script files (Apple port)
+static int load_chunk(lua_State* L, const char* buffer, size_t size, const char* name, bool cacheable)
+{
+#ifdef XR_PLATFORM_APPLE
+	if (cacheable)
+		return script_cache::load(L, buffer, size, name);
+#endif
+	return luaL_loadbuffer(L, buffer, size, name);
+}
+
 bool CScriptStorage::load_buffer(lua_State* L, LPCSTR caBuffer, size_t tSize, LPCSTR caScriptName,
-                                 LPCSTR caNameSpaceName)
+                                 LPCSTR caNameSpaceName, bool cacheable)
 {
 	int l_iErrorCode;
 	if (caNameSpaceName && xr_strcmp("_G", caNameSpaceName))
@@ -785,7 +826,7 @@ bool CScriptStorage::load_buffer(lua_State* L, LPCSTR caBuffer, size_t tSize, LP
 		xr_strcpy(script, total_size, insert);
 		CopyMemory(script + str_len, caBuffer, u32(tSize));
 
-		l_iErrorCode = luaL_loadbuffer(L, script, tSize + str_len, caScriptName);
+		l_iErrorCode = load_chunk(L, script, tSize + str_len, caScriptName, cacheable);
 
 		if (dynamic_allocation)
 			xr_free(script);
@@ -794,7 +835,7 @@ bool CScriptStorage::load_buffer(lua_State* L, LPCSTR caBuffer, size_t tSize, LP
 	{
 		//		try
 		{
-			l_iErrorCode = luaL_loadbuffer(L, caBuffer, tSize, caScriptName);
+			l_iErrorCode = load_chunk(L, caBuffer, tSize, caScriptName, cacheable);
 		}
 		//		catch(...) {
 		//			l_iErrorCode= LUA_ERRSYNTAX;
@@ -845,6 +886,7 @@ static bool unlocalRegex(std::set<std::string>& unlocals, std::string& s, const 
 
 bool CScriptStorage::do_file(LPCSTR caScriptName, LPCSTR caNameSpaceName)
 {
+	script_perf::LoadScope load_scope;
 	if (!unlocalizerPassed) {
 		auto file_list = FS.file_list_open("$game_config$", "unlocalizers\\", FS_RootOnly | FS_ListFiles);
 		if (!file_list) {
@@ -902,7 +944,10 @@ bool CScriptStorage::do_file(LPCSTR caScriptName, LPCSTR caNameSpaceName)
 	}
 	int start = lua_gettop(lua());
 	string_path l_caLuaFileName;
+	const double read_start_ms = script_perf::now_ms();
 	IReader* l_tpFileReader = FS.r_open(caScriptName);
+	if (l_tpFileReader)
+		script_perf::load_phase_read(script_perf::now_ms() - read_start_ms, (unsigned long long)l_tpFileReader->length());
 
 	if (!l_tpFileReader)
 	{
@@ -1022,12 +1067,14 @@ bool CScriptStorage::do_file(LPCSTR caScriptName, LPCSTR caNameSpaceName)
 	strconcat(sizeof(l_caLuaFileName), l_caLuaFileName, "@", caScriptName);
 
 	bool bufferLoaded = false;
+	const double compile_start_ms = script_perf::now_ms();
 	if (unlocalPerformed) {
-		bufferLoaded = load_buffer(lua(), scriptContents, scriptLength, l_caLuaFileName, caNameSpaceName);
+		bufferLoaded = load_buffer(lua(), scriptContents, scriptLength, l_caLuaFileName, caNameSpaceName, true);
 	} else {
 		l_tpFileReader->rewind();
-		bufferLoaded = load_buffer(lua(), static_cast<LPCSTR>(l_tpFileReader->pointer()), (size_t)l_tpFileReader->length(), l_caLuaFileName, caNameSpaceName);
+		bufferLoaded = load_buffer(lua(), static_cast<LPCSTR>(l_tpFileReader->pointer()), (size_t)l_tpFileReader->length(), l_caLuaFileName, caNameSpaceName, true);
 	}
+	script_perf::load_phase_compile(script_perf::now_ms() - compile_start_ms);
 
 	if (!bufferLoaded)
 	{
@@ -1039,6 +1086,12 @@ bool CScriptStorage::do_file(LPCSTR caScriptName, LPCSTR caNameSpaceName)
 		return (false);
 	}
 	FS.r_close(l_tpFileReader);
+
+	if (m_warm_only)
+	{
+		lua_settop(lua(), start);
+		return (true);
+	}
 
 	int errFuncId = -1;
 #ifdef USE_DEBUGGER
@@ -1075,6 +1128,30 @@ bool CScriptStorage::do_file(LPCSTR caScriptName, LPCSTR caNameSpaceName)
 	}
 
 	return (true);
+}
+
+size_t CScriptStorage::warm_bytecode_cache()
+{
+	size_t count = 0;
+#ifdef XR_PLATFORM_APPLE
+	FS_FileSet files;
+	FS.file_list(files, "$game_scripts$", FS_ListFiles, "*.script");
+	m_warm_only = true;
+	for (const FS_File& file : files)
+	{
+		string256 ns;
+		xr_strcpy(ns, file.name.c_str());
+		if (char* ext = strext(ns))
+			*ext = 0;
+		string_path path;
+		FS.update_path(path, "$game_scripts$", file.name.c_str());
+		// process_file_if_exists("_G") loads _G.script without the namespace header
+		if (do_file(path, !stricmp(ns, "_g") ? "_G" : ns))
+			++count;
+	}
+	m_warm_only = false;
+#endif
+	return count;
 }
 
 bool CScriptStorage::load_file_into_namespace(LPCSTR caScriptName, LPCSTR caNamespaceName)

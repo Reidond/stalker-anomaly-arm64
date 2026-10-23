@@ -15,6 +15,7 @@
 #include "script_game_object.h"
 #include "gameobject.h"
 #include "level.h"
+#include "script_perf.h"
 
 // comment next string when commiting
 //#define DBG_DISABLE_SCRIPTS
@@ -49,6 +50,7 @@ void CScriptBinder::clear()
 
 void CScriptBinder::reinit()
 {
+	script_perf::Context perf_section(script_perf::Binder);
 #ifdef DEBUG_MEMORY_MANAGER
 	size_t									start = 0;
 	if (g_bMEMO)
@@ -80,6 +82,7 @@ void CScriptBinder::Load(LPCSTR section)
 
 void CScriptBinder::reload(LPCSTR section)
 {
+	script_perf::Context perf_section(script_perf::Binder);
 #ifdef DEBUG_MEMORY_MANAGER
 	size_t									start = 0;
 	if (g_bMEMO)
@@ -133,6 +136,7 @@ void CScriptBinder::reload(LPCSTR section)
 
 BOOL CScriptBinder::net_Spawn(CSE_Abstract* DC)
 {
+	script_perf::Context perf_section(script_perf::Binder);
 #ifdef DEBUG_MEMORY_MANAGER
 	size_t									start = 0;
 	if (g_bMEMO)
@@ -165,6 +169,7 @@ BOOL CScriptBinder::net_Spawn(CSE_Abstract* DC)
 
 void CScriptBinder::net_Destroy()
 {
+	script_perf::Context perf_section(script_perf::Binder);
 	if (m_object)
 	{
 #ifdef _DEBUG
@@ -200,6 +205,7 @@ void CScriptBinder::set_object(CScriptBinderObject* object)
 
 void CScriptBinder::shedule_Update(u32 time_delta)
 {
+	script_perf::Context perf_section(script_perf::Binder);
 	if (m_object)
 	{
 		try
@@ -215,6 +221,7 @@ void CScriptBinder::shedule_Update(u32 time_delta)
 
 void CScriptBinder::save(NET_Packet& output_packet)
 {
+	script_perf::Context perf_section(script_perf::Binder);
 	if (m_object)
 	{
 		try
@@ -230,6 +237,7 @@ void CScriptBinder::save(NET_Packet& output_packet)
 
 void CScriptBinder::load(IReader& input_packet)
 {
+	script_perf::Context perf_section(script_perf::Binder);
 	if (m_object)
 	{
 		try
@@ -245,6 +253,7 @@ void CScriptBinder::load(IReader& input_packet)
 
 BOOL CScriptBinder::net_SaveRelevant()
 {
+	script_perf::Context perf_section(script_perf::Binder);
 	if (m_object)
 	{
 		try
@@ -261,6 +270,7 @@ BOOL CScriptBinder::net_SaveRelevant()
 
 void CScriptBinder::net_Relcase(CObject* object)
 {
+	script_perf::Context perf_section(script_perf::Binder);
 	CGameObject* game_object = smart_cast<CGameObject*>(object);
 	if (m_object && game_object)
 	{
