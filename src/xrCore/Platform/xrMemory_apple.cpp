@@ -22,7 +22,7 @@ void* xrMemory::mem_alloc(size_t size
 #endif
 )
 {
-	stat_calls++;
+	__atomic_fetch_add(&stat_calls, 1u, __ATOMIC_RELAXED); // every thread allocates; the count is only for the stats window
 	void* result = calloc(1, size ? size : 1);
 #ifdef USE_MEMORY_MONITOR
 	memory_monitor::monitor_alloc(result, size, _name);
@@ -32,7 +32,7 @@ void* xrMemory::mem_alloc(size_t size
 
 void xrMemory::mem_free(void* P)
 {
-	stat_calls++;
+	__atomic_fetch_add(&stat_calls, 1u, __ATOMIC_RELAXED); // every thread allocates; the count is only for the stats window
 #ifdef USE_MEMORY_MONITOR
 	memory_monitor::monitor_free(P);
 #endif
@@ -45,7 +45,7 @@ void* xrMemory::mem_realloc(void* P, size_t size
 #endif
 )
 {
-	stat_calls++;
+	__atomic_fetch_add(&stat_calls, 1u, __ATOMIC_RELAXED); // every thread allocates; the count is only for the stats window
 	if (!P)
 		return mem_alloc(size
 #ifdef DEBUG_MEMORY_NAME
