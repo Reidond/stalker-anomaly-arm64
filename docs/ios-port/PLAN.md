@@ -127,6 +127,9 @@ in order:
 The JIT stays available as the opt-in route for full speed: SideStore + StikDebug, or a debugger
 ([IPAD-JIT.md](IPAD-JIT.md)).
 
+State: steps 1 and 2 are built and measured, step 3 is decided on the numbers; the method, the tools, the cache design and the measurements
+are in [LUA-PERF.md](LUA-PERF.md), the iPad's numbers also in [IPAD.md](IPAD.md#lua-on-the-ipad).
+
 ## Risks
 
 1. **Memory on 8 GB.** This is the most likely blocker; the mitigations are above. Measure it
