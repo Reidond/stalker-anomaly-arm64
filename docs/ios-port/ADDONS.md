@@ -11,7 +11,8 @@ app, in which order the game reads them, what cannot work, how much memory a tex
 > iPadOS Files app documents, not something we filmed (the test set puts files into the same folders with `devicectl`). No third-party addon has been
 > installed yet. Where a statement is about addons in general and not something the test set shows, it says so.
 
-Two routes put an addon into the game. **The mod manager in the app** ([MOD-MANAGER.md](MOD-MANAGER.md)) imports `.zip`, `.7z` and `.rar` files and
+Two routes put an addon into the game, and the manual one keeps working next to the other (a file lying loose in `gamedata/` wins over every mod the manager mounts).
+**The mod manager in the app** ([MOD-MANAGER.md](MOD-MANAGER.md)) imports `.zip`, `.7z` and `.rar` files and
 FOMOD installers from the Files app or a download, keeps every mod in its own folder under `Documents/Mods`, and lets the player switch mods
 on and off and change their order, without ever copying over another mod's files. **By hand**, files are copied into the game folder with
 the Files app; this is what the rest of this guide describes (and what a mod that comes as a plain folder or a single `.db0` file needs when the
