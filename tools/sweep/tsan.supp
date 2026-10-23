@@ -1,0 +1,44 @@
+# ThreadSanitizer suppressions for the crash-sweep runs (docs/ios-port/SANITIZERS.md). Format: <kind>:<function or module pattern>.
+# Added only after the report was read and judged to be noise; every entry says why.
+
+# LuaJIT's assembly interpreter (lj_vm.S) and the JIT'ed machine code are not instrumented, and the VM is single-threaded by
+# contract (one lua_State at a time, the engine takes the script lock); what TSan sees of it is the C half racing with itself
+# across the engine's coroutine hand-offs.
+
+# ---- by design: the secondary thread (mt_Thread: seqParallel, seqFrameMT) runs while the primary thread renders ----
+# The engine hands work between the two threads with the mt_csEnter / mt_csLeave pair and with per-frame counters, not with locks
+# around the data. What TSan sees are scalars, flags and per-frame buffers that one side writes and the other reads one frame
+# later or earlier; a stale value costs a frame of wrong occlusion, a fade, a physics flag. None of them is a container or a lifetime.
+
+# the engine's one global CRandom, advanced by every thread (render, HOM, physics, particles): a lost update repeats a number
+race:CRandom::randI
+# hierarchical occlusion map: rebuilt by the secondary thread (CHOM::MT_RENDER), tested by the render phase
+race:CHOM::*
+race:xform_b0
+# Device.dwFrame and g_bRendering: written by the primary thread in Begin()/End(), read by the secondary thread and the prefetcher
+race:CRenderDevice::Begin
+race:CRenderDevice::End
+race:CRenderDevice::on_idle
+race:mt_Thread
+race:CLevelSoundManager::Update
+race:CALifeUpdateManager::update_switch
+race:CModelPool::Delete
+# the physics step writes element flags that the bones callback of the render phase reads
+race:CPHElement::PhDataUpdate
+race:CPHElement::BonesCallBack
+# crows: flags set while rendering (MakeMeCrow), read by the network processor of the secondary thread
+race:CObject::MakeMeCrow
+race:CObjectList::net_Export
+race:CAI_Crow::net_Export
+race:CHUDState::*
+# spatial database: sector pointers of the objects, written by the render phase, read by the secondary thread's queries
+race:ISpatial::spatial_updatesector_internal
+race:ISpatial::spatial_move
+# the grass (detail manager): the secondary thread computes next frame's visible slots (MT_CALC) behind the m_frame_rendered /
+# m_frame_calc counters while the render phase dumps this frame's; the counters are volatile, not acquire/release. OPEN ITEM
+# (SANITIZERS.md): the hand-off is not proven, a late dump of the shadow pass can overlap it
+race:CDetailManager::*
+# shader compile on the spawn prefetcher's thread reads render options that the render phase changes per frame (RImplementation.o)
+race:CBlender_Compile::_cpp_Compile
+# static shared_str s_bones_array_const, assigned by the first model load on whichever thread gets there first
+race:CSkeletonX::_Load

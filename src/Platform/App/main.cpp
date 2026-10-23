@@ -62,6 +62,8 @@
 #include "Unattended.h"
 #include "xrEngine/xr_engine_app.h"
 
+#include <dispatch/dispatch.h>
+#include <signal.h>
 #include <sys/stat.h>
 
 #include <algorithm>
@@ -675,6 +677,37 @@ void SaveForBackground(App& app)
     app.saving = false;
 }
 
+// SIGTERM (what `devicectl ... terminate`, the system and a `kill` send). SDL turns it into SDL_EVENT_QUIT, but only when its event pump runs,
+// and an app in the background is not iterated at its display link's pace. While the app is paused in the background the engine cannot
+// answer a quit either (it does not run its event queue, and frames are not allowed): the disconnect it would quit through never
+// happens. (Once the system has suspended the app nothing runs at all and the system's SIGKILL, 31 s later, is what ends it.) The game
+// was saved when the app left the screen, so the main queue ends it at once through the same exit as a normal quit, also when the
+// signal arrives while the app is waking up. Otherwise SDL's own behaviour: a quit event.
+void OnTerminateSignal(void*)
+{
+    App* const app = g_app;
+    if (app && app->engine_up && AppleShell::IsPaused())
+    {
+        AppleShell::Log("anomaly: SIGTERM while in the background, leaving without the disconnect");
+        g_app = nullptr;
+        SDL_AppQuit(app, SDL_APP_SUCCESS);
+        exit(0);
+    }
+    SDL_Event quit{};
+    quit.type = SDL_EVENT_QUIT;
+    SDL_PushEvent(&quit);
+}
+
+dispatch_source_t g_terminate_source = nullptr;
+
+void InstallTerminateSource()
+{
+    signal(SIGTERM, SIG_IGN); // the dispatch source sees it, the default action (and SDL's handler) does not
+    g_terminate_source = dispatch_source_create(DISPATCH_SOURCE_TYPE_SIGNAL, SIGTERM, 0, dispatch_get_main_queue());
+    dispatch_source_set_event_handler_f(g_terminate_source, OnTerminateSignal);
+    dispatch_resume(g_terminate_source);
+}
+
 bool StartEngine(App& app)
 {
     // before the engine registers its own listener: the listeners run in the order they were added
@@ -814,11 +847,13 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char** argv)
         if (!LoadScript(*app, resolved.c_str()))
             return SDL_APP_FAILURE;
     }
+    AppleShell::Log("anomaly: build %s %s", __DATE__, __TIME__); // which binary a log belongs to (this file's compile time)
     AppleShell::Log("anomaly: data root %s", paths.data_root.c_str());
     AppleShell::Log("anomaly: appdata   %s", paths.appdata.c_str());
     if (app->unattended)
         PrepareUnattendedConfig(*app, paths);
 
+    InstallTerminateSource();
     const bool data_ok = AppleShell::ValidateGameData(paths.data_root).state == AppleShell::DataState::Ok;
     if (data_ok && !want_launcher)
         return StartEngine(*app) ? SDL_APP_CONTINUE : SDL_APP_FAILURE;
@@ -872,7 +907,11 @@ SDL_AppResult SDL_AppIterate(void* appstate)
         }
         app->last_frame_start_ns = frame_start_ns;
         if (!xr_engine::Frame())
+        {
+            // the last frame: the level is gone, what follows is xr_engine::Shutdown() (the "quit (ok)" line ends it)
+            AppleShell::Log("anomaly: the engine asked to quit");
             return SDL_APP_SUCCESS;
+        }
         // one line in the shell log every 10 s: frames per second of the main loop, the CPU time of a frame (time inside
         // Frame(): the rest of the frame interval is the wait for the GPU and the display), and the memory the OS charges us
         ++app->fps_frames;
@@ -977,6 +1016,15 @@ SDL_AppResult SDL_AppEvent(void* appstate, SDL_Event* event)
             while (double(SDL_GetTicksNS() - t0) * 1e-9 < 4.0 && xr_engine::Frame())
                 ;
             AppleShell::Log("anomaly: disconnect %s", double(SDL_GetTicksNS() - t0) * 1e-9 < 4.0 ? "finished" : "timed out");
+            return SDL_APP_SUCCESS;
+        }
+        if (event->type == SDL_EVENT_QUIT && AppleShell::IsPaused())
+        {
+            // A SIGTERM (or RequestQuit) while the app sits in the background: the engine is paused, it does not run its event
+            // queue, so the disconnect it would quit through never happens, and RequestQuit's 30 s limit was all that ended the app
+            // (31 s). Frames cannot run in the background either (GPU work there kills the app). The game was saved when the app
+            // left the screen (SaveForBackground), so leave at once: SDL_AppQuit runs xr_engine::Shutdown().
+            AppleShell::Log("anomaly: quit while in the background, leaving without the disconnect");
             return SDL_APP_SUCCESS;
         }
         // SDL3's callback loop has already taken the event out of the queue the engine would pump

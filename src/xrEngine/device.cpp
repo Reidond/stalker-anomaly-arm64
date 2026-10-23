@@ -179,7 +179,7 @@ void CRenderDevice::End(void)
 }
 
 
-volatile u32 mt_Thread_marker = 0x12345678;
+std::atomic<u32> mt_Thread_marker{0x12345678}; // written by the secondary thread, read by the primary one
 
 void mt_Thread(void* ptr)
 {
@@ -192,11 +192,11 @@ void mt_Thread(void* ptr)
 		// waiting for Device permission to execute
 		device.mt_csEnter.Enter();
 
-		if (device.mt_bMustExit)
+		if (device.mt_bMustExit.load(std::memory_order_acquire))
 		{
 			PROF_EVENT("Must exit");
 
-			device.mt_bMustExit = FALSE; // Important!!!
+			device.mt_bMustExit.store(FALSE, std::memory_order_release); // Important!!!
 			device.mt_csEnter.Leave(); // Important!!!
 			return;
 		}
@@ -393,16 +393,25 @@ float GetMonitorRefresh()
 extern int ps_framelimiter;
 extern u32 g_screenmode;
 
-CTimer FreezeTimer;
+// The freeze watchdog flushes the (buffered) log when the primary thread has not come round for a while, so the log shows where a
+// hang is. It is stopped by RunEnd() before the core and the log are torn down: it used to run for the life of the process and flush
+// into a file system that Core._destroy() was freeing.
+static std::atomic<bool> mt_freeze_stop{false};
+static std::atomic<bool> mt_freeze_running{false};
+// what the primary thread tells the watchdog (written once per on_idle, read from the watchdog's thread): when it last came round, and
+// whether a level is being loaded (loading steps are allowed to take longer)
+static std::atomic<u64> mt_freeze_tick{0};
+static std::atomic<bool> mt_freeze_loading{false};
+
 void mt_FreezeThread(void *ptr) {
 	float freezetime = 0.f;
 	float repeatcheck = 500.f;
 
-	while (true)
+	while (!mt_freeze_stop.load())
 	{
 		PROF_EVENT();
 
-		if (g_loading_events.size())
+		if (mt_freeze_loading.load(std::memory_order_relaxed))
 			freezetime = 25000.0f;
 		else
 			freezetime = 5000.0f;
@@ -410,20 +419,25 @@ void mt_FreezeThread(void *ptr) {
 		repeatcheck = 500.f;
 
 		START_PROFILE("Check timer");
-		if (FreezeTimer.GetElapsed_sec()*1000.f > freezetime)
+		const u64 last_tick = mt_freeze_tick.load(std::memory_order_relaxed);
+		if (float(double(CPU::QPC() - last_tick) / double(CPU::qpc_freq)) * 1000.f > freezetime)
 		{
 			FlushLog();
 			repeatcheck = 5000.f;
 		}
 		STOP_PROFILE;
 
-		Sleep(repeatcheck);
+		// in slices, so that RunEnd() does not wait for the whole interval
+		for (float waited = 0.f; waited < repeatcheck && !mt_freeze_stop.load(); waited += 20.f)
+			Sleep(20);
 	}
+	mt_freeze_running.store(false);
 }
 
 void CRenderDevice::on_idle()
 {
-	FreezeTimer.Start();
+	mt_freeze_tick.store(CPU::QPC(), std::memory_order_relaxed);
+	mt_freeze_loading.store(!g_loading_events.empty(), std::memory_order_relaxed);
 
 	if (!b_is_Ready)
 	{
@@ -725,7 +739,9 @@ void CRenderDevice::RunBegin()
 	// InitializeCriticalSection (&mt_csEnter);
 	// InitializeCriticalSection (&mt_csLeave);
 	mt_csEnter.Enter();
-	mt_bMustExit = FALSE;
+	mt_bMustExit.store(FALSE, std::memory_order_release);
+	mt_freeze_stop.store(false);
+	mt_freeze_running.store(true);
 	thread_spawn(mt_FreezeThread, "Freeze detecting thread", 0, 0);
 	thread_spawn(mt_Thread, "X-RAY Secondary thread", 0, this);
 #ifdef XR_USE_DISCORD
@@ -741,9 +757,18 @@ void CRenderDevice::RunEnd()
 {
 	seqAppEnd.Process(rp_AppEnd);
 	// Stop Balance-Thread
-	mt_bMustExit = TRUE;
+	mt_bMustExit.store(TRUE, std::memory_order_release);
 	mt_csEnter.Leave();
-	while (mt_bMustExit) Sleep(0);
+	while (mt_bMustExit.load(std::memory_order_acquire)) Sleep(0);
+	// Stop the freeze watchdog too (it flushes the log from its own thread) and wait until it is gone, like a join: it uses the log and
+	// the file system, which the teardown after this destroys. It looks at the stop flag every 20 ms and a flush takes milliseconds.
+	mt_freeze_stop.store(true);
+	for (int waited_ms = 0; mt_freeze_running.load(); waited_ms += 5)
+	{
+		Sleep(5);
+		if (waited_ms == 5000)
+			fprintf(stderr, "xrEngine: still waiting for the freeze watchdog to stop\n"); // (not Msg: it may be the log that is stuck)
+	}
 	// DeleteCriticalSection (&mt_csEnter);
 	// DeleteCriticalSection (&mt_csLeave);
 }

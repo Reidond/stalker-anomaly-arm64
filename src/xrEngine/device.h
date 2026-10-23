@@ -440,7 +440,7 @@ public:
 	// Multi-threading
 	xrCriticalSection mt_csEnter;
 	xrCriticalSection mt_csLeave;
-	volatile BOOL mt_bMustExit;
+	std::atomic<BOOL> mt_bMustExit;
 
 	ICF void remove_from_seq_parallel(const fastdelegate::FastDelegate0<>& delegate)
 	{

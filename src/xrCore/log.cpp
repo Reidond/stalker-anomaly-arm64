@@ -4,6 +4,7 @@
 #include <time.h>
 #include "resource.h"
 #include "log.h"
+#include "log_lines.h"
 #ifdef _EDITOR
 #include "malloc.h"
 #endif
@@ -27,16 +28,33 @@ static xrCriticalSection logCS;
 #endif // PROFILE_CRITICAL_SECTIONS
 xr_vector<xr_string> LogFile;
 static LogCallback LogCB = 0;
+// Everything below that touches LogFile, last_line and log_closed holds logCS: Log() is called from every thread the engine has
+// (the ALife/secondary thread, the freeze watchdog, sound, GCD workers), the console reads the lines to draw them, and CloseLog() runs
+// while any of them may still be logging.
+static xr_string last_line; // the last line as it was logged, before the " [n]" counter: a repeat only bumps the counter
+static int items_count = 0;
+static bool log_closed = false; // CloseLog() ran: the file system is going away, nothing is written to the log file any more
+// Set when the statics above are being destroyed (this object is defined after them, so it goes first). Logging that happens after
+// that - a fatal signal or a terminate handler during exit() - must not touch a mutex and a vector that are gone: the mutex throws,
+// which is a std::terminate() whose handler logs again.
+static std::atomic<bool> g_log_gone{false};
+static struct LogLifetime
+{
+	~LogLifetime() { g_log_gone.store(true); }
+} g_log_lifetime;
 
 void FlushLog()
 {
+	if (g_log_gone.load())
+		return;
 	PROF_EVENT();
 
-	// the freeze watchdog thread calls this too, also after the file system has been shut down
-	if (!no_log && xr_FS)
+	// The freeze watchdog thread calls this too, also while the main thread tears the file system down: the lock is taken before
+	// anything is looked at, and CloseLog() (same lock) is what ends the right to write.
+	logCS.Enter();
+	if (!no_log && !log_closed && xr_FS)
 	{
 		PROF_EVENT("Flushing");
-		logCS.Enter();
 		IWriter* f = FS.w_open(logFName);
 		if (f)
 		{
@@ -45,10 +63,12 @@ void FlushLog()
 				LPCSTR s = i.c_str();
 				f->w_string(s ? s : "");
 			}
-			FS.w_close(f);
+			// not FS.w_close(): it registers the file in the file system's table, which only the thread that owns the file system
+			// may change (the log file is registered by CreateLog already)
+			xr_delete(f);
 		}
-		logCS.Leave();
 	}
+	logCS.Leave();
 }
 
 std::string getCurrentTimeStamp(LPCSTR format = "%d.%m.%Y %H:%M:%S") {
@@ -99,6 +119,11 @@ __attribute__((weak)) bool is_console_mark(Console_mark) { return false; }
 
 void AddOne(const char* split)
 {
+	if (g_log_gone.load())
+	{
+		fprintf(stderr, "%s\n", split);
+		return;
+	}
 
 	logCS.Enter();
 
@@ -120,15 +145,11 @@ void AddOne(const char* split)
 			}
 			t = c + "[" + timeInHMSMMM() + "] " + t;
 		}
-		auto temp = shared_str(t.c_str());
-		static shared_str last_str;
-		static int items_count;
-
-		// (LogFile is empty after CloseLog() / clear_log: erase(end() - 1) on it moved the end below the begin and the next
+		// (LogFile is empty after CloseLog() / ClearLog(): erase(end() - 1) on it moved the end below the begin and the next
 		// push_back crashed, which is how a quit that logged the same line twice died)
-		if (!LogFile.empty() && last_str.equal(temp))
+		if (!LogFile.empty() && last_line == t.c_str())
 		{
-			xr_string tmp = temp.c_str();
+			xr_string tmp = t.c_str();
 
 			if (items_count == 0)
 				items_count = 2;
@@ -139,14 +160,13 @@ void AddOne(const char* split)
 			tmp += std::to_string(items_count).c_str();
 			tmp += "]";
 
-			LogFile.erase(LogFile.end()-1);
-			LogFile.push_back(xr_string(tmp.c_str()));
+			LogFile.back() = tmp;
 		}
 		else
 		{
 			// DUMP_PHASE;
-			LogFile.push_back(xr_string(temp.c_str()));
-			last_str = temp;
+			LogFile.push_back(xr_string(t.c_str()));
+			last_line = t.c_str();
 			items_count = 0;
 		}
 	}
@@ -313,8 +333,47 @@ void CreateLog(BOOL nl)
 
 void CloseLog(void)
 {
+	logCS.Enter();
 	FlushLog();
+	log_closed = true;
 	LogFile.clear();
+	last_line.clear();
+	items_count = 0;
+	logCS.Leave();
+}
+
+void ClearLog()
+{
+	logCS.Enter();
+	LogFile.clear_not_free();
+	last_line.clear();
+	items_count = 0;
+	logCS.Leave();
+	FlushLog();
+}
+
+u32 LogLineCount()
+{
+	logCS.Enter();
+	const u32 count = (u32)LogFile.size();
+	logCS.Leave();
+	return count;
+}
+
+u32 LogCopyLines(u32 last, u32 count, xr_vector<xr_string>& out)
+{
+	out.clear();
+	logCS.Enter();
+	u32 first = 0;
+	if (!LogFile.empty())
+	{
+		if (last >= LogFile.size())
+			last = (u32)LogFile.size() - 1;
+		first = last + 1 > count ? last + 1 - count : 0;
+		out.assign(LogFile.begin() + first, LogFile.begin() + last + 1);
+	}
+	logCS.Leave();
+	return first;
 }
 
 xr_string FormatString(LPCSTR fmt, ...)

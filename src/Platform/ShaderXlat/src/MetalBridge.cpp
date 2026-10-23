@@ -336,6 +336,11 @@ HRESULT compile(const mtl_d3d11::CompileRequest& request, std::vector<uint8_t>* 
                                        (request.target ? request.target : "");
     IncludeAdapter includes(request.include);
 
+    // One translation at a time. vkd3d-shader and SPIRV-Cross are reentrant, but the callers are not the library's tools: this runs
+    // inside the engine's resource creation, whose include callback reads through the engine's file system, and the abort that
+    // showed up in vkd3d's preprocessor on the iPad (a free of a block that was never allocated) made a guard here cheap insurance.
+    static std::mutex translateMutex;
+    std::lock_guard<std::mutex> translateLock(translateMutex);
     const auto t0 = std::chrono::steady_clock::now();
     bool hit = false;
     shaderxlat::Result result = cache ? cache->translate(source, name, macros, options, &includes, &hit)

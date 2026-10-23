@@ -6,6 +6,7 @@
 ////////////////////////////////////////////////////////////////////////////
 
 #include "stdafx.h"
+#include "../xrCore/log_lines.h"
 #include "XR_IOConsole.h"
 
 #include "line_editor.h"
@@ -65,9 +66,9 @@ void CConsole::Screenshot()
 void CConsole::Prev_log() // DIK_PRIOR=PAGE_UP
 {
 	scroll_delta++;
-	if (scroll_delta > int(LogFile.size()) - 1)
+	if (scroll_delta > int(LogLineCount()) - 1)
 	{
-		scroll_delta = LogFile.size() - 1;
+		scroll_delta = LogLineCount() - 1;
 	}
 }
 
@@ -82,7 +83,7 @@ void CConsole::Next_log() // DIK_NEXT=PAGE_DOWN
 
 void CConsole::Begin_log() // PAGE_UP+Ctrl
 {
-	scroll_delta = LogFile.size() - 1;
+	scroll_delta = LogLineCount() - 1;
 }
 
 void CConsole::End_log() // PAGE_DOWN+Ctrl

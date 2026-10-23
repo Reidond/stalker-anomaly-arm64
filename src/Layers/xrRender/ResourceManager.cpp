@@ -464,6 +464,7 @@ void CResourceManager::_GetMemoryUsage(u32& m_base, u32& c_base, u32& m_lmaps, u
 
 void CResourceManager::_DumpMemoryUsage()
 {
+	xrCriticalSectionGuard guard(creationGuard); // m_textures changes whenever a thread creates or releases a texture
 	xr_multimap<u32, std::pair<u32, shared_str>> mtex;
 
 	// sort

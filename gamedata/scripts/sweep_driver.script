@@ -574,6 +574,57 @@ end
 
 -- alife():register(se_obj) writes the server object out, destroys it and returns the one made from the packet; scripts (death_manager,
 -- item_parts) go on reading the object they passed: it has to stay valid. ASan reports a use after free if it does not.
+-- level.add_call(condition, action) puts a call into the physics commander (CLevel::OnFrame -> CPHCommander::update runs them). The actions run
+-- scripts, and a script may remove calls: its own (CPHScriptAction::run() then wrote b_obsolete into the freed action), the next one, one it
+-- has already run. update() indexed m_calls after the action had erased from it. Every action here removes some of the others; each must
+-- run exactly once and nothing may crash (ASan: heap-use-after-free; MallocScribble: a wild pointer).
+local function phcalls()
+	say("-- ph commander: calls that remove calls")
+	local N = 12
+	local ran, conds, acts = {}, {}, {}
+	for i = 1, N do
+		ran[i] = 0
+		conds[i] = function() return true end
+		acts[i] = function()
+			ran[i] = ran[i] + 1
+			if i % 4 == 1 then level.remove_call(conds[i], acts[i]) end                        -- itself
+			if i % 4 == 2 and i < N then level.remove_call(conds[i + 1], acts[i + 1]) end        -- the next one, not run yet
+			if i % 4 == 3 then level.remove_call(conds[i - 1], acts[i - 1]) end                  -- the previous one, already run
+			if i % 4 == 0 and i > 4 then level.remove_call(conds[i - 3], acts[i - 3]) end        -- one a few places back
+		end
+	end
+	-- The calls are added from a callback, not from this coroutine: a luabind functor keeps the lua_State it was made on, and this
+	-- coroutine is suspended (in pause()) while the commander runs them.
+	local request = false
+	local function on_update()
+		if request then
+			request = false
+			for i = 1, N do level.add_call(conds[i], acts[i]) end
+		end
+	end
+	RegisterScriptCallback("actor_on_update", on_update)
+	for round = 1, 20 do
+		for i = 1, N do ran[i] = 0 end
+		request = true
+		-- until every call that is not removed before it runs has run (a slow build, TSan, needs seconds), then a little longer for a second run
+		wait_for("the ph calls to run", 20000, function()
+			for i = 1, N do
+				if i % 4 ~= 3 and ran[i] < 1 then return false end
+			end
+			return true
+		end)
+		pause(500)
+		local bad = {}
+		for i = 1, N do
+			-- 2 is removed by 1? no: odd i % 4 == 1 removes itself, i % 4 == 2 removes i+1 (i+1 % 4 == 3) before it runs
+			local expect_removed_before_run = (i % 4 == 3)
+			if ran[i] > 1 or (not expect_removed_before_run and ran[i] ~= 1) then bad[#bad + 1] = i .. "=" .. ran[i] end
+		end
+		check("ph calls round " .. round .. ": each action ran once", #bad == 0, table.concat(bad, " "))
+	end
+	UnregisterScriptCallback("actor_on_update", on_update)
+end
+
 local function reprocess()
 	say("-- register / reprocess_spawn")
 	local olds = {}
@@ -1023,6 +1074,9 @@ local phases = {
 	},
 	-- quit from a state: reach it on sweep_base, then ask the engine to quit with the state still up
 	quit_level = { function() wait_for("actor", 240000, actor_ready); enable_ui(); pause(3000); return { quit = true } end },
+	-- stands in the level until the --script ends the run (quit_background_level: lifecycle background, then quit)
+	phcalls = { function() wait_for("actor", 240000, actor_ready); enable_ui(); pause(3000); phcalls(); return { quit = true } end },
+	hold = { function() wait_for("actor", 240000, actor_ready); enable_ui(); pause(900000); return { quit = true } end },
 	quit_inventory = {
 		function()
 			wait_for("actor", 240000, actor_ready); enable_ui()

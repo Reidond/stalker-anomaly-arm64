@@ -81,6 +81,11 @@ class CPHCommander :
 	PHCALL_STORAGE m_calls;
 	PHCALL_STORAGE m_calls_as_add_buffer;
 	PHCALL_STORAGE m_calls_as_remove_buffer;
+	// update() runs the calls' actions and they run scripts: a script may add calls, remove calls (the one that is running, or the
+	// ones of an object it releases) while the loop is walking m_calls. A call removed then is not erased and deleted under the
+	// loop: its slot is cleared and the call kept here, to be deleted when the outermost update() is done.
+	u32 m_update_depth = 0;
+	PHCALL_STORAGE m_deferred;
 public:
 	~CPHCommander();
 
@@ -122,6 +127,9 @@ private:
 	IC PHCALL_I find_call(CPHReqComparerV* cmp_condition, CPHReqComparerV* cmp_action, PHCALL_STORAGE& cs);
 	IC void remove_call(CPHReqComparerV* cmp_condition, CPHReqComparerV* cmp_action, PHCALL_STORAGE& cs);
 	IC void remove_calls(CPHReqComparerV* cmp_object, PHCALL_STORAGE& cs);
+	bool deferring(const PHCALL_STORAGE& cs) const { return m_update_depth && &cs == &m_calls; }
+	void defer_call(CPHCall*& slot);
+	void end_update();
 private:
 	virtual void update_step() { update_threadsafety(); }
 	virtual void phys_shell_relcase(CPhysicsShell* sh);

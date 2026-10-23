@@ -284,6 +284,15 @@ bool Init(const InitParams& params)
         bool ok = true;
         for (const std::string& dir : {p.app_support, p.appdata, p.logs, p.saves, p.caches, p.shader_cache, p.shell_dir})
             ok = MakeDirs(dir) && ok;
+        // ANOMALY_CLEAR_SHADER_CACHE=1 starts with an empty shader cache (every shader is translated again): for cold-start tests,
+        // on the iPad through `devicectl ... --environment-variables`, where there is no state root to point somewhere else.
+        const char* clear_cache = getenv("ANOMALY_CLEAR_SHADER_CACHE");
+        const bool cleared_shader_cache = clear_cache && *clear_cache && *clear_cache != '0';
+        if (cleared_shader_cache)
+        {
+            [NSFileManager.defaultManager removeItemAtPath:[NSString stringWithUTF8String:p.shader_cache.c_str()] error:nil];
+            ok = MakeDirs(p.shader_cache) && ok;
+        }
 #if TARGET_OS_IOS
         // Make Documents/Anomaly exist so it shows up in Files and Finder, and keep 17 GB out of backups.
         if (p.data_root_source == DataRootSource::PlatformDefault && MakeDirs(p.data_root))
@@ -313,6 +322,8 @@ bool Init(const InitParams& params)
         Log("data root (%d): %s", int(p.data_root_source), p.data_root.c_str());
         Log("appdata: %s", p.appdata.c_str());
         Log("caches: %s", p.caches.c_str());
+        if (cleared_shader_cache)
+            Log("ANOMALY_CLEAR_SHADER_CACHE: shader cache emptied (%s)", p.shader_cache.c_str());
         Log("shell dir: %s", p.shell_dir.c_str());
         Log("HOME: %s", getenv("HOME") ? getenv("HOME") : "(unset)");
         if (s.previous_session_unexpected)

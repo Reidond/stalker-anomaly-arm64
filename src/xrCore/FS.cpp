@@ -438,7 +438,11 @@ void IReader::r(void* p, int cnt)
     if (fast_dynamic_cast<CVirtualFileReader*>(this)) bShow = TRUE;
     if (bShow)
     {
+#ifdef XR_PLATFORM_APPLE
+        __atomic_fetch_add(&FS.dwOpenCounter, 1u, __ATOMIC_RELAXED); // files are opened from several threads; the count drives the disk icon
+#else
         FS.dwOpenCounter++;
+#endif
     }
 #endif
 };

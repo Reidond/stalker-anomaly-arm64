@@ -237,8 +237,16 @@ CLocatorAPI::~CLocatorAPI()
 	_dump_open_files(1);
 }
 
+// The file registry (m_files, a std::set of every file the game can open) is read by every thread that opens a file and written by
+// every thread that creates one (Register() runs for each FS.w_close()). The primary thread, the spawn prefetcher (which compiles
+// shaders and writes them to the shader cache) and the freeze watchdog's log flush all do both; an unlocked insert racing a find
+// corrupts the tree, and the heap with it. One recursive lock around the registry functions (they call each other).
+static xrCriticalSection g_fs_files_lock;
+#define FS_FILES_LOCK xrCriticalSectionGuard fs_files_guard(g_fs_files_lock)
+
 void CLocatorAPI::Register(LPCSTR name, u32 vfs, u32 crc, u32 ptr, u32 size_real, u32 size_compressed, u32 modif)
 {
+	FS_FILES_LOCK;
 	//Msg("Register[%d] [%s]",vfs,name);
 	// string256 on Windows; absolute roots on Apple platforms (iOS sandbox containers) are much longer
 	string_path temp_file_name;
@@ -590,6 +598,7 @@ void CLocatorAPI::ProcessArchive(LPCSTR _path)
 
 void CLocatorAPI::unload_archive(CLocatorAPI::archive& A)
 {
+	FS_FILES_LOCK;
 	files_it I = m_files.begin();
 	for (; I != m_files.end(); ++I)
 	{
@@ -610,6 +619,7 @@ void CLocatorAPI::unload_archive(CLocatorAPI::archive& A)
 
 void CLocatorAPI::get_stats(registry_stats& out) const
 {
+	FS_FILES_LOCK;
 	out.entries = m_files.size();
 	out.folders = out.loose_files = out.archived_files = 0;
 	out.per_archive.assign(m_archives.size(), 0);
@@ -1047,6 +1057,7 @@ void CLocatorAPI::_initialize(u32 flags, LPCSTR target_folder, LPCSTR fs_name)
 
 void CLocatorAPI::_destroy()
 {
+	FS_FILES_LOCK;
 	CloseLog();
 
 	for (files_it I = m_files.begin(); I != m_files.end(); I++)
@@ -1072,12 +1083,14 @@ void CLocatorAPI::_destroy()
 
 const CLocatorAPI::file* CLocatorAPI::exist(const char* fn)
 {
+	FS_FILES_LOCK;
 	files_it it = file_find_it(fn);
 	return (it != m_files.end()) ? &(*it) : 0;
 }
 
 const CLocatorAPI::file* CLocatorAPI::exist(const char* path, const char* name)
 {
+	FS_FILES_LOCK;
 	string_path temp;
 	update_path(temp, path, name);
 	return exist(temp);
@@ -1085,12 +1098,14 @@ const CLocatorAPI::file* CLocatorAPI::exist(const char* path, const char* name)
 
 const CLocatorAPI::file* CLocatorAPI::exist(string_path& fn, LPCSTR path, LPCSTR name)
 {
+	FS_FILES_LOCK;
 	update_path(fn, path, name);
 	return exist(fn);
 }
 
 const CLocatorAPI::file* CLocatorAPI::exist(string_path& fn, LPCSTR path, LPCSTR name, LPCSTR ext)
 {
+	FS_FILES_LOCK;
 	string_path nm;
 	strconcat(sizeof(nm), nm, name, ext);
 	update_path(fn, path, nm);
@@ -1099,6 +1114,7 @@ const CLocatorAPI::file* CLocatorAPI::exist(string_path& fn, LPCSTR path, LPCSTR
 
 xr_vector<char*>* CLocatorAPI::file_list_open(const char* initial, const char* folder, u32 flags)
 {
+	FS_FILES_LOCK;
 	string_path N;
 	R_ASSERT(initial&&initial[0]);
 	update_path(N, initial, folder);
@@ -1107,6 +1123,7 @@ xr_vector<char*>* CLocatorAPI::file_list_open(const char* initial, const char* f
 
 xr_vector<char*>* CLocatorAPI::file_list_open(const char* _path, u32 flags)
 {
+	FS_FILES_LOCK;
 	R_ASSERT(_path);
 	VERIFY(flags);
 	// проверить нужно ли пересканировать пути
@@ -1169,6 +1186,7 @@ void CLocatorAPI::file_list_close(xr_vector<char*>*& lst)
 
 int CLocatorAPI::file_list(FS_FileSet& dest, LPCSTR path, u32 flags, LPCSTR mask)
 {
+	FS_FILES_LOCK;
 	R_ASSERT(path);
 	VERIFY(flags);
 	// проверить нужно ли пересканировать пути
@@ -1242,6 +1260,7 @@ int CLocatorAPI::file_list(FS_FileSet& dest, LPCSTR path, u32 flags, LPCSTR mask
 
 void CLocatorAPI::check_cached_files(LPSTR fname, const u32& fname_size, const file& desc, LPCSTR& source_name)
 {
+	FS_FILES_LOCK;
 	string_path fname_copy;
 	if (pathes.size() <= 1)
 		return;
@@ -1585,6 +1604,7 @@ void CLocatorAPI::copy_file_to_build(T*& r, LPCSTR source_name)
 
 bool CLocatorAPI::check_for_file(LPCSTR path, LPCSTR _fname, string_path& fname, const file*& desc)
 {
+	FS_FILES_LOCK;
 	// проверить нужно ли пересканировать пути
 	check_pathes();
 
@@ -1602,7 +1622,11 @@ bool CLocatorAPI::check_for_file(LPCSTR path, LPCSTR _fname, string_path& fname,
 	if (I == m_files.end())
 		return (false);
 
+#ifdef XR_PLATFORM_APPLE
+	__atomic_fetch_add(&dwOpenCounter, 1u, __ATOMIC_RELAXED); // files are opened from several threads; the count drives the disk icon
+#else
 	++dwOpenCounter;
+#endif
 	desc = &*I;
 	return (true);
 }
@@ -1714,6 +1738,7 @@ void CLocatorAPI::w_close(IWriter*& S)
 
 CLocatorAPI::files_it CLocatorAPI::file_find_it(LPCSTR fname)
 {
+	FS_FILES_LOCK;
 	// проверить нужно ли пересканировать пути
 	check_pathes();
 
@@ -1730,6 +1755,7 @@ CLocatorAPI::files_it CLocatorAPI::file_find_it(LPCSTR fname)
 
 BOOL CLocatorAPI::dir_delete(LPCSTR path, LPCSTR nm, BOOL remove_files)
 {
+	FS_FILES_LOCK;
 	string_path fpath;
 	if (path && path[0]) update_path(fpath, path, nm);
 	else xr_strcpy(fpath, sizeof(fpath), nm);
@@ -1778,6 +1804,7 @@ BOOL CLocatorAPI::dir_delete(LPCSTR path, LPCSTR nm, BOOL remove_files)
 
 void CLocatorAPI::file_delete(LPCSTR path, LPCSTR nm)
 {
+	FS_FILES_LOCK;
 	string_path fname;
 	if (path && path[0]) update_path(fname, path, nm);
 	else xr_strcpy(fname, sizeof(fname), nm);
@@ -1813,6 +1840,7 @@ void CLocatorAPI::file_copy(LPCSTR src, LPCSTR dest)
 
 void CLocatorAPI::file_rename(LPCSTR src, LPCSTR dest, bool bOwerwrite)
 {
+	FS_FILES_LOCK;
 	files_it S = file_find_it(src);
 	if (S != m_files.end())
 	{
@@ -1843,6 +1871,7 @@ void CLocatorAPI::file_rename(LPCSTR src, LPCSTR dest, bool bOwerwrite)
 
 int CLocatorAPI::file_length(LPCSTR src)
 {
+	FS_FILES_LOCK;
 	files_it I = file_find_it(src);
 	return (I != m_files.end()) ? I->size_real : -1;
 }
@@ -1884,6 +1913,7 @@ return get_path(initial)->_update(dest,src);
 
 u32 CLocatorAPI::get_file_age(LPCSTR nm)
 {
+	FS_FILES_LOCK;
 	// проверить нужно ли пересканировать пути
 	check_pathes();
 
@@ -1893,6 +1923,7 @@ u32 CLocatorAPI::get_file_age(LPCSTR nm)
 
 void CLocatorAPI::set_file_age(LPCSTR nm, u32 age)
 {
+	FS_FILES_LOCK;
 	// проверить нужно ли пересканировать пути
 	check_pathes();
 
@@ -1919,6 +1950,7 @@ void CLocatorAPI::set_file_age(LPCSTR nm, u32 age)
 
 void CLocatorAPI::rescan_path(LPCSTR full_path, BOOL bRecurse)
 {
+	FS_FILES_LOCK;
 	file desc;
 	desc.name = full_path;
 	files_it I = m_files.lower_bound(desc);
@@ -1946,6 +1978,7 @@ void CLocatorAPI::rescan_path(LPCSTR full_path, BOOL bRecurse)
 
 void CLocatorAPI::rescan_pathes()
 {
+	FS_FILES_LOCK;
 	m_Flags.set(flNeedRescan, FALSE);
 	for (PathPairIt p_it = pathes.begin(); p_it != pathes.end(); p_it++)
 	{
@@ -1973,6 +2006,7 @@ void CLocatorAPI::unlock_rescan()
 
 void CLocatorAPI::check_pathes()
 {
+	FS_FILES_LOCK;
 	if (m_Flags.is(flNeedRescan) && (0 == m_iLockRescan))
 	{
 		lock_rescan();
