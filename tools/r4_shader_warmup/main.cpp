@@ -633,11 +633,12 @@ void print_failures(const std::vector<JobResult>& results, bool show_missing)
     }
 }
 
-// The vertex/pixel pairs the engine builds: pixel inputs the vertex shader never writes are zero-filled by the shim
-// (Context::fragmentFunctionFor); build the same variant here and let Metal compile it.
+// The vertex/pixel pairs the engine builds: pixel inputs the vertex shader never writes are zero-filled, and inputs it writes
+// with another width are adapted, by the shim (Context::fragmentFunctionFor); build the same variant here and let Metal
+// compile it. A stock pair that needs either is listed: the shim logs one line per such pair at run time.
 struct PairReport
 {
-    int pairs = 0, with_missing = 0, patched_ok = 0, patched_failed = 0, skipped = 0, stress = 0, stress_failed = 0;
+    int pairs = 0, with_missing = 0, with_mismatch = 0, patched_ok = 0, patched_failed = 0, skipped = 0, stress = 0, stress_failed = 0;
     std::vector<std::string> notes;
 };
 
@@ -694,27 +695,32 @@ PairReport check_pairs(const std::vector<JobResult>& results, const Requests& fo
         const auto outs = mtl_d3d11::ParseInterpolants(vsrc, "main0_out");
         const auto ins = mtl_d3d11::ParseInterpolants(psrc, "main0_in");
         std::vector<mtl_d3d11::Interpolant> missing;
-        for (const auto& in : ins)
-        {
-            bool written = false;
-            for (const auto& out : outs)
-                written |= out.location == in.location;
-            if (!written)
-                missing.push_back(in);
-        }
-        if (missing.empty())
+        std::vector<mtl_d3d11::InterpolantPair> mismatched;
+        mtl_d3d11::CompareInterpolants(outs, ins, &missing, &mismatched);
+        if (missing.empty() && mismatched.empty())
             continue;
-        ++rep.with_missing;
-        std::string note = pr.first + ".vs + " + pr.second + ".ps: " + std::to_string(missing.size()) + " unwritten input(s) at locn";
-        for (const auto& m : missing)
-            note += " " + std::to_string(m.location);
+        if (!missing.empty())
+            ++rep.with_missing;
+        if (!mismatched.empty())
+            ++rep.with_mismatch;
+        std::string note = pr.first + ".vs + " + pr.second + ".ps:";
+        if (!missing.empty())
+        {
+            note += " " + std::to_string(missing.size()) + " unwritten input(s) at locn";
+            for (const auto& m : missing)
+                note += " " + std::to_string(m.location);
+        }
+        for (const auto& m : mismatched)
+            note += " locn" + std::to_string(m.pixel.location) + " reads " + m.pixel.type + ", written as " + m.vertex.type;
         if (!ctx.metal)
         {
             rep.notes.push_back(note);
             continue;
         }
+        // the variant the shim builds at draw time (Context::fragmentFunctionFor)
         mtl_d3d11::ShaderBlob patched = *p->second;
-        const std::string text = mtl_d3d11::PatchFragmentInputs(psrc, missing);
+        std::string text = mtl_d3d11::AdaptFragmentInputs(psrc, mismatched);
+        text = mtl_d3d11::PatchFragmentInputs(text, missing);
         patched.payload.assign(text.begin(), text.end());
         const std::vector<uint8_t> container = mtl_d3d11::Serialize(patched);
         ID3D11PixelShader* shader = nullptr;
@@ -722,12 +728,12 @@ PairReport check_pairs(const std::vector<JobResult>& results, const Requests& fo
         {
             ++rep.patched_ok;
             shader->Release();
-            rep.notes.push_back(note + " -> zero-filled variant compiles");
+            rep.notes.push_back(note + " -> adapted variant compiles");
         }
         else
         {
             ++rep.patched_failed;
-            rep.notes.push_back(note + " -> PATCHED VARIANT FAILED TO COMPILE");
+            rep.notes.push_back(note + " -> ADAPTED VARIANT FAILED TO COMPILE");
         }
     }
     return rep;
@@ -882,10 +888,11 @@ int main(int argc, char** argv)
     }
     print_failures(results, true);
     const PairReport pairs = check_pairs(results, found, ctx);
-    printf("\nvertex/pixel pairs: %d checked (%d not compiled), %d have pixel inputs the vertex shader does not write",
-           pairs.pairs, pairs.skipped, pairs.with_missing);
+    printf("\nvertex/pixel pairs: %d checked (%d not compiled), %d have pixel inputs the vertex shader does not write, %d read an input "
+           "in another width than the vertex shader writes it",
+           pairs.pairs, pairs.skipped, pairs.with_missing, pairs.with_mismatch);
     if (ctx.metal)
-        printf("; zero-filled variants: %d compile, %d fail", pairs.patched_ok, pairs.patched_failed);
+        printf("; adapted variants: %d compile, %d fail", pairs.patched_ok, pairs.patched_failed);
     printf("\n");
     if (ctx.metal)
         printf("pixel-input patching stress test: %d variants compiled with Metal, %d failed\n", pairs.stress,

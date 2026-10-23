@@ -123,32 +123,57 @@ void faultHandler(int sig, siginfo_t* info, void* ctx)
     }
 }
 
-// Each thread needs its own alternate stack so a runaway recursion can also be caught. A thread that already has one (a
-// sanitizer runtime or a crash reporter installed it) keeps it; one this guard installed is removed and freed with the thread.
+// Each thread needs its own alternate stack so a runaway recursion can also be caught.
+//
+//  * A thread that already has one (a crash reporter installed it) keeps it.
+//  * Under a sanitizer the runtime gives every thread it starts an alternate stack and, at thread exit, unmaps whatever is installed
+//    at that moment: a block of this guard's would be unmapped by someone else, so the guard installs nothing there.
+//  * Otherwise the guard installs a stack of its own and removes and frees it with the thread. Darwin refuses to disable a stack
+//    whose size is left at zero and keeps it installed, so the disable carries the real size; if it still fails the block is
+//    leaked, because freeing an installed alternate stack is worse than losing 64 KB.
+#if defined(__SANITIZE_ADDRESS__) || defined(__SANITIZE_THREAD__)
+#define XLAT_SANITIZER_OWNS_ALT_STACK 1
+#elif defined(__has_feature)
+#if __has_feature(address_sanitizer) || __has_feature(thread_sanitizer) || __has_feature(memory_sanitizer)
+#define XLAT_SANITIZER_OWNS_ALT_STACK 1
+#endif
+#endif
+
 struct AltStack
 {
+    static constexpr size_t kSize = 64 * 1024;
     void* mem = nullptr;
     AltStack()
     {
+#ifdef XLAT_SANITIZER_OWNS_ALT_STACK
+        return;
+#else
         stack_t cur = {};
         if (sigaltstack(nullptr, &cur) == 0 && !(cur.ss_flags & SS_DISABLE))
             return;
         stack_t ss = {};
-        ss.ss_size = 64 * 1024;
+        ss.ss_size = kSize;
         ss.ss_sp = mem = std::malloc(ss.ss_size);
         if (ss.ss_sp && sigaltstack(&ss, nullptr) != 0)
         {
             std::free(mem);
             mem = nullptr;
         }
+#endif
     }
     ~AltStack()
     {
         if (!mem)
             return;
-        stack_t ss = {};
-        ss.ss_flags = SS_DISABLE;
-        sigaltstack(&ss, nullptr);
+        stack_t cur = {};
+        if (sigaltstack(nullptr, &cur) == 0 && cur.ss_sp == mem && !(cur.ss_flags & SS_DISABLE))
+        {
+            stack_t ss = {};
+            ss.ss_flags = SS_DISABLE;
+            ss.ss_size = kSize;
+            if (sigaltstack(&ss, nullptr) != 0)
+                return; // still installed
+        }
         std::free(mem);
     }
 };

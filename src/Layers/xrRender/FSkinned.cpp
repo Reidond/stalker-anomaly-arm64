@@ -36,8 +36,23 @@ s16 q_P(float v)
 
 u8 q_N(float v)
 {
+	// A NaN would reach the float to int conversion (undefined; x64 gave INT_MIN, arm64 gives 0): it is "no vector", the middle of the range.
+	if (v != v) v = 0.f;
 	int _v = clampr(iFloor((v + 1.f) * 127.5f), 0, 255);
 	return u8(_v);
+}
+
+// 139 stock models (item_merger, mwolf, rotan, a few stalker suits and masks, a hundred weapon variants) carry a binormal of
+// (inf, inf, inf) on 779 of their 25.5 million skinned vertices, and 5,512 vertices of weapons an infinite texture coordinate.
+// normalize_safe makes a NaN of an infinite vector (inf * 0), which then reaches the quantisation above. Such a component
+// carries no information: 0.
+static IC float finite_or_zero(float x) { return std::isfinite(x) ? x : 0.f; }
+
+static IC void sanitize_frame(Fvector3& N, Fvector3& T, Fvector3& B)
+{
+	N.set(finite_or_zero(N.x), finite_or_zero(N.y), finite_or_zero(N.z));
+	T.set(finite_or_zero(T.x), finite_or_zero(T.y), finite_or_zero(T.z));
+	B.set(finite_or_zero(B.x), finite_or_zero(B.y), finite_or_zero(B.z));
 }
 
 s16 q_tc(float v)
@@ -77,6 +92,7 @@ struct vertHW_1W
 
 	void set(Fvector3& P, Fvector3 N, Fvector3 T, Fvector3 B, Fvector2& tc, int index)
 	{
+		sanitize_frame(N, T, B);
 		N.normalize_safe();
 		T.normalize_safe();
 		B.normalize_safe();
@@ -87,8 +103,8 @@ struct vertHW_1W
 		_N_I = color_rgba(q_N(N.x), q_N(N.y), q_N(N.z), u8(index));
 		_T = color_rgba(q_N(T.x), q_N(T.y), q_N(T.z), 0);
 		_B = color_rgba(q_N(B.x), q_N(B.y), q_N(B.z), 0);
-		_tc[0] = tc.x;
-		_tc[1] = tc.y;
+		_tc[0] = finite_or_zero(tc.x);
+		_tc[1] = finite_or_zero(tc.y);
 	}
 
 	u16 get_bone() const
@@ -133,6 +149,7 @@ struct vertHW_2W
 
 	void set(Fvector3& P, Fvector3 N, Fvector3 T, Fvector3 B, Fvector2& tc, int index0, int index1, float w)
 	{
+		sanitize_frame(N, T, B);
 		N.normalize_safe();
 		T.normalize_safe();
 		B.normalize_safe();
@@ -143,8 +160,8 @@ struct vertHW_2W
 		_N_w = color_rgba(q_N(N.x), q_N(N.y), q_N(N.z), u8(clampr(iFloor(w * 255.f + .5f), 0, 255)));
 		_T = color_rgba(q_N(T.x), q_N(T.y), q_N(T.z), 0);
 		_B = color_rgba(q_N(B.x), q_N(B.y), q_N(B.z), 0);
-		_tc_i[0] = tc.x;
-		_tc_i[1] = tc.y;
+		_tc_i[0] = finite_or_zero(tc.x);
+		_tc_i[1] = finite_or_zero(tc.y);
 		_tc_i[2] = s16(index0);
 		_tc_i[3] = s16(index1);
 	}
@@ -204,6 +221,7 @@ struct vertHW_3W
 	void set(Fvector3& P, Fvector3 N, Fvector3 T, Fvector3 B, Fvector2& tc, int index0, int index1, int index2,
 	         float w0, float w1)
 	{
+		sanitize_frame(N, T, B);
 		N.normalize_safe();
 		T.normalize_safe();
 		B.normalize_safe();
@@ -214,8 +232,8 @@ struct vertHW_3W
 		_N_w = color_rgba(q_N(N.x), q_N(N.y), q_N(N.z), u8(clampr(iFloor(w0 * 255.f + .5f), 0, 255)));
 		_T_w = color_rgba(q_N(T.x), q_N(T.y), q_N(T.z), u8(clampr(iFloor(w1 * 255.f + .5f), 0, 255)));
 		_B_i = color_rgba(q_N(B.x), q_N(B.y), q_N(B.z), u8(index2));
-		_tc_i[0] = tc.x;
-		_tc_i[1] = tc.y;
+		_tc_i[0] = finite_or_zero(tc.x);
+		_tc_i[1] = finite_or_zero(tc.y);
 		_tc_i[2] = s16(index0);
 		_tc_i[3] = s16(index1);
 	}
@@ -300,6 +318,7 @@ struct vertHW_4W
 	void set(Fvector3& P, Fvector3 N, Fvector3 T, Fvector3 B, Fvector2& tc, int index0, int index1, int index2,
 	         int index3, float w0, float w1, float w2)
 	{
+		sanitize_frame(N, T, B);
 		N.normalize_safe();
 		T.normalize_safe();
 		B.normalize_safe();
@@ -310,8 +329,8 @@ struct vertHW_4W
 		_N_w = color_rgba(q_N(N.x), q_N(N.y), q_N(N.z), u8(clampr(iFloor(w0 * 255.f + .5f), 0, 255)));
 		_T_w = color_rgba(q_N(T.x), q_N(T.y), q_N(T.z), u8(clampr(iFloor(w1 * 255.f + .5f), 0, 255)));
 		_B_w = color_rgba(q_N(B.x), q_N(B.y), q_N(B.z), u8(clampr(iFloor(w2 * 255.f + .5f), 0, 255)));
-		_tc[0] = tc.x;
-		_tc[1] = tc.y;
+		_tc[0] = finite_or_zero(tc.x);
+		_tc[1] = finite_or_zero(tc.y);
 		_i = color_rgba(u8(index0), u8(index1), u8(index2), u8(index3));
 	}
 

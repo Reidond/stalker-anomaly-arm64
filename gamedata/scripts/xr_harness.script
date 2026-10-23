@@ -196,3 +196,62 @@ function options_tree()
 	walk(ui_options.options, "")
 	log("OPTIONS locked rows visible: %d (locks %s)", locked, tostring(gfx_locks_active and gfx_locks_active() or false))
 end
+
+-- a story character (esc_m_trader, esc_wolf, ...) starts talking to the player: the dialog window opens
+function talk(story)
+	local id = get_story_object_id(story)
+	local npc = id and level.object_by_id(id)
+	if not npc then
+		log("no online story object %s", story)
+		return
+	end
+	db.actor:run_talk_dialog(npc, false)
+	log("talk %s", story)
+end
+
+-- plays a particle effect of particles.xr (`_samples_particles_\fire_01`, `explosions\explosion_dynamite`, ...) `dist` metres in front of the
+-- player, `up` metres above his feet, for `seconds` (the effect loops until it is stopped)
+local playing = {}
+function particle(name, dist, up, seconds)
+	local cam = device().cam_dir
+	local p = db.actor:position()
+	local at = vector():set(p.x + cam.x * dist, p.y + (up or 0), p.z + cam.z * dist)
+	local fx = particles_object(name)
+	fx:play_at_pos(at)
+	playing[#playing + 1] = fx
+	log("particle %s at %.1f %.1f %.1f", name, at.x, at.y, at.z)
+end
+
+function particles_stop()
+	for _, fx in ipairs(playing) do
+		fx:stop()
+	end
+	playing = {}
+end
+
+-- the blowout's sky and light, `from` seconds into the effect (`fx_blowout_day` / `fx_blowout_night`): the surge manager plays the same
+-- one, but only through its several-minute script of waves, cover and deaths
+function blowout(night, from)
+	local fx = night and "fx_blowout_night" or "fx_blowout_day"
+	level.start_weather_fx_from_time(fx, from or 0)
+	log("blowout %s from %s s", fx, tostring(from or 0))
+end
+
+-- the night vision effect of a device section (device_torch_nv_1 .. 3), as the device script switches it
+function nightvision(on, section)
+	item_device.set_nightvision(section or "device_torch_nv_2", on ~= false)
+	log("nightvision %s %s", tostring(on ~= false), section or "device_torch_nv_2")
+end
+
+-- a weapon section (wpn_svd_1p29 has its scope built on) into the hands: `slot` 2 is the primary
+function weapon(section, slot)
+	local w = db.actor:object(section)
+	if not w then
+		alife_create_item(section, db.actor)
+		log("weapon %s created, call again to take it", section)
+		return
+	end
+	db.actor:move_to_slot(w, slot or 2)
+	db.actor:activate_slot(slot or 2)
+	log("weapon %s in slot %d", section, slot or 2)
+end

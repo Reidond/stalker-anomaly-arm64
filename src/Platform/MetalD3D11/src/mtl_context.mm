@@ -916,20 +916,7 @@ id<MTLFunction> Context::fragmentFunctionFor(VertexShader* vs, PixelShader* ps)
 
     std::vector<Interpolant> missing;
     std::vector<InterpolantPair> mismatched;
-    for (const Interpolant& in : ps->interpolants)
-    {
-        const Interpolant* written = nullptr;
-        for (const Interpolant& out : vs->interpolants)
-            if (out.location == in.location)
-            {
-                written = &out;
-                break;
-            }
-        if (!written)
-            missing.push_back(in);
-        else if (written->type != in.type)
-            mismatched.push_back({in, *written});
-    }
+    CompareInterpolants(vs->interpolants, ps->interpolants, &missing, &mismatched);
     id<MTLFunction> fn = ps->fn;
     if (!missing.empty() || !mismatched.empty())
     {

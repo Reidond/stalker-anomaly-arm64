@@ -1,0 +1,7 @@
+# Night vision on, in the Rookie village at night.
+1 console run_string xr_harness.env(0,30,"w_clear2")
+3 console run_string xr_harness.tp(-215,-8.5,-40.6,0)
+20 console run_string xr_harness.nightvision(true)
+27 console screenshot 16_nightvision
+29 console run_string xr_harness.nightvision(false)
+31 quit
