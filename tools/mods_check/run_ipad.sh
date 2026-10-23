@@ -64,18 +64,20 @@ function ini_value()
     log("MODTEST ini value=" .. ini_file("modtest.ltx"):r_string("test", "value"))
 end
 
--- writes Documents/Mods/big/content/gamedata/textures/dirN/tex_I.dds, `files` files of `size` bytes (the start-up cost of a big mod is measured
--- at the next start; the files are never read)
-function make_big(files, size)
+-- writes <container>/Documents/Mods/big/content/gamedata/textures/dirN/tex_I.dds, `files` files of `size` bytes (the start-up cost of a big mod is
+-- measured at the next start; the files are never read). `base` replaces the container path (a test on another machine).
+function make_big(files, size, base)
     local lfs = require("lfs")
-    -- the virtual paths are lower case; xr_native_path puts the container's capitals back
-    local appdata = getFS():update_path("$app_data_root$", ""):gsub("\\", "/")
-    local at = appdata:lower():find("/library/", 1, true)
-    if not at then log("MODTEST make_big: no container path in " .. appdata) return end
-    local base = appdata:sub(1, at - 1)
+    if not base then
+        -- the virtual paths are lower case; xr_native_path puts the container's capitals back
+        local appdata = getFS():update_path("$app_data_root$", ""):gsub("\\", "/")
+        local at = appdata:lower():find("/library/", 1, true)
+        if not at then log("MODTEST make_big: no container path in " .. appdata) return end
+        base = appdata:sub(1, at - 1)
+    end
     local root = base .. "/Documents/Mods/big/content/gamedata/textures"
     local chunk = string.rep("x", size)
-    for _, d in ipairs({"/Documents/Mods/big", "/Documents/Mods/big/content", "/Documents/Mods/big/content/gamedata", "/Documents/Mods/big/content/gamedata/textures"}) do
+    for _, d in ipairs({"/Documents", "/Documents/Mods", "/Documents/Mods/big", "/Documents/Mods/big/content", "/Documents/Mods/big/content/gamedata", "/Documents/Mods/big/content/gamedata/textures"}) do
         lfs.mkdir(base .. d)
     end
     for i = 0, files - 1 do
