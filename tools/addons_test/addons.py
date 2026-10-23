@@ -43,7 +43,7 @@ SCENARIOS = {
     "shader_v2": dict(script=1, config=1, texture=1, shader=2, mcm=1, patches=1, addons=1, loose_priority=1, mcm_expect=42),
     "shader_v3": dict(script=1, config=1, texture=1, shader=3, mcm=1, patches=1, addons=1, loose_priority=1, mcm_expect=42),
     "case_variants": dict(script=1, config=1, texture=1, shader=1, mcm=1, patches=1, addons=1, loose_priority=1, variants=1, mcm_expect=42),
-    "removed": dict(mcm_expect=None),
+    "removed": dict(mcm_expect=None, mcm_reset=1),
 }
 
 TINTS = {1: "float3(1.0, 0.2, 0.2)", 2: "float3(0.2, 1.0, 0.2)", 3: "float3(0.2, 1.0, 0.2)"}
@@ -152,7 +152,7 @@ def lua_table(d, indent="\t"):
     return "".join(lines)
 
 
-def patched_distort(stock_ps, version):
+def patched_distort(stock_ps, version, nonce):
     """The stock r3\\distort.ps (the main menu's image pass: CRenderTarget creates it at start-up) with the picture tinted."""
     text = stock_ps.decode("latin-1")
     if "common.h" not in text or not re.search(r"return\s+float4\s*\(\s*image\s*,\s*1\s*\)\s*;", text):
@@ -160,10 +160,12 @@ def patched_distort(stock_ps, version):
     text = re.sub(r'(#include\s+"common\.h"[^\n]*)', lambda m: m.group(1) + '\n#include "zz_addon_tint.h"', text, count=1)
     factor = " * 0.9" if version == 3 else ""
     text = re.sub(r"return\s+float4\s*\(\s*image\s*,\s*1\s*\)\s*;", f"return float4(image * ZZ_ADDON_TINT{factor}, 1);", text, count=1)
+    # the translation cache is content-addressed and keeps what it has seen: a run id makes every run's shader new to it
+    text += f"\n// addons_test run {nonce}{' v3' if version == 3 else ''}\n"
     return text.encode("latin-1")
 
 
-def stage(scenario, out, game_dir, xrdb_unpack, mode="boot"):
+def stage(scenario, out, game_dir, xrdb_unpack, mode="boot", nonce="0"):
     if scenario not in SCENARIOS:
         raise SystemExit(f"unknown scenario {scenario}; known: {', '.join(SCENARIOS)}")
     cfg = SCENARIOS[scenario]
@@ -199,9 +201,9 @@ def stage(scenario, out, game_dir, xrdb_unpack, mode="boot"):
 
     if cfg.get("shader"):
         v = cfg["shader"]
-        ps = patched_distort(stock.read("db/shaders.db0", "shaders/r3/distort.ps"), v)
+        ps = patched_distort(stock.read("db/shaders.db0", "shaders/r3/distort.ps"), v, nonce)
         sizes["distort_ps"] = write(os.path.join(gamedata, "Shaders", "R3", "Distort.PS"), ps)
-        header = f"// test addon \"shader\": tint of the main menu's image pass (version {v})\n#define ZZ_ADDON_TINT {TINTS[v]}\n"
+        header = f"// test addon \"shader\": tint of the main menu's image pass (version {v}, run {nonce})\n#define ZZ_ADDON_TINT {TINTS[v]}\n"
         sizes["tint_h"] = write(os.path.join(gamedata, "Shaders", "R3", "ZZ_Addon_Tint.H"), header)
 
     if cfg.get("patches"):
@@ -232,6 +234,7 @@ def stage(scenario, out, game_dir, xrdb_unpack, mode="boot"):
         "script": bool(cfg.get("script")), "config": bool(cfg.get("config")), "texture": bool(cfg.get("texture")),
         "shader": bool(cfg.get("shader")), "mcm": bool(cfg.get("mcm")),
         "archive_patches": bool(cfg.get("patches")), "archive_addons": bool(cfg.get("addons")),
+        "mcm_reset": bool(cfg.get("mcm_reset")),
         "mcm_write": cfg.get("mcm_write"), "mcm_expect": cfg.get("mcm_expect"),
         "size": sizes, "layer": layer,
     }
@@ -254,6 +257,8 @@ def main():
     p.add_argument("scenario")
     p.add_argument("out")
     p.add_argument("--mode", choices=("boot", "game"), default="boot")
+    p.add_argument("--nonce", default=os.environ.get("ADDONS_TEST_NONCE", "0"),
+                   help="run id written into the shader files so the translation cache has not seen them (default $ADDONS_TEST_NONCE)")
     p.add_argument("--game-dir")
     p.add_argument("--xrdb-unpack")
     sub.add_parser("scenarios")
@@ -262,7 +267,7 @@ def main():
         for name in SCENARIOS:
             print(name)
         return 0
-    manifest = stage(args.scenario, args.out, find_game_dir(args.game_dir), find_xrdb_unpack(args.xrdb_unpack), args.mode)
+    manifest = stage(args.scenario, args.out, find_game_dir(args.game_dir), find_xrdb_unpack(args.xrdb_unpack), args.mode, args.nonce)
     print(f"{args.out}: {len(manifest)} files for scenario {args.scenario}")
     return 0
 

@@ -49,6 +49,12 @@ function run()
 	local want = zz_addon_expect.want
 	printf("%s", "ADDON_TEST_BEGIN scenario=" .. zz_addon_expect.scenario)
 
+	-- a run that starts from nothing: forget the value an earlier run stored (the page itself is not installed in that scenario)
+	if want.mcm_reset then
+		axr_main.config:remove_line("mcm_zz_addon", "volume")
+		axr_main.config:save()
+	end
+
 	-- script addon: a new script; once a game has started (axr_main calls every script's on_game_start): its on_game_start ran
 	-- and the monkey-patched stock function does its own thing for "ZZ_" strings and passes everything else through
 	check("script_new", want.script, function() return _G.zz_addon_script ~= nil end)

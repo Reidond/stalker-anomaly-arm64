@@ -148,6 +148,24 @@ std::string ResolveOverlaySource(const InitParams& params)
     return dir;
 }
 
+// Whether the volume of 'dir' tells "Scripts" from "scripts". The engine's own lookups ignore case either way, but an addon unzipped in
+// the Files app lands in one merged folder on a case-insensitive volume and in two folders on a case-sensitive one, so the log says.
+bool VolumeIsCaseSensitive(const std::string& dir)
+{
+    const std::string a = dir + "/.case_probe_Aa";
+    const std::string b = dir + "/.case_probe_aA";
+    unlink(a.c_str());
+    unlink(b.c_str());
+    FILE* f = fopen(a.c_str(), "wb");
+    if (!f)
+        return false;
+    fclose(f);
+    struct stat st;
+    const bool sensitive = stat(b.c_str(), &st) != 0;
+    unlink(a.c_str());
+    return sensitive;
+}
+
 std::string BuildFsGameLtx(const Paths& p)
 {
     std::ostringstream out;
@@ -328,6 +346,7 @@ bool Init(const InitParams& params)
             Log("ANOMALY_CLEAR_SHADER_CACHE: shader cache emptied (%s)", p.shader_cache.c_str());
         Log("shell dir: %s", p.shell_dir.c_str());
         Log("HOME: %s", getenv("HOME") ? getenv("HOME") : "(unset)");
+        Log("volume: file names are case-%s", VolumeIsCaseSensitive(p.caches) ? "sensitive" : "insensitive");
         if (s.previous_session_unexpected)
             Log("previous session ended unexpectedly (crash, jetsam or force quit)");
         if (s.previous_crash_log)
