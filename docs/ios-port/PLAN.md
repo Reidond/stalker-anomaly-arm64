@@ -129,11 +129,11 @@ The JIT stays available as the opt-in route for full speed: SideStore + StikDebu
 
 State (2026-10-23, measured on the Mac and on the iPad; the method, tools and tables are in [LUA-PERF.md](LUA-PERF.md), the iPad's numbers also in [IPAD.md](IPAD.md#lua-on-the-ipad)):
 
-1. **Measured.** Lua is 0.9 to 3.6 ms of a frame on the iPad's interpreter, 5 to 12 % of the frame budget in the Cordon, the Rookie village and the Bar, in both modes; both modes hold their cap
+1. **Measured.** Lua is 1.0 to 3.6 ms of a frame on the iPad's interpreter, 6 to 11 % of the frame budget in the Cordon, the Rookie village and the Bar, in both modes; both modes hold their cap
    (Quality 30 fps, Performance 60). The profile is flat: a quarter of the time is the collector, half is engine functions called from scripts, a fifth is bytecode.
 2. **Bytecode cache.** Built (`Library/Caches/Anomaly/lua`, keyed by a hash of the exact text, any mismatch or error loads the source; tested for stale sources, addon overrides and damaged entries). It
-   gains little because compiling is not where the load time goes: the scripts are 0.35 s of a 6 s level load on the iPad and 65 ms of that is compiling. An opt-in read-ahead thread (`-lua_prefetch`) takes a warm load
-   to 16 to 21 ms instead of ~95 ms on the Mac; it is off because it is not measured on the iPad.
+   gains little because compiling is not where the load time goes: the scripts are 0.33 s of a 5.5 s level load on the iPad and 66 ms of that is compiling. An opt-in read-ahead thread (`-lua_prefetch`) takes a warm load
+   to 10 ms instead of 66 on the iPad (16 to 21 instead of ~95 on the Mac), about 50 ms of the load; it is off by default (a thread next to the engine's allocator and collector threads).
 3. **Hot paths: not needed**, the budget holds with room; nothing was ported.
 
 ## Risks

@@ -176,13 +176,13 @@ The iPad runs LuaJIT as an interpreter. Measured with the engine's own timers (`
 | Mode | fps | Lua per frame | share of the budget | frames on the beat |
 |---|---:|---:|---:|---:|
 | Quality (30 fps cap) | 29.9 / 29.9 / 30.0 | 2.6 / 3.6 / 2.9 ms | 8 / 11 / 8 % of 33.3 ms | 98.5 / 99.3 / 100 % |
-| Performance (60 fps) | 60.0 / 59.8 / 60.0 | 0.9 / 2.0 / 1.1 ms | 5 / 12 / 7 % of 16.7 ms | 99.6 / 98.5 / 99.8 % |
+| Performance (60 fps) | 59.9 / 59.7 / 60.0 | 1.0 / 1.9 / 1.2 ms | 6 / 11 / 7 % of 16.7 ms | 99.7 / 98.3 / 99.7 % |
 
 **The budget holds in both modes, so no script function was moved to C++.** The profile is flat: 22 to 24 % of the Lua time is bytecode, about half is engine functions called from scripts, a
-quarter is the collector. The collector's steps run on a second thread (3 to 4 ms per frame there, parallel to the renderer). Level load: the scripts are 0.33 to 0.35 s of the ~6 s (running
-their main chunks, 250 to 270 ms, is most of it; the compile is 65 ms). The bytecode cache (`Library/Caches/Anomaly/lua`) does not shorten it (reading 474 small
-files takes as long as parsing them); an opt-in read-ahead thread (`-lua_prefetch`) removes that on the Mac and is not enabled (not verified on the iPad). New game: the Lua part is 0.34 to 0.46 s; a steady 60 fps window ends 27 to 29 s
-after Start. The Time Profiler figure in "Performance: where the time goes" (`lua_pcall` about 1.4 ms per frame at the 60 fps preset) agrees: the field is 0.9 ms in Performance and 2.6 ms in Quality (a Quality frame covers two frames of game time).
+quarter is the collector. The collector's steps run on a second thread (3 to 4 ms per frame there, parallel to the renderer). Level load: the scripts are 0.32 to 0.34 s of the ~5.5 s (running
+their main chunks, 250 ms, is most of it; the compile is 66 ms). The bytecode cache (`Library/Caches/Anomaly/lua`) barely shortens it (reading 474 small
+files takes as long as parsing them: 319 against 326 to 343 ms); an opt-in read-ahead thread (`-lua_prefetch`) takes the file reads off the load and saves 50 ms more (268 to 275 ms), and is not enabled by default. New game: the Lua part is 0.34 to 0.46 s; a steady 60 fps window ends 27 to 29 s
+after Start. The Time Profiler figure in "Performance: where the time goes" (`lua_pcall` about 1.4 ms per frame at the 60 fps preset) agrees: the field is 1.0 ms in Performance and 2.6 ms in Quality (a Quality frame covers two frames of game time).
 
 Switches: `-lua_perf`, `-lua_profile`, `-no_lua_cache` in `Documents/commandline.txt`; console `lua_perf`, `lua_profile`, `lua_cache` (with `-dbg`). `tools/ios/lua_measure.sh` repeats the whole set (about 45 minutes).
 

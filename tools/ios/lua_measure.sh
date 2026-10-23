@@ -17,6 +17,7 @@
 #     -q           the load test only (no timer or profiler runs)
 #     -P           the profiler run only
 #     -c states    cache states of the load test (default "off cold warm")
+#     -x flags     more engine flags for every run, e.g. -lua_prefetch
 #     -T           the timer runs only
 #     -m modes     graphics modes of the timer runs (default "quality performance")
 #
@@ -37,8 +38,9 @@ profonly=0
 timersonly=0
 modes="quality performance"
 states="off cold warm"
-while getopts "is:o:k:n:w:gqPTm:c:" opt; do
-    case $opt in i) install=1;; s) save=$OPTARG;; o) out=$OPTARG;; k) lock=$OPTARG;; n) loads=$OPTARG;; w) soak=$OPTARG;; g) newgame=1;; m) modes=$OPTARG;; c) states=$OPTARG;; T) timersonly=1;; q) quick=1;; P) profonly=1; quick=1;; *) exit 2;; esac
+extra=""
+while getopts "is:o:k:n:w:gqPTm:c:x:" opt; do
+    case $opt in i) install=1;; s) save=$OPTARG;; o) out=$OPTARG;; k) lock=$OPTARG;; n) loads=$OPTARG;; w) soak=$OPTARG;; g) newgame=1;; m) modes=$OPTARG;; c) states=$OPTARG;; x) extra=$OPTARG;; T) timersonly=1;; q) quick=1;; P) profonly=1; quick=1;; *) exit 2;; esac
 done
 if [[ -n $lock && -e $lock ]]; then echo "the iPad is in use ($lock exists)" >&2; exit 3; fi
 mkdir -p "$out"
@@ -62,7 +64,7 @@ run() { # name script [args]: a launch, its console output, the shell log and th
     done
     echo "== $name"
     # engine flags go through Documents/commandline.txt: devicectl would read `-lua_perf` as its own `-l`
-    printf '%s\n' "$@" > "$out/commandline.txt"
+    printf '%s\n' "$@" ${=extra} > "$out/commandline.txt"
     $ipad put "$out/commandline.txt" commandline.txt > "$out/$name.out" 2>&1 || true
     # No `--console`: a launch with the console attached failed with error 10002 (EINVAL) most of the time after the first one. The script is copied to
     # Documents, the app is started on its own and polled until it is gone; a launch that fails ("pid could not be determined") is tried up to three times.
