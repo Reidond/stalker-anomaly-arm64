@@ -187,6 +187,26 @@ local function survival()
 	H.pause(10000)
 	C.check("survival", "antirad", db.actor.radiation < rad1 - 0.02, string.format("radiation %.3f -> %.3f", rad1, db.actor.radiation))
 
+	-- quick use: a new install has a medkit in quick slot 1 and a bandage in 2 (slot_0 .. slot_3 of default_controls.ltx); F1 and F2 use them
+	C.run("survival", "quick-slots", function()
+		local con = get_console()
+		return con:get_string("slot_0") == "medkit" and con:get_string("slot_1") == "bandage", string.format("quick slots hold %s, %s, %s, %s", con:get_string("slot_0"), con:get_string("slot_1"), con:get_string("slot_2"), con:get_string("slot_3"))
+	end)
+	wound(0.15)
+	H.pause(2000)
+	give("medkit", 2)
+	H.pause(1000)
+	local kits0, hp2 = C.count("medkit"), db.actor.health
+	H.press(key_bindings.kQUICK_USE_1, 150)
+	H.pause(8000)
+	C.check("survival", "quick-use-1", C.count("medkit") == kits0 - 1 and db.actor.health > hp2 + 0.03, string.format("F1: medkits %d -> %d, health %.3f -> %.3f", kits0, C.count("medkit"), hp2, db.actor.health))
+	give("bandage", 2)
+	H.pause(1000)
+	local bands0, bleed2 = C.count("bandage"), db.actor.bleeding
+	H.press(key_bindings.kQUICK_USE_2, 150)
+	H.pause(6000)
+	C.check("survival", "quick-use-2", C.count("bandage") == bands0 - 1 and db.actor.bleeding < 0.001, string.format("F2: bandages %d -> %d, bleeding %.4f -> %.5f", bands0, C.count("bandage"), bleed2, db.actor.bleeding))
+
 	-- psy health and stamina
 	local p0 = db.actor.power
 	H.press_dik(DIK_keys.DIK_W, 100)
