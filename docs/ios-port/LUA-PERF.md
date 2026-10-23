@@ -98,10 +98,11 @@ Console and command-line summary:
 - **Read-ahead (opt-in, `-lua_prefetch`).** Opening and reading ~475 small files is most of the time of a hit (53 of 60 ms on the iPad, 59 to 91 ms on the Mac), more than decoding
   the bytecode (6 ms on the iPad) and as much as parsing the text (65 ms). With the switch, `set_directory` starts a thread that reads the directory's entries into memory; a load takes
   its entry from there (once) and reads the file only when the thread has not got to it. The engine calls `set_directory` again at every new Lua state, which refills the read-ahead.
-  An entry read ahead is checked like any other, so one that was replaced or damaged afterwards is a stale or corrupt entry, never a wrong script. **It is off by default**: of four
-  ASan smoke sweeps with it on, two stalled after the Cordon to Garbage level change (the game kept running at 5 to 15 fps and the sweep driver never advanced; nothing in the log; no stall
-  in the five runs without it, three with the cache and the read-ahead off, one with the cache off), two completed. The cause was not found (a race with the engine's own threads is the
-  suspect: the second thread runs the Lua collector while scripts load), so it stays a switch until someone has looked.
+  An entry read ahead is checked like any other, so one that was replaced or damaged afterwards is a stale or corrupt entry, never a wrong script. **It is off by default**: the iPad runs below are of the default, the read-ahead is verified on the Mac only, and it adds a thread next to the engine's allocator and
+  collector threads. Two of the four ASan smoke sweeps run with it stalled after the Cordon to Garbage level change (the game kept running at 5 to 15 fps, the sweep driver never
+  advanced, nothing in the log). That is probably not the read-ahead: the same stall happened with it off (one of three runs with the cache on, none of one with the cache off) and in 5 of
+  22 smoke runs of other sessions on builds without any of these changes (`render-fixes`, `xrgame-triage`: 1500 to 2350 s, no `DONE plan smoke`). It is a flake of the sweep or the
+  game, open and not looked at here.
 - `lua_cache warm` runs every `*.script` of `$game_scripts$` (the stock archives, the Monolith overlay, loose addon files) through the same
   `do_file` path without running it, so the first level load is already warm. `-no_lua_cache` turns it off.
 

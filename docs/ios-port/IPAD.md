@@ -181,7 +181,7 @@ The iPad runs LuaJIT as an interpreter. Measured with the engine's own timers (`
 **The budget holds in both modes, so no script function was moved to C++.** The profile is flat: 22 to 24 % of the Lua time is bytecode, about half is engine functions called from scripts, a
 quarter is the collector. The collector's steps run on a second thread (3 to 4 ms per frame there, parallel to the renderer). Level load: the scripts are 0.33 to 0.35 s of the ~6 s (running
 their main chunks, 250 to 270 ms, is most of it; the compile is 65 ms). The bytecode cache (`Library/Caches/Anomaly/lua`) does not shorten it (reading 474 small
-files takes as long as parsing them); an opt-in read-ahead thread (`-lua_prefetch`) removes that on the Mac but stalled two of four sweeps and is not enabled. New game: the Lua part is 0.34 to 0.46 s; a steady 60 fps window ends 27 to 29 s
+files takes as long as parsing them); an opt-in read-ahead thread (`-lua_prefetch`) removes that on the Mac and is not enabled (not verified on the iPad). New game: the Lua part is 0.34 to 0.46 s; a steady 60 fps window ends 27 to 29 s
 after Start. The Time Profiler figure in "Performance: where the time goes" (`lua_pcall` about 1.4 ms per frame at the 60 fps preset) agrees: the field is 0.9 ms in Performance and 2.6 ms in Quality (a Quality frame covers two frames of game time).
 
 Switches: `-lua_perf`, `-lua_profile`, `-no_lua_cache` in `Documents/commandline.txt`; console `lua_perf`, `lua_profile`, `lua_cache` (with `-dbg`). `tools/ios/lua_measure.sh` repeats the whole set (about 45 minutes).

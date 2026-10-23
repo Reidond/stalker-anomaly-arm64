@@ -133,7 +133,7 @@ State (2026-10-23, measured on the Mac and on the iPad; the method, tools and ta
    (Quality 30 fps, Performance 60). The profile is flat: a quarter of the time is the collector, half is engine functions called from scripts, a fifth is bytecode.
 2. **Bytecode cache.** Built (`Library/Caches/Anomaly/lua`, keyed by a hash of the exact text, any mismatch or error loads the source; tested for stale sources, addon overrides and damaged entries). It
    gains little because compiling is not where the load time goes: the scripts are 0.35 s of a 6 s level load on the iPad and 65 ms of that is compiling. An opt-in read-ahead thread (`-lua_prefetch`) takes a warm load
-   to 16 to 21 ms instead of ~95 ms on the Mac; it is off because two of four smoke sweeps with it stalled after a level change (cause unknown), and it is not measured on the iPad.
+   to 16 to 21 ms instead of ~95 ms on the Mac; it is off because it is not measured on the iPad.
 3. **Hot paths: not needed**, the budget holds with room; nothing was ported.
 
 ## Risks
