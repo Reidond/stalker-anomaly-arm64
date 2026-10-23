@@ -215,7 +215,7 @@ Run on `macos-arm64-tsan` (`tools/sweep/run.sh --tsan --scale 3`, `tools/sweep/q
 
 Without `tsan.supp` the same `smoke` run reports 477 races in 66 places. 301 are `CRandom::randI` (the one global generator, advanced by every thread);
 the rest are the by-design overlap of the secondary thread with the render phase (below). None is a container or a lifetime: those were the ones
-fixed in findings 29 to 38 (the first TSan runs, before the fixes, also had them: `CModelPool::Delete` and `CBlender_Compile` against the
+fixed in findings 29 to 37 (the first TSan runs, before the fixes, also had them: `CModelPool::Delete` and `CBlender_Compile` against the
 prefetcher's thread, `s_bones_array_const`, and `FS.dwOpenCounter` from the texture loader's GCD workers).
 
 `tools/sweep/tsan.supp` names every function it hides and why. The by-design class: the secondary thread (`mt_Thread`: `Device.seqParallel`,
