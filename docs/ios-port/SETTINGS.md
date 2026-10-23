@@ -86,8 +86,9 @@ available to measure it**. A ProMotion iPad Pro falls in `ipad-8gb` or `ipad-16g
 
 **A warm iPad is the other limit.** The iPad leaves Nominal for Serious within a minute or two of load and then runs 12 to 20 % slower on the
 main thread (RENDERER.md, measured by the MetalFX session: every render scale up to 0.67 then fell to 45 to 51 fps). The two modes divide the
-problem: **Quality holds 60 fps cool**, with about 10 % of the frame to spare in the worst scene, so a warm iPad may dip under it; **Performance
-holds 60 fps warm**, with 25 % to spare (more than the 20 % slowdown). A player who wants an even frame rate whatever the temperature has the frame
+problem: **Quality holds 60 fps cool** (59.2 in the heaviest rain measured: no frame to spare there), so a warm iPad will dip under it; **Performance
+holds 60 fps** with about 20 % of the frame to spare (21 % fewer scene pixels than Quality, no AO: about 13 ms against 16.6 in that rain), about the 12 to 20 %
+slowdown of the warm state. A player who wants an even frame rate whatever the temperature has the frame
 rate cap: 30 fps paces frames evenly (the app skips every other display tick). The measurement tables below have a two-minute warm-up in the
 busiest scene before the scenes and a thermal column, so they show what state each window ran in.
 
@@ -194,7 +195,7 @@ not a clamp: a profile asking for 0.42 would leave the scale at 1.0, the iPad at
 **The iPad scales are below the renderer's minimum of 0.5, and below what the MetalFX session recommends (0.6 for Quality, 0.5 for Performance).** That
 recommendation keeps the old preset's GPU cost (15.3 ms in a field in the rain, 56 to 59 fps). The on-device runs of this profile (below) show that a
 frame of that cost does not hold 60 fps in the rain (54.6 fps at 1280x960, 1.23 Mpixel: about 15 ms a Mpixel), so the profile asks for about 1.0 Mpixel of
-scene for Quality and 0.79 for Performance: scales 0.42 and 0.375 of the panel. This change lowers the renderer's minimum to 0.35 (the `0.5f` in `CMD4(CCC_RenderScale, "r__render_scale", ...)` in `xrRender_console.cpp`, as the MetalFX session offered);
+scene for Quality and 0.79 for Performance (a margin of about 20 %): scales 0.42 and 0.375 of the panel. This change lowers the renderer's minimum to 0.35 (the `0.5f` in `CMD4(CCC_RenderScale, "r__render_scale", ...)` in `xrRender_console.cpp`, as the MetalFX session offered);
 a build with the old minimum would run the iPad at 0.5, which is 1.4 Mpixel (the old preset's pixel count: Quality dips under 60 in the rain), and
 `gfx_profile` prints the value that was set.
 
@@ -278,7 +279,8 @@ was the limit.
   textures (2.4 to 2.5 GB).
 - **The iPad stayed at thermal state Nominal** through the two-minute warm-up and the four minutes of scenes in both launches, so the Serious state the MetalFX
   measurements describe (45 to 51 fps at any scale, 12 to 20 % slower main thread) was not reached here, and nothing was measured in it. What the profile
-  does about it is the margin: Performance has about 25 % of the frame to spare in the worst scene, Quality about 10 % (the next table).
+  does about it is the margin: Performance has about 20 % of the frame to spare in the worst scene (21 % fewer scene pixels than Quality and no AO), Quality none in the
+  rain.
 
 **Where the sizes come from.** The first on-device run of the profile (2026-10-23; before the render scale was merged, so the render size was `vid_mode`) had
 Quality at 1280x960 (1.23 Mpixel) and Performance at 1152x864 (1.0 Mpixel):
@@ -297,7 +299,7 @@ Quality at 1280x960 (1.23 Mpixel) and Performance at 1152x864 (1.0 Mpixel):
 |  | night | 3 | 60.0 | 60.0 | 16.6 | 15.0 | 1890 | 4038 | Nominal |
 
 Quality held 60 in four of the five scenes and **dropped to 54.6 fps in the rain** (slowest window 53.6, 18 ms a frame, 2222 draws): at 1.23 Mpixel the frame
-costs about 15 ms a Mpixel there, so 1.0 Mpixel (scale 0.42 of the panel) leaves 10 % of a 16.7 ms frame and 0.79 Mpixel (0.375) leaves 25 %. The previous
+costs about 15 ms a Mpixel there, so 1.0 Mpixel (scale 0.42 of the panel) is the size at which that rain holds 60 (59.2 measured) and 0.79 Mpixel (0.375) leaves about 20 % of a 16.7 ms frame. The previous
 preset's 1366x1024 was 49 to 55 fps in the village (`IPAD.md`; 1.4 Mpixel, about 10 ms a Mpixel). The MetalFX session's recommendation for this iPad (scale
 0.6 for Quality, 0.5 for Performance, `RENDERER.md`) keeps that old cost class (15.3 ms in a field in the rain) and is not enough here; its minimum of 0.5
 cannot express these sizes either, so this change lowers the renderer's minimum to 0.35.
@@ -312,7 +314,7 @@ Checks and where their output is:
 | Check | How | Result |
 |---|---|---|
 | Console and scripts cannot change locked settings | `tools/render_harness/scenes/20_locks.script`: `r2_sun_quality st_opt_extreme` typed, `exec_console_cmd("texture_lod 4")`, `exec_console_cmd("r4_enable_tessellation on")`, `exec_console_cmd("ssfx_ssr (1, 1, 1, 1)")` | each refused, the first refusal of each logged once (`! graphics: '...' refused: locked by the mac-pro profile. Further attempts ... are not logged.`), the second typed attempt silent; the values read back are the profile's; `fov 80` and `gfx_mode performance` accepted; `gfx_fps unlimited` refused |
-| The menu shows no locked row, and the PC menu is intact | `scenes/22_options_tree.script` prints the tree | with the profile: `OPTIONS locked rows visible: 0`, 7 rows on Visual / Basic; with `--graphics-profile none`: the stock tree (Advanced 42 rows, Graphics 8, Particles 4, HDR10 36, Optimizations 12, Debug 8) |
+| The menu shows no locked row, and the PC menu is intact | `scenes/22_options_tree.script` prints the tree | with the profile: `OPTIONS locked rows visible: 0`, 8 rows on Visual / Basic on the Mac (7 on the iPad); with `--graphics-profile none`: the stock tree (Advanced 42 rows, Graphics 8, Particles 4, HDR10 36, Optimizations 12, Debug 8) |
 | Locks survive a restart, stale `user.ltx` is overridden | `tools/render_harness/lock_restart.sh`: run 1 changes settings and saves; `user.ltx` gets stale values for 7 locked settings (`r2_sun_quality st_opt_extreme`, `texture_lod 0`, `r4_enable_tessellation on`, `r3_msaa 4x`, `r2_ssao st_opt_high`, `r3_dynamic_wet_surfaces on`, `r__detail_radius 250`) and `r2_mblur_enabled on`; run 2 prints the values | start log: `user.ltx has 186 locked settings, ignored (the mac-pro profile applies); 7 of them differ from the profile: ...`; read back: `r2_sun_quality st_opt_low`, `texture_lod 1`, `r4_enable_tessellation off`, `r3_msaa st_opt_off`, `r2_ssao st_opt_low`, `r3_dynamic_wet_surfaces off`, `r__detail_radius 75` (the Performance values: the mode saved by run 1); `r2_mblur_enabled on`, `fov 80.`, `gfx_mode performance`, `gfx_fps 30` kept (the player's) |
 | The same on the iPad (Air M3) | `tools/ios/measure_profile.sh`: `scripts/lock_test.txt` (refusals from the console and from `run_string`), then `scripts/restart_check.txt` after a `user.ltx` with stale values | refused and logged once each (`r2_sun_quality`, `texture_lod`, `r4_enable_tessellation`, `ssfx_ssr`, `vid_mode`, `r3_msaa`), `fov 80` and `gfx_fps 30` accepted; at the next start `user.ltx has 192 locked settings, ignored (the ipad-8gb profile applies); 7 of them differ from the profile: ...` and the values read back are the profile's (`r2_sun_quality st_opt_low`, `texture_lod 1`, `r3_msaa st_opt_off`, `r2_ssao st_opt_off`, `r3_dynamic_wet_surfaces off`, `r__detail_radius 30`, Performance mode saved by the run before); `r2_mblur_enabled on`, `fov 80.`, `gfx_mode performance`, `gfx_fps 30` kept |
 | The iPad menu | `scripts/settings_menu.txt` (Down three times, Return, a screenshot) | Visual / Basic with Graphics mode, Frame rate, Brightness, Text size, FOV, HUD FOV, Motion Blur and no Screen mode row; text sharp at the native output and as tall as on a 1080p PC |
