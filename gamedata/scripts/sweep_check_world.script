@@ -912,6 +912,146 @@ local function fast_travel_phase_2()
 	return C.done("chk_fasttravel")
 end
 
+-- soak -----------------------------------------------------------------------------------------------------------------------------------------
+-- SWEEP_MINUTES (default 60) of play with nobody at the keyboard: walking about, fights, fast-forwarding, sleeping, the inventory and PDA,
+-- a level change now and then. Memory is logged next to the footprint the shell logs every 10 s. SWEEP_SOAK_MODE=idle does nothing at all
+-- (the baseline for a memory creep). The Lua state is rebuilt by a level change, so the elapsed time is kept in a file.
+local SOAK_LEVELS = { "l01_escape", "l02_garbage", "l03_agroprom", "l01_escape" }
+
+local soak_file = nil
+local function soak_path()
+	soak_file = soak_file or (getFS():update_path("$app_data_root$", "") .. "chk_soak.txt")
+	return soak_file
+end
+
+local function soak_state()
+	local f = io.open(soak_path(), "r")
+	if not f then return nil end
+	local t0, cycles, levels = tonumber(f:read("*l")), tonumber(f:read("*l")), tonumber(f:read("*l"))
+	f:close()
+	return t0, cycles or 0, levels or 1
+end
+
+local function soak_write(t0, cycles, levels)
+	local f = io.open(soak_path(), "w")
+	if f then f:write(tostring(t0), "\n", tostring(cycles), "\n", tostring(levels), "\n") f:close() end
+end
+
+local function soak_log(tag, t0)
+	local n_squads = 0
+	for _ in pairs(SIMBOARD.squads) do n_squads = n_squads + 1 end
+	H.say("SOAK %s t=%.1f min, lua heap %.0f KB, %s, %d squads, health %.2f, game time %s", tag, (time_global() - t0) / 60000, collectgarbage("count"), level.present() and level.name() or "-", n_squads, db.actor and db.actor.health or -1, C.gtime())
+end
+
+local function soak_plan()
+	H.wait_for("actor", 300000, H.actor_ready)
+	H.enable_ui()
+	H.pause(5000)
+	local minutes = tonumber(os.getenv("SWEEP_MINUTES") or "") or 60
+	local mode = os.getenv("SWEEP_SOAK_MODE") or "mixed"
+	local t0, cycles, level_idx = soak_state()
+	if not t0 then
+		t0 = time_global()
+		cycles, level_idx = 0, 1
+		soak_write(t0, cycles, level_idx)
+		H.say("SOAK start: %d minutes, mode %s", minutes, mode)
+	end
+	H.god(true)
+	local last_log = 0
+	local function tick(tag)
+		if time_global() - last_log > 30000 then
+			last_log = time_global()
+			soak_log(tag, t0)
+		end
+	end
+	soak_log("resume", t0)
+	local errors = 0
+	while (time_global() - t0) < minutes * 60000 do
+		cycles = cycles + 1
+		soak_write(t0, cycles, level_idx)
+		if mode == "idle" then
+			for i = 1, 6 do H.pause(5000) tick("idle") end
+		else
+			local ok, err = pcall(function()
+				-- a walk: somewhere else on the level
+				local pts = C.level_points()
+				local p = pts[math.random(#pts)]
+				db.actor:set_actor_position(p.pos)
+				H.pause(6000)
+				tick("walk")
+				-- a fight
+				H.arm()
+				local foes = {}
+				for _, sec in ipairs({ "sim_default_bandit_0", "dog_normal", "boar_normal" }) do
+					local pos, lvid, gvid = C.point_at(16 + math.random(10))
+					local se = alife_create(sec, pos, lvid, gvid)
+					if se then foes[#foes + 1] = se.id end
+				end
+				H.pause(3000)
+				for _, id in ipairs(foes) do
+					local o = level.object_by_id(id)
+					if o and o:alive() then
+						if IsStalker(o) then o:set_relation(game_object.enemy, db.actor) end
+						H.fire_burst(o, 1200)
+					end
+					tick("fight")
+				end
+				for _, id in ipairs(foes) do
+					local o = level.object_by_id(id)
+					if o and o:alive() then o:kill(db.actor) end
+				end
+				H.pause(2000)
+				-- the clock runs
+				fast_forward(300, 12000)
+				tick("clock")
+				-- every third cycle a sleep, every other cycle the inventory and the PDA
+				if cycles % 3 == 0 then
+					ui_sleep_dialog.sleep_forced(4)
+					H.wait_for("the sleep", 60000, function() return not db.actor:has_info("actor_is_sleeping") end)
+					H.pause(2000)
+				end
+				if cycles % 2 == 0 then
+					H.press(key_bindings.kINVENTORY, 150)
+					H.pause(3000)
+					H.close_ui("inventory")
+					ActorMenu.get_pda_menu():ShowDialog(true)
+					H.pause(2500)
+					ActorMenu.get_pda_menu():SetActiveSubdialog("eptMap")
+					H.pause(2000)
+					ActorMenu.get_pda_menu():HideDialog()
+					H.pause(1500)
+				end
+				-- items made and dropped, the bandage used
+				H.give("bandage", 2)
+				H.give("ammo_5.45x39_fmj", 1, 30)
+				H.pause(2000)
+				db.actor:eat(db.actor:object("bandage"))
+				H.pause(1000)
+				collectgarbage("step")
+			end)
+			if not ok then
+				errors = errors + 1
+				H.say("SOAK cycle %d failed: %s", cycles, tostring(err))
+			end
+			tick("cycle")
+			-- a level change every fifth cycle
+			if cycles % 5 == 0 and (time_global() - t0) < (minutes - 3) * 60000 then
+				level_idx = level_idx % #SOAK_LEVELS + 1
+				soak_write(t0, cycles, level_idx)
+				soak_log("level change to " .. SOAK_LEVELS[level_idx], t0)
+				get_console():execute("jump_to_level " .. SOAK_LEVELS[level_idx])
+				return { next = true }
+			end
+		end
+	end
+	soak_log("end", t0)
+	H.say("SOAK end: %d cycles in %.1f minutes, %d failed cycles", cycles, (time_global() - t0) / 60000, errors)
+	local f = io.open(soak_path(), "w")
+	if f then f:close() end
+	C.check("soak", "completed", true, string.format("%d cycles in %.1f minutes, %d cycles raised a Lua error", cycles, (time_global() - t0) / 60000, errors))
+	return C.done("chk_soak")
+end
+
 function plans(c, h)
 	C, H = c, h
 	local out = {}
@@ -923,6 +1063,10 @@ function plans(c, h)
 	out.chk_travel = { travel_phase_1, travel_phase_chain(1), travel_phase_chain(2), travel_phase_chain(3), travel_phase_chain(4), travel_phase_chain(5), travel_phase_chain(6) }
 	out.chk_companions = { companions_phase_1, companions_phase_2 }
 	out.chk_fasttravel = { fast_travel_phase_1, fast_travel_phase_2 }
+	-- the soak is one phase that comes back after every level change: each phase reads its progress from the file
+	local soak_phases = {}
+	for i = 1, 40 do soak_phases[i] = soak_plan end
+	out.chk_soak = soak_phases
 	out.chk_anomalies = { anomalies_plan }
 	out.chk_weather = { weather_plan }
 	out.chk_sleep = { sleep_plan }

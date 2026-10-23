@@ -767,11 +767,71 @@ local function equipment()
 	return C.done("chk_equipment")
 end
 
+
+-- sound ----------------------------------------------------------------------------------------------------------------------------------------
+-- Makes the sounds of the game happen; xrSound counts what it hands to OpenAL (SoundStats.h) and prints the totals to the engine log every
+-- 10 s ("snd: ..."). tools/sweep/check_report.py compares the first and the last such line of the run: sources played, errors.
+local function sound_plan()
+	start_quiet()
+	H.god(true)
+	H.gear_up()
+	H.arm()
+	H.say("sound activity: start")
+	-- shots, reloads, steps
+	H.fire_burst(nil, 2500)
+	H.press(key_bindings.kWPN_RELOAD, 100)
+	H.pause(4500)
+	local fdik = bind_to_dik(key_bindings.kFWD)
+	level.press_action(fdik)
+	for i = 1, 240 do level.hold_action(fdik) coroutine.yield() end
+	level.release_action(fdik)
+	-- an explosion, a fight (mutant and stalker voices), a talk, the interface
+	local g = db.actor:object("grenade_f1")
+	if not g then give("grenade_f1", 1) H.pause(1500) g = db.actor:object("grenade_f1") end
+	db.actor:make_item_active(g)
+	H.pause(3500)
+	local gd = bind_to_dik(key_bindings.kWPN_FIRE)
+	level.press_action(gd)
+	for i = 1, 40 do level.hold_action(gd) coroutine.yield() end
+	level.release_action(gd)
+	H.pause(6000)
+	H.arm()
+	for _, sec in ipairs({ "dog_normal", "boar_normal", "sim_default_bandit_0" }) do
+		local pos, lvid, gvid = C.point_at(14)
+		alife_create(sec, pos, lvid, gvid)
+	end
+	H.pause(4000)
+	H.fire_burst(nil, 3000)
+	H.pause(6000)
+	local trader = get_story_object("esc_m_trader")
+	if trader then
+		db.actor:set_actor_position(trader:position())
+		H.pause(3500)
+		db.actor:run_talk_dialog(get_story_object("esc_m_trader"), false)
+		H.pause(6000)
+		H.press_dik(DIK_keys.DIK_ESCAPE, 150)
+		H.pause(2500)
+	end
+	H.press(key_bindings.kINVENTORY, 150)
+	H.pause(3000)
+	H.close_ui("inventory")
+	-- the siren of an emission
+	local sm = surge_manager.get_surge_manager()
+	sm.started = false
+	sm:start(true)
+	H.pause(25000)
+	if sm.started then sm:end_surge(true) end
+	H.pause(3000)
+	H.say("sound activity: end")
+	return C.done("chk_sound")
+end
+
 function plans(c, h)
 	C, H = c, h
 	local out = {}
 	out.chk_saveload = { saveload_phase1, saveload_phase2, saveload_phase3, saveload_phase4, saveload_phase5 }
 	out.chk_equipment = { function() return equipment() end }
+	out.chk_sound = { function() return sound_plan() end }
 	out.chk_weapons = { function() return weapons() end }
 	-- chk_probe: runs appdata/probe.lua (a scratch file, not part of the check) with the library and the helpers, to try an API out
 	out.chk_probe = { function()

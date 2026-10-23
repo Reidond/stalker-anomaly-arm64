@@ -154,6 +154,12 @@ hard_stop=$(( timeout_s - 60 ))
 # ---- environment ------------------------------------------------------------------------------------------------------
 # the overlay is read from the checkout, not from the bundle, so an edit of gamedata/ (the driver) needs no relink
 env_args=(--env "ANOMALY_STATE_ROOT=$state" --env "ANOMALY_SWEEP=$plan" --env "ANOMALY_OVERLAY=$repo/gamedata")
+# settings of a plan (the soak's length and mode), passed through to the driver's os.getenv
+for v in SWEEP_MINUTES SWEEP_SOAK_MODE; do
+    [ -z "${!v:-}" ] || env_args+=(--env "$v=${!v}")
+done
+# SWEEP_ENV="NAME=value NAME=value": more environment for the app (e.g. MallocStackLogging=lite to find who allocates)
+for kv in ${SWEEP_ENV:-}; do env_args+=(--env "$kv"); done
 if [ "$plain" = 0 ]; then
     # container-overflow: the engine's own vectors are annotated, the system libc++'s are not (false positives);
     # halt_on_error=0: keep going after a report (the app is built with -fsanitize-recover), the reports are the product
@@ -164,7 +170,7 @@ if [ "$plain" = 0 ]; then
     )
 fi
 
-rm -f "$appdata/sweep_state.txt" # a plan starts at its first phase
+rm -f "$appdata/sweep_state.txt" "$appdata"/chk_soak.txt "$appdata"/chk_snapshot.txt "$appdata"/chk_companion.txt # a plan starts at its first phase
 rm -f "$log_dir"/xray_*.log "$shell_log_dir"/anomaly-crash.log "$log_dir"/*.crash.txt 2>/dev/null
 
 echo "plan $plan, out $out"
