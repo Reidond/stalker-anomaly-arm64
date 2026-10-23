@@ -537,6 +537,153 @@ local function sleep_plan()
 	return C.done("chk_sleep")
 end
 
+-- anomalies, artefacts, detectors ---------------------------------------------------------------------------------------------------------
+local ANOMALY_FAMILIES = {
+	{ name = "gravitational", prefix = "zone_mine_gravitational" },
+	{ name = "electric", prefix = "zone_mine_electric" },
+	{ name = "chemical", prefix = "zone_mine_chemical" },
+	{ name = "thermal", prefix = "zone_mine_thermal" },
+		{ name = "buzz", prefix = "zone_buzz" },
+	{ name = "mosquito-bald", prefix = "zone_mosquito_bald" },
+	{ name = "radioactive", prefix = "zone_field_radioactive" },
+	{ name = "steam", prefix = "zone_mine_steam" },
+}
+
+local function anomalies_plan()
+	start_quiet()
+	give("detector_simple", 1)
+	give("drug_antirad", 2)
+	-- every anomaly of the level, by the server's list (the zones of a level are online only near the actor)
+	local my_level = game_graph():vertex(db.actor:game_vertex_id()):level_id()
+	local ap = vector():set(db.actor:position())
+	local zones = {}
+	for id = 0, 65535 do
+		local se = alife():object(id)
+		if se then
+			local sec = se:section_name()
+			if sec:find("^zone_") and se.m_game_vertex_id and game_graph():vertex(se.m_game_vertex_id):level_id() == my_level then
+				zones[#zones + 1] = { id = id, sec = sec, pos = vector():set(se.position) }
+			end
+		end
+	end
+	C.check("anomalies", "zones-on-level", #zones > 20, string.format("%d anomaly zones on the Cordon", #zones))
+
+	local touches = {}
+	RegisterScriptCallback("actor_on_feeling_anomaly", function(obj)
+		local sec = obj and obj:section() or "?"
+		touches[sec] = (touches[sec] or 0) + 1
+	end)
+
+	-- Dynamic anomalies (plugins/dynamic_anomalies.ltx) switch a random share of the zones off for the actor's whole stay, so the zone
+	-- under test is switched on first (the export the game's own field script uses). God mode is on: the strong ones kill within a second,
+	-- and what is looked at is whether the zone takes hold of the actor (the touch callback, radiation); damage has its own item below.
+	local function expose(z, god, min_steps)
+		H.god(god)
+		db.actor.health = 1
+		db.actor:cast_Actor():conditions():ChangeRadiation(-1)
+		local touches0 = touches[z.sec] or 0
+		local hp0, rad0 = 1, db.actor.radiation
+		local hp1, rad1, alive, hit_it = 1, rad0, true, false
+		db.actor:set_actor_position(z.pos)
+		H.wait_for("the zone to come online", 8000, function() return level.object_by_id(z.id) ~= nil end)
+		local o = level.object_by_id(z.id)
+		if o then pcall(function() o:enable_anomaly() end) end
+		for k = 1, 24 do
+			H.pause(500)
+			hp1, rad1 = db.actor.health, db.actor.radiation
+			alive = db.actor:alive()
+			if not alive or hp1 < 0.45 then break end
+			if (touches[z.sec] or 0) > touches0 or hp1 < hp0 - 0.003 or rad1 > rad0 + 0.0005 then hit_it = true end
+			if hit_it and k >= (min_steps or 4) then break end
+		end
+		db.actor:set_actor_position(ap)
+		H.pause(1500)
+		H.god(false)
+		if alive then db.actor.health = 1 end
+		return hit_it or (touches[z.sec] or 0) > touches0, alive, hp1, rad1, (touches[z.sec] or 0) - touches0
+	end
+
+	for _, fam in ipairs(ANOMALY_FAMILIES) do
+		C.run("anomalies", fam.name, function()
+			local list = {}
+			for _, z in ipairs(zones) do
+				if z.sec:find("^" .. fam.prefix) then list[#list + 1] = { id = z.id, sec = z.sec, pos = z.pos, d = z.pos:distance_to(ap) } end
+			end
+			if #list == 0 then return true, "no zone of this kind on the level, skipped" end
+			table.sort(list, function(a, b) return a.d < b.d end)
+			local z = list[1]
+			local acted, alive, hp1, rad1, n_touch = expose(z, true)
+			return acted and alive, string.format("%s %.0f m away: took hold of the actor %s (%d touches, radiation %.3f)", z.sec, z.d, tostring(acted), n_touch, rad1)
+		end)
+	end
+
+	H.god(false)
+	db.actor.health = 1
+
+	-- artefacts: lying in the world, taken, carried on the belt
+	C.run("artefacts", "pickup", function()
+		local pos, lvid, gvid = C.point_at(6)
+		local se = alife_create("af_gold_fish", pos, lvid, gvid)
+		H.pause(3000)
+		local o = se and level.object_by_id(se.id)
+		if not o then return false, "the artefact did not come online" end
+		local n0 = C.count("af_gold_fish")
+		db.actor:set_actor_position(pos)
+		H.pause(2500)
+		db.actor:transfer_item(o, db.actor)
+		H.pause(2000)
+		return C.count("af_gold_fish") == n0 + 1, string.format("af_gold_fish in the backpack: %d -> %d", n0, C.count("af_gold_fish"))
+	end)
+	C.run("artefacts", "belt-effect", function()
+		give("army_outfit", 1) -- an outfit with a belt slot
+		H.pause(1500)
+		local outfit = db.actor:object("army_outfit")
+		db.actor:move_to_slot(outfit, 7)
+		H.pause(3000)
+		local over0, tot0, max0 = actor_status.get_overweight(false)
+		local af = db.actor:object("af_gold_fish")
+		db.actor:move_to_belt(af)
+		H.pause(2500)
+		local on_belt = false
+		db.actor:iterate_belt(function(_, o) if o:id() == af:id() then on_belt = true end end)
+		local over1, tot1, max1 = actor_status.get_overweight(false)
+		return on_belt and max1 > max0 + 10, string.format("on the belt %s; the load limit %.1f -> %.1f kg", tostring(on_belt), max0, max1)
+	end)
+
+	-- the detector near an artefact (the device is up; its sounds go to the sound check)
+	C.run("detectors", "active-near-artefact", function()
+		local pos, lvid, gvid = C.point_at(8)
+		local se = alife_create("af_medusa", pos, lvid, gvid)
+		H.pause(2500)
+		db.actor:move_to_slot(db.actor:object("detector_simple"), 9)
+		H.pause(2500)
+		db.actor:activate_slot(0)
+		H.pause(2000)
+		H.press_dik(DIK_keys.DIK_O, 120)
+		local up = H.wait_for("the detector", 8000, function() return db.actor:active_detector() ~= nil end)
+		H.pause(6000)
+		local det = db.actor:active_detector()
+		return up and det ~= nil, string.format("detector %s up with an artefact %.0f m away; condition %.3f", tostring(det and det:section()), db.actor:position():distance_to(pos), det and det:condition() or -1)
+	end)
+	-- damage with god mode off, last because the strong ones kill the actor
+	-- damage, god mode off: a weak gravitational zone, a thermal one, a radiation field
+	for _, spec in ipairs({ { "zone_field_radioactive", "radiation" }, { "zone_burning_fuzz", "health" }, { "zone_mine_gravitational_weak", "health" }, { "zone_mine_thermal", "health" } }) do
+		C.run("anomalies", "damage/" .. spec[1], function()
+			local best
+			for _, z in ipairs(zones) do
+				if z.sec:find("^" .. spec[1]) and (not best or z.pos:distance_to(ap) < best.pos:distance_to(ap)) then best = z end
+			end
+			if not best then return true, "no such zone on the level, skipped" end
+			local acted, alive, hp1, rad1 = expose(best, false, spec[2] == "radiation" and 18 or 4)
+			if spec[2] == "health" then
+				return hp1 < 0.97 or not alive, string.format("%s: health 1.00 -> %.2f%s", best.sec, hp1, alive and "" or " (died)")
+			end
+			return rad1 > 0.001, string.format("%s: radiation 0.000 -> %.3f", best.sec, rad1)
+		end)
+	end
+	return C.done("chk_anomalies")
+end
+
 function plans(c, h)
 	C, H = c, h
 	local out = {}
@@ -545,6 +692,7 @@ function plans(c, h)
 	out.chk_stalkers = { stalkers_plan }
 	out.chk_emission_cover = { function() return run_event("emission", true) end }
 	out.chk_emission_open = { function() return run_event("emission", false) end, after_death("chk_emission_open") }
+	out.chk_anomalies = { anomalies_plan }
 	out.chk_weather = { weather_plan }
 	out.chk_sleep = { sleep_plan }
 	out.chk_psistorm_cover = { function() return run_event("psi_storm", true) end }
