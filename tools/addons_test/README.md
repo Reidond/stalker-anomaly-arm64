@@ -50,9 +50,10 @@ tools/addons_test/run.sh cleanup                  # take everything this tool pu
 ```
 
 **Removing files on the iPad.** `devicectl` cannot delete a file, and its `copy to --remove-existing-content` once emptied a whole app container
-(game data and saves) when it was given an empty source folder. Never use it. `run.sh` therefore has the game delete what an earlier push left:
-it generates `zz_addon_remove.script` (the list of files, with their case), pushes it, runs `timelines/remove.txt` (a boot that calls it) and the
-script removes the files, the folders that are then empty, and itself, with `os.remove` under `$HOME/Documents/Anomaly`.
+(game data and saves) when it was given an empty source folder. Never use it. Scripts cannot delete either (the engine takes `os.remove` away from
+Lua). `run.sh` therefore has the app do it: the `--script` runner has a `delete <path>` step (main.cpp: one file or one empty folder below the game
+folder's `gamedata` or `db`, relative path, no `..`, links refused, never recursive), `run.sh` generates a timeline of those steps for the files an
+earlier push left (`run.sh remove-timeline <manifest lines>` prints it) and runs it as a boot that quits.
 
 On the Mac `--data-root` is written to (the addons go into its `gamedata/` and `db/`), so use a copy: `db/` can be a folder of symlinks to the
 real archives. A volume that is **case-sensitive** (`hdiutil create -fs "Case-sensitive APFS" ...`) shows the same behaviour as an iPad whose
