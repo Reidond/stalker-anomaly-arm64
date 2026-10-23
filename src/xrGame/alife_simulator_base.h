@@ -61,6 +61,16 @@ protected:
 	// temp
 	ALife::SCHEDULE_P_VECTOR m_tpaCombatGroups[2];
 
+private:
+	struct SDeferredEntity
+	{
+		CSE_Abstract* object;
+		u32 frame;
+		u32 time;
+	};
+	xr_vector<SDeferredEntity> m_deferred_destroy;
+	xrCriticalSection m_deferred_destroy_lock;
+
 protected:
 	IC CALifeSimulatorHeader& header();
 	IC CALifeTimeManager& time();
@@ -121,6 +131,12 @@ public:
 	void append_item_vector(ALife::OBJECT_VECTOR& tObjectVector, ALife::ITEM_P_VECTOR& tItemList);
 	shared_str level_name() const;
 	void on_death(CSE_Abstract* killed, CSE_Abstract* killer);
+
+	// Destroys `object` a few frames from now instead of at once, for a server entity a script may still hold
+	// (`alife():register(se_obj)` replaces the object it is given and the script goes on reading the old one).
+	// flush_deferred_destroy(false) destroys what has been parked long enough, (true) all of it (unload() does).
+	void defer_destroy(CSE_Abstract* object);
+	void flush_deferred_destroy(bool all);
 
 public:
 	ALife::ITEM_P_VECTOR m_temp_item_vector;

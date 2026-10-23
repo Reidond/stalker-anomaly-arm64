@@ -120,6 +120,8 @@ void CALifeUpdateManager::shedule_Update(u32 dt)
 {
 	ISheduled::shedule_Update(dt);
 
+	flush_deferred_destroy(false);
+
 	if (!initialized())
 		return;
 

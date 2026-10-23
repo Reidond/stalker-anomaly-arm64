@@ -53,6 +53,7 @@ CALifeSimulatorBase::CALifeSimulatorBase(xrServer* server, LPCSTR section)
 CALifeSimulatorBase::~CALifeSimulatorBase()
 {
 	VERIFY(!m_initialized);
+	flush_deferred_destroy(true);
 }
 
 void CALifeSimulatorBase::destroy()
@@ -62,6 +63,9 @@ void CALifeSimulatorBase::destroy()
 
 void CALifeSimulatorBase::unload()
 {
+	// before the registries and the script engine go: an entity written by a script may own Lua references
+	flush_deferred_destroy(true);
+
 	xr_delete(m_objects);
 	xr_delete(m_header);
 	xr_delete(m_time_manager);
@@ -142,6 +146,52 @@ CSE_Abstract* CALifeSimulatorBase::spawn_item(LPCSTR section, const Fvector& pos
 
 	//	Msg							("LSS : SPAWN : [%s],[%s], level %s",*dynamic_object->s_name,dynamic_object->name_replace(),*ai().game_graph().header().level(ai().game_graph().vertex(dynamic_object->m_tGraphID)->level_id()).name());
 	return (dynamic_object);
+}
+
+// A parked entity is destroyed once it is at least this old in both measures (the script that got it back from
+// register() reads it in the same call or the next few updates), and never more than the cap are parked.
+static const u32 deferred_destroy_frames = 3;
+static const u32 deferred_destroy_ms = 5000;
+static const size_t deferred_destroy_cap = 4096;
+
+void CALifeSimulatorBase::defer_destroy(CSE_Abstract* object)
+{
+	if (!object)
+		return;
+
+	xrCriticalSectionGuard guard(m_deferred_destroy_lock);
+	for (const SDeferredEntity& e : m_deferred_destroy)
+		if (e.object == object)
+			return;
+
+	m_deferred_destroy.push_back({object, Device.dwFrame, Device.dwTimeGlobal});
+	if (m_deferred_destroy.size() > deferred_destroy_cap)
+	{
+		F_entity_Destroy(m_deferred_destroy.front().object);
+		m_deferred_destroy.erase(m_deferred_destroy.begin());
+	}
+}
+
+void CALifeSimulatorBase::flush_deferred_destroy(bool all)
+{
+	xr_vector<CSE_Abstract*> expired;
+	{
+		xrCriticalSectionGuard guard(m_deferred_destroy_lock);
+		if (m_deferred_destroy.empty())
+			return;
+
+		// parked in order, so the expired ones are a prefix
+		size_t n = 0;
+		while (n < m_deferred_destroy.size() &&
+		       (all || (Device.dwFrame - m_deferred_destroy[n].frame >= deferred_destroy_frames &&
+		                Device.dwTimeGlobal - m_deferred_destroy[n].time >= deferred_destroy_ms)))
+			expired.push_back(m_deferred_destroy[n++].object);
+		m_deferred_destroy.erase(m_deferred_destroy.begin(), m_deferred_destroy.begin() + n);
+	}
+
+	// outside the lock: the destructor of a script-derived entity releases Lua references
+	for (CSE_Abstract*& object : expired)
+		F_entity_Destroy(object);
 }
 
 CSE_Abstract* CALifeSimulatorBase::create(CSE_ALifeGroupAbstract* tpALifeGroupAbstract, CSE_ALifeDynamicObject* j)
