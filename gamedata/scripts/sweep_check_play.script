@@ -1,0 +1,569 @@
+--[[
+	Systems check, part 1: starting and saving, survival, inventory, weapons, equipment. See sweep_check.script.
+--]]
+
+local C, H
+
+local function give(...) return H.give(...) end
+
+-- the new games of the check (seed() below is called from the main menu by tools/sweep/run.sh, run_string, before the console starts the game)
+local NEW = {
+	dolg = { map = "makeshift_barracks", level = "l05_bar", story = true, money = 7000, loadout = "wpn_pm,ammo_9x18_fmj,bandage,medkit,bread" },
+	freedom = { map = "military_base", level = "l07_military", story = false, money = 3500, loadout = "wpn_ak74u,ammo_5.45x39_fmj,bandage,vodka,wpn_binoc" },
+	ecolog = { map = "sakharovs_bunker", level = "l08_yantar", story = false, money = 12000, loadout = "wpn_pm,ammo_9x18_fmj,medkit,device_torch" },
+}
+
+
+-- new games ---------------------------------------------------------------------------------------------------------------
+-- tools/sweep/run.sh seeds [character_creation] of axr_options.ltx from the main menu (run_string) and starts the game with the
+-- console, the way the faction dialog's Start button does; the game's own on_game_load / actor_on_first_update then set the
+-- faction, the money and the loadout and send the player to the start location (a level change out of fake_start).
+local ini_map = nil
+
+local function new_game_plan(faction, map, level, money, loadout)
+	local name = "chk_new_" .. faction
+	local function arrived()
+		ini_map = ini_map or ini_file("plugins\\new_game_start_locations.ltx")
+		if not H.wait_for("the " .. level, 420000, function() return H.level_is(level) and H.actor_ready() end) then
+			C.check("start", name .. "/arrive", false, "never reached " .. level .. ", level now " .. tostring(level.present() and level.name()))
+			return false
+		end
+		H.enable_ui()
+		H.pause(12000)
+		local x, y, z = ini_map:r_float_ex(map, "x"), ini_map:r_float_ex(map, "y"), ini_map:r_float_ex(map, "z")
+		local d = db.actor:position():distance_to(vector():set(x, y, z))
+		C.check("start", name .. "/arrive", true, string.format("%s at %s, %.0f m from the start point", level, map, d))
+		C.run("start", name .. "/position", function() return d < 120, string.format("%.0f m from %s", d, map) end)
+		C.run("start", name .. "/faction", function()
+			local comm = character_community(db.actor)
+			return comm == "actor_" .. faction, comm
+		end)
+		C.run("start", name .. "/alive", function() return db.actor:alive() and db.actor.health > 0.3, "health " .. C.fmt(db.actor.health) end)
+		C.run("start", name .. "/money", function() return db.actor:money() == money, "money " .. tostring(db.actor:money()) end)
+		C.run("start", name .. "/loadout", function()
+			local missing = {}
+			for sec in string.gmatch(loadout, "[^,]+") do
+				if C.count(sec) == 0 and not sec:find("^ammo_") then
+					missing[#missing + 1] = sec
+				end
+			end
+			return #missing == 0, #missing == 0 and ("all of " .. loadout) or ("missing " .. table.concat(missing, ","))
+		end)
+		C.run("start", name .. "/hud", function()
+			-- the HUD indicators the survival scripts drive and the actor's weapon slot are up
+			return get_hud() ~= nil and level.present(), "level " .. level
+		end)
+		C.run("start", name .. "/time", function() return C.gtime() ~= nil, C.gtime() end)
+		C.shot(name)
+		return true
+	end
+	return {
+		name = name,
+		phases = {
+			function()
+				if not arrived() then return C.done(name) end
+				-- play a little: sprint forward, look around, so the first minutes after a new game run
+				H.pause(20000)
+				C.run("start", name .. "/still-alive", function() return db.actor:alive(), C.vitals_str(C.vitals()) end)
+				H.save_here("chk_" .. faction)
+				C.run("start", name .. "/save", function()
+					local s = C.save_exists("chk_" .. faction)
+					return s ~= nil and s.size > 100000, s and ("chk_" .. faction .. ".scop " .. s.size .. " bytes") or "missing"
+				end)
+				return C.done(name)
+			end,
+		},
+	}
+end
+
+
+-- helpers -------------------------------------------------------------------------------------------------------------------
+local function start_quiet()
+	H.wait_for("actor", 240000, H.actor_ready)
+	H.enable_ui()
+	H.pause(6000)
+	H.god(false)
+end
+
+local function elapsed_game_seconds(fn)
+	local t0 = game.get_game_time()
+	fn()
+	return game.get_game_time():diffSec(t0)
+end
+
+-- run the game clock fast for a while (real milliseconds) and say how many game seconds went by. surge_manager's main loop puts the
+-- time factor back to the normal one every second while no emission runs, so it is set again every frame.
+local function fast_forward(factor, ms)
+	local t0 = game.get_game_time()
+	local normal = level.get_time_factor()
+	local t_end = time_global() + ms
+	while time_global() < t_end do
+		level.set_time_factor(factor)
+		coroutine.yield()
+	end
+	level.set_time_factor(normal)
+	return game.get_game_time():diffSec(t0)
+end
+
+local function obj_of(section)
+	return db.actor:object(section)
+end
+
+-- survival ------------------------------------------------------------------------------------------------------------------
+local function survival()
+	start_quiet()
+	local v0 = C.vitals()
+	C.check("survival", "baseline", v0.health > 0.9 and v0.power > 0.9 and v0.radiation < 0.01 and v0.bleeding < 0.01, C.vitals_str(v0))
+
+	-- hunger, thirst and sleepiness grow with game time
+	local secs = fast_forward(300, 20000)
+	local v1 = C.vitals()
+	C.check("survival", "clock", secs > 3600, string.format("%.0f game seconds in 20 s", secs))
+	C.check("survival", "hunger", v1.satiety < v0.satiety, string.format("satiety %.4f -> %.4f", v0.satiety, v1.satiety))
+	C.check("survival", "thirst-grows", v1.thirst ~= nil and v1.thirst > v0.thirst, string.format("deprivation %s -> %s", C.fmt(v0.thirst), C.fmt(v1.thirst)))
+	C.check("survival", "sleepiness-grows", v1.sleepiness ~= nil and v1.sleepiness > v0.sleepiness, string.format("deprivation %s -> %s", C.fmt(v0.sleepiness), C.fmt(v1.sleepiness)))
+
+	-- eating, drinking
+	give("bread", 1)
+	give("water_drink", 1)
+	H.pause(1500)
+	local before = C.vitals()
+	local bread0 = C.count("bread")
+	C.run("survival", "eat", function()
+		db.actor:eat(obj_of("bread"))
+		H.pause(3000)
+		local after = C.vitals()
+		return after.satiety > before.satiety and C.count("bread") == bread0 - 1, string.format("satiety %.4f -> %.4f, bread %d -> %d", before.satiety, after.satiety, bread0, C.count("bread"))
+	end)
+	before = C.vitals()
+	C.run("survival", "drink", function()
+		db.actor:eat(obj_of("water_drink"))
+		H.pause(3000)
+		local after = C.vitals()
+		return after.thirst < before.thirst and after.sleepiness <= before.sleepiness, string.format("thirst %s -> %s, sleepiness %s -> %s", C.fmt(before.thirst), C.fmt(after.thirst), C.fmt(before.sleepiness), C.fmt(after.sleepiness))
+	end)
+
+	-- bleeding and the bandage
+	local function wound(power)
+		local h = hit()
+		h.type = hit.wound
+		h.power = power
+		h.impulse = 0
+		h.direction = vector():set(0, 0, 1)
+		h.draftsman = db.actor
+		db.actor:hit(h)
+	end
+	local hp0 = db.actor.health
+	wound(0.15)
+	H.pause(2000)
+	local bleed = db.actor.bleeding
+	C.check("survival", "wound", db.actor.health < hp0 and bleed > 0, string.format("health %.3f -> %.3f, bleeding %.4f", hp0, db.actor.health, bleed))
+	local hp1 = db.actor.health
+	H.pause(4000)
+	C.check("survival", "bleeding-drains", db.actor.health < hp1, string.format("health %.4f -> %.4f in 4 s", hp1, db.actor.health))
+	give("bandage", 1)
+	H.pause(1000)
+	db.actor:eat(obj_of("bandage"))
+	H.pause(6000)
+	C.check("survival", "bandage", db.actor.bleeding < 0.001, string.format("bleeding %.5f after the bandage", db.actor.bleeding))
+
+	-- healing
+	give("medkit", 1)
+	H.pause(1000)
+	hp1 = db.actor.health
+	db.actor:eat(obj_of("medkit"))
+	H.pause(8000)
+	C.check("survival", "medkit", db.actor.health > hp1 + 0.05, string.format("health %.3f -> %.3f", hp1, db.actor.health))
+
+	-- radiation and the anti-rad drug
+	local cond = db.actor:cast_Actor():conditions()
+	cond:ChangeRadiation(0.4)
+	H.pause(2000)
+	local rad1 = db.actor.radiation
+	C.check("survival", "radiation", rad1 > 0.3, string.format("radiation %.3f", rad1))
+	give("drug_antirad", 1)
+	H.pause(1000)
+	db.actor:eat(obj_of("drug_antirad"))
+	H.pause(10000)
+	C.check("survival", "antirad", db.actor.radiation < rad1 - 0.02, string.format("radiation %.3f -> %.3f", rad1, db.actor.radiation))
+
+	-- psy health and stamina
+	local p0 = db.actor.power
+	H.press_dik(DIK_keys.DIK_W, 100)
+	cond:ChangePower(-0.5)
+	H.pause(2000)
+	C.check("survival", "stamina", db.actor.power < p0 - 0.2, string.format("power %.3f -> %.3f", p0, db.actor.power))
+	H.pause(8000)
+	C.check("survival", "stamina-recovers", db.actor.power > p0 - 0.45, string.format("power %.3f after 8 s", db.actor.power))
+	C.run("survival", "hud-indicators", function() return C.shot("chk_survival"), "screenshot chk_survival" end)
+	return C.done("chk_survival")
+end
+
+-- inventory and weight ------------------------------------------------------------------------------------------------------
+local function inventory()
+	start_quiet()
+	-- weight: the total grows by inv_weight per item
+	local w0 = db.actor:get_total_weight()
+	local per = ini_sys:r_float("bandage", "inv_weight")
+	give("bandage", 5)
+	H.pause(1500)
+	local w1 = db.actor:get_total_weight()
+	C.check("inventory", "give", C.count("bandage") == 5, "bandages " .. C.count("bandage"))
+	C.check("inventory", "weight", math.abs((w1 - w0) - 5 * per) < 0.05, string.format("%.3f -> %.3f, expected +%.3f", w0, w1, 5 * per))
+
+	give("wpn_ak74", 1)
+	give("wpn_pm", 1)
+	give("medkit", 3)
+	give("stalker_outfit", 1)
+	give("vodka", 2)
+	H.pause(1500)
+
+	-- the inventory window opens and closes from the key
+	local opened = false
+	for attempt = 1, 4 do
+		H.press(key_bindings.kINVENTORY, 150)
+		if H.wait_for("the inventory", 5000, H.ui_open) then opened = true break end
+	end
+	C.check("inventory", "open", opened, "window up after the key")
+	H.pause(1500)
+	C.run("inventory", "screenshot", function() return C.shot("chk_inventory"), "screenshot chk_inventory" end)
+
+	-- moves
+	local ak, pm = obj_of("wpn_ak74"), obj_of("wpn_pm")
+	db.actor:move_to_slot(ak, 3)
+	db.actor:move_to_slot(pm, 2)
+	H.pause(1000)
+	C.check("inventory", "slot-rifle", db.actor:item_in_slot(3) ~= nil and db.actor:item_in_slot(3):id() == ak:id(), "wpn_ak74 in the rifle slot")
+	C.check("inventory", "slot-pistol", db.actor:item_in_slot(2) ~= nil and db.actor:item_in_slot(2):id() == pm:id(), "wpn_pm in the pistol slot")
+	local outfit = obj_of("stalker_outfit")
+	db.actor:move_to_slot(outfit, 7)
+	H.pause(1000)
+	C.check("inventory", "outfit", db.actor:item_in_slot(7) ~= nil and db.actor:item_in_slot(7):id() == outfit:id(), "outfit worn")
+	give("af_medusa", 1)
+	H.pause(1000)
+	local med = obj_of("af_medusa")
+	db.actor:move_to_belt(med)
+	H.pause(800)
+	local on_belt = false
+	db.actor:iterate_belt(function(_, o) if o:id() == med:id() then on_belt = true end end)
+	C.check("inventory", "belt", on_belt, "artefact on the belt")
+	db.actor:move_to_ruck(med)
+	H.pause(800)
+	on_belt = false
+	db.actor:iterate_belt(function(_, o) if o:id() == med:id() then on_belt = true end end)
+	C.check("inventory", "ruck", not on_belt, "artefact back in the backpack")
+	local w2 = db.actor:get_total_weight()
+
+	-- use: the medkit has several uses
+	local kit = obj_of("medkit")
+	local uses0 = kit:get_remaining_uses()
+	local hp = db.actor.health
+	db.actor:eat(kit)
+	H.pause(2500)
+	C.check("inventory", "use", C.count("medkit") < 3 or (obj_of("medkit") and obj_of("medkit"):get_remaining_uses() < uses0), string.format("medkits %d, remaining uses of one %s -> %s", C.count("medkit"), tostring(uses0), tostring(obj_of("medkit") and obj_of("medkit"):get_remaining_uses())))
+
+	-- drop
+	local vod = obj_of("vodka")
+	local vid = vod:id()
+	db.actor:drop_item(vod)
+	H.pause(2500)
+	local dropped = level.object_by_id(vid)
+	C.check("inventory", "drop", C.count("vodka") == 1 and dropped ~= nil and (dropped:parent() == nil or dropped:parent():id() ~= AC_ID), string.format("vodka %d left, the dropped one is %s", C.count("vodka"), dropped and "in the world" or "gone"))
+	local w3 = db.actor:get_total_weight()
+	C.check("inventory", "weight-after-drop", w3 < w2, string.format("%.3f -> %.3f", w2, w3))
+
+	-- stacks: ammo boxes merge and split
+	give("ammo_5.45x39_fmj", 1, 30)
+	give("ammo_5.45x39_fmj", 1, 20)
+	H.pause(1500)
+	local total = 0
+	db.actor:iterate_inventory(function(_, o) if o:section() == "ammo_5.45x39_fmj" then total = total + o:ammo_get_count() end end, db.actor)
+	C.check("inventory", "ammo-count", total == 50, "rounds in boxes " .. total)
+	C.run("inventory", "ammo-split", function()
+		local box
+		db.actor:iterate_inventory(function(_, o) if o:section() == "ammo_5.45x39_fmj" and not box then box = o end end, db.actor)
+		local n = box:ammo_get_count()
+		box:ammo_set_count(n - 10)
+		alife_create_item("ammo_5.45x39_fmj", db.actor, { ammo = 10 })
+		H.pause(1500)
+		local sum, boxes = 0, 0
+		db.actor:iterate_inventory(function(_, o) if o:section() == "ammo_5.45x39_fmj" then sum = sum + o:ammo_get_count(); boxes = boxes + 1 end end, db.actor)
+		return sum == 50 and boxes >= 2, string.format("%d rounds in %d boxes after a split of 10", sum, boxes)
+	end)
+
+	-- the window closes again
+	H.close_ui("inventory")
+	C.check("inventory", "close", not H.ui_open(), "window closed")
+	return C.done("chk_inventory")
+end
+
+
+-- weapons ---------------------------------------------------------------------------------------------------------------------
+local function wpn_state(w)
+	local ok, st = pcall(function() return w:get_state() end)
+	return ok and st or -1
+end
+
+-- a game object a few metres in front of the actor
+local function ahead(dist)
+	local pos = vector():set(db.actor:position()):add(vector():set(db.actor:direction()):mul(dist))
+	return pos, level.vertex_id(pos)
+end
+
+local function weapons()
+	start_quiet()
+	give("wpn_ak74", 1)
+	give("ammo_5.45x39_fmj", 4, 30)
+	give("wpn_pm", 1)
+	give("ammo_9x18_fmj", 2, 30)
+	give("1p29", 1)
+	give("wpn_sil_tgp-a", 1)
+	give("grenade_f1", 2)
+	H.pause(2500)
+	local ak = obj_of("wpn_ak74")
+	db.actor:move_to_slot(ak, 3)
+	db.actor:make_item_active(ak)
+	H.pause(4000)
+	C.check("weapons", "equip", db.actor:active_item() ~= nil and db.actor:active_item():id() == ak:id(), "wpn_ak74 in the hands")
+
+	-- reload from the boxes
+	local mag0, total0 = ak:get_ammo_in_magazine(), ak:get_ammo_total()
+	H.press(key_bindings.kWPN_RELOAD, 100)
+	H.pause(6000)
+	local size = ak:cast_Weapon():GetAmmoMagSize()
+	local mag1, total1 = ak:get_ammo_in_magazine(), ak:get_ammo_total()
+	C.check("weapons", "reload", mag1 == size and total1 == total0 - (size - mag0), string.format("magazine %d -> %d of %d, spare rounds %d -> %d", mag0, mag1, size, total0, total1))
+
+	-- fire a burst
+	local cond0 = ak:condition()
+	H.fire_burst(nil, 1500)
+	H.pause(1000)
+	local mag2 = ak:get_ammo_in_magazine()
+	C.check("weapons", "fire", mag2 < mag1 - 3, string.format("magazine %d -> %d in a 1.5 s burst", mag1, mag2))
+	C.check("weapons", "weapon-degradation", ak:condition() < cond0, string.format("condition %.5f -> %.5f", cond0, ak:condition()))
+
+	-- run dry: the weapon stops, a reload fills it again
+	H.fire_burst(nil, 5000)
+	H.pause(1500)
+	local mag3 = ak:get_ammo_in_magazine()
+	C.check("weapons", "empty", mag3 == 0, "magazine " .. mag3 .. " after firing it dry")
+	H.press(key_bindings.kWPN_RELOAD, 100)
+	H.pause(6000)
+	C.check("weapons", "reload-empty", ak:get_ammo_in_magazine() == size or ak:get_ammo_in_magazine() == size + 1, "magazine " .. ak:get_ammo_in_magazine())
+
+	-- jams and misfires: a worn weapon stops now and then; the magazine still holds rounds when it does
+	ak:set_condition(0.04)
+	H.pause(500)
+	local jam, shots = false, 0
+	local states = {}
+	for burst = 1, 12 do
+		local m = ak:get_ammo_in_magazine()
+		if m < 5 then
+			H.press(key_bindings.kWPN_RELOAD, 100)
+			H.pause(6000)
+			m = ak:get_ammo_in_magazine()
+		end
+		H.fire_burst(nil, 800)
+		H.pause(400)
+		local m2 = ak:get_ammo_in_magazine()
+		states[#states + 1] = wpn_state(ak)
+		shots = shots + (m - m2)
+		if m2 == m and m > 0 then
+			jam = true
+			break
+		end
+	end
+	C.check("weapons", "jam", jam, string.format("a worn AK (condition %.2f) stopped with rounds in the magazine after %d shots; states %s; misfire starts below %.2f", ak:condition(), shots, table.concat(states, ","), ak:cast_Weapon():GetMisfireStartCondition()))
+	if jam then
+		H.press(key_bindings.kWPN_RELOAD, 100)
+		H.pause(5000)
+		local m3 = ak:get_ammo_in_magazine()
+		H.fire_burst(nil, 600)
+		C.check("weapons", "unjam", ak:get_ammo_in_magazine() < m3 + 1, string.format("magazine %d, then %d after the reload and a burst", m3, ak:get_ammo_in_magazine()))
+	end
+	ak:set_condition(0.9)
+
+	-- the silencer: attach, shoot, detach
+	db.actor:hide_weapon()
+	H.pause(2000)
+	local sil = obj_of("wpn_sil_tgp-a")
+	C.run("weapons", "silencer-attach", function()
+		ak:weapon_addon_attach(sil)
+		H.pause(1500)
+		return ak:weapon_is_silencer(), "weapon_is_silencer " .. tostring(ak:weapon_is_silencer())
+	end)
+	db.actor:restore_weapon()
+	H.pause(4000)
+	if not db.actor:active_item() then db.actor:make_item_active(ak) H.pause(3000) end
+	local m4 = ak:get_ammo_in_magazine()
+	H.fire_burst(nil, 800)
+	C.check("weapons", "silenced-fire", ak:get_ammo_in_magazine() < m4, string.format("magazine %d -> %d", m4, ak:get_ammo_in_magazine()))
+	db.actor:hide_weapon()
+	H.pause(2000)
+	C.run("weapons", "silencer-detach", function()
+		ak:weapon_addon_detach("wpn_sil_tgp-a", true)
+		H.pause(1500)
+		return not ak:weapon_is_silencer() and C.count("wpn_sil_tgp-a") == 1, "silencer back in the inventory: " .. C.count("wpn_sil_tgp-a")
+	end)
+	db.actor:restore_weapon()
+	H.pause(2500)
+
+	-- the scope: the game's own attach script clones the weapon with the scope on
+	C.run("weapons", "scope-attach", function()
+		local scope = obj_of("1p29")
+		item_weapon.attach_scope(scope, ak)
+		H.pause(3000)
+		local found = nil
+		db.actor:iterate_inventory(function(_, o) if o:section():find("^wpn_ak74_") then found = o end end, db.actor)
+		return found ~= nil and found:cast_Weapon():IsScopeAttached(), found and (found:section() .. " scope " .. tostring(found:cast_Weapon():IsScopeAttached())) or "no scoped AK in the inventory"
+	end)
+
+	-- the scoped weapon: zoom
+	C.run("weapons", "scope-zoom", function()
+		local scoped
+		db.actor:iterate_inventory(function(_, o) if o:section():find("^wpn_ak74_") then scoped = o end end, db.actor)
+		if not scoped then return false, "no scoped AK" end
+		db.actor:move_to_slot(scoped, 3)
+		db.actor:make_item_active(scoped)
+		H.pause(4000)
+		local w = scoped:cast_Weapon()
+		local zoomed_before = w:IsZoomed()
+		-- aiming is hold-to-zoom: keep the key down while looking
+		local zdik = bind_to_dik(key_bindings.kWPN_ZOOM)
+		level.press_action(zdik)
+		for i = 1, 90 do level.hold_action(zdik) coroutine.yield() end
+		local zoomed = w:IsZoomed()
+		level.release_action(zdik)
+		H.pause(500)
+		w:StopZoom()
+		return w:IsZoomEnabled() and zoomed and not zoomed_before, string.format("zoom enabled %s, zoomed %s -> %s, factor %.1f", tostring(w:IsZoomEnabled()), tostring(zoomed_before), tostring(zoomed), w:GetZoomFactor())
+	end)
+
+	-- grenades
+	local gr0 = C.count("grenade_f1")
+	C.run("weapons", "grenade-throw", function()
+		local g = obj_of("grenade_f1")
+		db.actor:make_item_active(g)
+		H.pause(3500)
+		H.god(true) -- a 1.5 s fuse after the release: the throw lands near the actor
+		-- the first press pulls the pin, the release throws
+		local fdik = bind_to_dik(key_bindings.kWPN_FIRE)
+		level.press_action(fdik)
+		for i = 1, 60 do level.hold_action(fdik) coroutine.yield() end
+		level.release_action(fdik)
+		-- watch the thrown grenade: it shows up in the world, then its fuse burns down and it explodes
+		local id, seen, gone = nil, false, false
+		for i = 1, 100 do
+			H.pause(100)
+			if not id then
+				level.iterate_nearest(db.actor:position(), 80, function(o)
+					if o:section() == "grenade_f1" and not o:parent() then id = o:id() end
+					return false
+				end)
+			elseif not level.object_by_id(id) then
+				gone = true
+				break
+			end
+		end
+		H.pause(1500)
+		H.god(false)
+		C.check("weapons", "grenade-in-flight", id ~= nil, "a grenade object in the world after the throw: " .. tostring(id))
+		C.check("weapons", "grenade-explodes", id ~= nil and gone, "the thrown grenade is gone after its fuse")
+		C.check("weapons", "grenade-survived", db.actor:alive(), "actor alive after the blast with god mode on")
+		return C.count("grenade_f1") == gr0 - 1, string.format("grenades %d -> %d", gr0, C.count("grenade_f1"))
+	end)
+
+	-- the knife: it comes up, and every press of the fire key swings it (the weapon state leaves idle)
+	C.run("weapons", "knife", function()
+		local knife = db.actor:item_in_slot(1)
+		if not knife then return false, "no knife in the knife slot" end
+		db.actor:make_item_active(knife)
+		H.pause(3500)
+		local active = db.actor:active_item() ~= nil and db.actor:active_item():section() == knife:section()
+		local fdik = bind_to_dik(key_bindings.kWPN_FIRE)
+		local swung = false
+		for i = 1, 3 do
+			level.press_action(fdik)
+			for k = 1, 30 do
+				level.hold_action(fdik)
+				coroutine.yield()
+				if wpn_state(knife) ~= 0 then swung = true end
+			end
+			level.release_action(fdik)
+			H.pause(1000)
+		end
+		return active and swung, string.format("knife active %s, swing seen %s", tostring(active), tostring(swung))
+	end)
+
+	-- outfit degradation: hits wear the worn outfit down (wounds and blasts; bullets only where it has armour)
+	C.run("weapons", "outfit-degradation", function()
+		give("stalker_outfit", 1)
+		H.pause(1000)
+		local outfit
+		db.actor:iterate_inventory(function(_, o) if o:section() == "stalker_outfit" and not outfit then outfit = o end end, db.actor)
+		db.actor:move_to_slot(outfit, 7)
+		H.pause(9000) -- hits are ignored for the first seconds after the outfit goes on
+		local c0 = outfit:condition()
+		local notes = {}
+		for _, kind in ipairs({ "explosion", "wound" }) do
+			local hp0, cc0 = db.actor.health, outfit:condition()
+			local h = hit()
+			h.type = hit[kind]
+			h.power = 0.5
+			h.impulse = 0
+			h.direction = vector():set(0, 0, 1)
+			h.draftsman = db.actor
+			db.actor:hit(h)
+			H.pause(1000)
+			notes[#notes + 1] = string.format("%s: health %.3f -> %.3f, outfit %.4f -> %.4f", kind, hp0, db.actor.health, cc0, outfit:condition())
+			db.actor.health = 1
+			H.pause(300)
+		end
+		local c1 = outfit:condition()
+		return c1 < c0 - 0.01 and db.actor:alive(), table.concat(notes, "; ")
+	end)
+	C.run("weapons", "screenshot", function() return C.shot("chk_weapons"), "screenshot chk_weapons" end)
+	return C.done("chk_weapons")
+end
+
+function plans(c, h)
+	C, H = c, h
+	local out = {}
+	out.chk_weapons = { function() return weapons() end }
+	-- chk_probe: runs appdata/probe.lua (a scratch file, not part of the check) with the library and the helpers, to try an API out
+	out.chk_probe = { function()
+		start_quiet()
+		local f = io.open(getFS():update_path("$app_data_root$", "") .. "probe.lua", "r")
+		if f then
+			local src = f:read("*a")
+			f:close()
+			local fn, err = loadstring(src, "probe.lua")
+			if fn then
+				local ok, res = pcall(fn, C, H)
+				H.say("probe: %s %s", ok and "ok" or "ERROR", tostring(res))
+			else
+				H.say("probe: syntax error %s", tostring(err))
+			end
+		end
+		return C.done("chk_probe")
+	end }
+	out.chk_survival = { function() return survival() end }
+	out.chk_inventory = { function() return inventory() end }
+	for faction, v in pairs(NEW) do
+		local p = new_game_plan(faction, v.map, v.level, v.money, v.loadout)
+		out[p.name] = p.phases
+	end
+	return out
+end
+
+function seed(faction)
+	local v = NEW[faction]
+	local cfg = axr_main.config
+	cfg:w_value("character_creation", "new_game_faction", faction)
+	cfg:w_value("character_creation", "new_game_map", v.map)
+	cfg:w_value("character_creation", "new_game_story_mode", v.story)
+	cfg:w_value("character_creation", "new_game_money", v.money)
+	cfg:w_value("character_creation", "new_game_loadout", v.loadout)
+	cfg:save()
+	printf("[sweep] seeded a new game: %s at %s", faction, v.map)
+end

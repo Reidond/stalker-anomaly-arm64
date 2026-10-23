@@ -1,0 +1,164 @@
+--[[
+	Systems check (docs/ios-port/SYSTEMS-CHECK.md, tools/sweep/check.sh).
+
+	Inert unless the environment sets ANOMALY_SWEEP=chk_<plan>: sweep_driver then calls install() with its helpers and the plans
+	below join the crash-sweep plans. A plan is a list of phases, as in sweep_driver (see there); what is new is that a phase
+	asserts: C.check(system, item, ok, detail) logs
+
+	    [sweep] [t=.. f=..] CHECK PASS|FAIL <system>/<item> | <detail>
+
+	and tools/sweep/check.sh collects those lines into the table of SYSTEMS-CHECK.md. The plans only use what the game's own
+	scripts and the engine's Lua exports offer; they read state back (conditions, inventory, tasks, the sim board) instead of
+	trusting that a call returned.
+
+	The plans themselves are in sweep_check_play.script, sweep_check_world.script and sweep_check_ui.script.
+--]]
+
+C = {}               -- the library (global, so the plan files can reach it as sweep_check.C)
+local H = nil        -- helpers of sweep_driver
+local pass_n, fail_n = 0, 0
+
+function install(phases, helpers)
+	H = helpers
+	C.H = helpers
+	for _, mod in ipairs({ "sweep_check_play", "sweep_check_world", "sweep_check_ui" }) do
+		local ok, m = pcall(function() return _G[mod] end)
+		if ok and m and m.plans then
+			for name, list in pairs(m.plans(C, H)) do
+				phases[name] = list
+			end
+		elseif not ok then
+			H.say("FAIL loading %s: %s", mod, tostring(m))
+		end
+	end
+	for name, list in pairs(C.plans or {}) do
+		phases[name] = list
+	end
+end
+
+-- results ---------------------------------------------------------------------------------------------------------------
+function C.check(system, item, ok, detail)
+	if ok then
+		pass_n = pass_n + 1
+	else
+		fail_n = fail_n + 1
+	end
+	H.say("CHECK %s %s/%s | %s", ok and "PASS" or "FAIL", system, item, detail ~= nil and tostring(detail) or "")
+	return ok and true or false
+end
+
+-- run fn under pcall; a Lua error is a FAIL of the item (with the message), otherwise fn returns ok, detail
+function C.run(system, item, fn, ...)
+	local ok, res, detail = pcall(fn, ...)
+	if not ok then
+		return C.check(system, item, false, "Lua error: " .. tostring(res))
+	end
+	return C.check(system, item, res, detail)
+end
+
+function C.done(name)
+	H.say("CHECK SUMMARY %s pass=%d fail=%d", name or H.plan, pass_n, fail_n)
+	return { quit = true }
+end
+
+function C.counts()
+	return pass_n, fail_n
+end
+
+-- state -----------------------------------------------------------------------------------------------------------------
+function C.fmt(v)
+	if type(v) == "number" then
+		return string.format("%.3f", v)
+	end
+	return tostring(v)
+end
+
+-- the actor's vitals, all from the engine
+function C.vitals()
+	local a = db.actor
+	local cond = a:cast_Actor():conditions()
+	local v = {
+		health = a.health, power = a.power, radiation = a.radiation, bleeding = a.bleeding, psy = a.psy_health,
+		satiety = cond:GetSatiety(), money = a:money(), weight = a:get_total_weight(),
+	}
+	local ok, w = pcall(function() return actor_status_thirst.get_water_deprivation() end)
+	v.thirst = ok and w or nil
+	ok, w = pcall(function() return actor_status_sleep.get_sleep_deprivation() end)
+	v.sleepiness = ok and w or nil
+	return v
+end
+
+function C.vitals_str(v)
+	local t = {}
+	for _, k in ipairs({ "health", "power", "radiation", "bleeding", "psy", "satiety", "thirst", "sleepiness", "weight", "money" }) do
+		t[#t + 1] = k .. "=" .. C.fmt(v[k])
+	end
+	return table.concat(t, " ")
+end
+
+-- how many of an item section the actor carries (stacked ammo and the like count as the objects, not the rounds)
+function C.count(section)
+	local n = 0
+	db.actor:iterate_inventory(function(_, item)
+		if item:section() == section then
+			n = n + 1
+		end
+	end, db.actor)
+	return n
+end
+
+function C.inventory_total()
+	local n = 0
+	db.actor:iterate_inventory(function() n = n + 1 end, db.actor)
+	return n
+end
+
+function C.gtime()
+	local game_time = game.get_game_time()
+	local Y, M, D, h, m, s, ms
+	Y, M, D, h, m, s, ms = game_time:get(Y, M, D, h, m, s, ms)
+	return string.format("%d-%02d-%02d %02d:%02d:%02d", Y, M, D, h, m, s)
+end
+
+-- seconds of game time since a CTime
+function C.since(t0)
+	return game.get_game_time():diffSec(t0)
+end
+
+-- files ---------------------------------------------------------------------------------------------------------------------
+-- the saves that match a pattern ("*.scop" style), newest first: { name, size }
+function C.saves(pattern)
+	local out = {}
+	local flist = getFS():file_list_open_ex("$game_saves$", bit_or(FS.FS_ListFiles, FS.FS_RootOnly), pattern or "*.scop")
+	local n = flist and flist:Size() or 0
+	if n > 0 then
+		flist:Sort(FS.FS_sort_by_modif_down)
+		for i = 0, n - 1 do
+			local f = flist:GetAt(i)
+			out[#out + 1] = { name = f:NameFull(), size = f:Size(), modif = f:ModifDigitOnly() }
+		end
+	end
+	return out
+end
+
+function C.save_exists(name)
+	for _, s in ipairs(C.saves("*.scop")) do
+		if s.name:lower() == (name .. ".scop"):lower() then
+			return s
+		end
+	end
+	return nil
+end
+
+-- a screenshot the person running the check can look at: appdata/screenshots/<name>.png (r_screenshot_mode png)
+function C.shot(name)
+	get_console():execute("r_screenshot_mode png")
+	get_console():execute("screenshot " .. name)
+	H.pause(1500)
+	return getFS():exist("$screenshots$", name .. ".png") ~= nil
+end
+
+-- the engine's own error log: the check runner greps these out of the log, but a plan can also look at what the game keeps
+function C.err_count()
+	return 0
+end

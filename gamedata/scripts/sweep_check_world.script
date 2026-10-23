@@ -1,0 +1,10 @@
+--[[
+	Systems check, world plans. See sweep_check.script.
+--]]
+
+local C, H
+
+function plans(c, h)
+	C, H = c, h
+	return {}
+end
