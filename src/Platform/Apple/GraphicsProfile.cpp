@@ -141,23 +141,23 @@ const std::vector<ProfileDef> kProfiles = {
     {"ipad-8gb", "iPad, 8 GB (iPad Air M3 measured)", "ipad", true,
         "Measured on the iPad Air 13-inch (M3, 8 GB, 60 Hz). Also the target of other 8 GB iPads with an M-series chip.", "-smap1536",
         {{"texture_lod", "1"}, {"r3_dynamic_wet_surfaces", "off"}, {"r2_ssao_mode", "hdao"}, {"r__geometry_lod", "1.0"}},
-        // Quality: the first preset's settings at about 1.0 Mpixel of scene (1152x864, 2.4x upscaled to the panel). At 1280x960 the rain scene
-        // measured 54.6 fps (about 15 ms of frame per Mpixel), so 1.0 Mpixel leaves 10 % of the frame. Scale 0.42 of the native 2732x2048 is
-        // 1147x860 (clamped to the lowest scale this build accepts: 0.5 until the renderer's minimum is lowered)
+        // Quality: the first preset's settings at scale 0.6 of the native 2732x2048 (1639x1229, 2.0 Mpixel, a scene 1.5 times the pixels of
+        // the first preset's 1366x1024), at a frame rate cap of 40: 25 ms a frame. 40 fps is every third refresh of a 120 Hz panel; a 60 Hz
+        // panel (the iPad Air) shows 40 unevenly, so FrameCaps() offers 30 there and EffectiveFrameCap() steps down to it
         {{"r2_sun_quality", "st_opt_low"}, {"r2_ls_squality", "0.5"}, {"r2_ssao", "st_opt_low"}, {"r__detail_density", "0.4"},
          {"r__detail_radius", "35"}, {"rs_vis_distance", "0.8"}, {"vid_mode", "1152x864", When::WithoutUpscaler},
-         {"r__render_scale", "0.42", When::WithUpscaler}},
-        // Performance: 1024x768 of scene (0.79 Mpixel, scale 0.375), no AO, shorter distances: 25 % of the frame to spare, for a warm iPad
+         {"r__render_scale", "0.6", When::WithUpscaler}},
+        // Performance: scale 0.42 (1147x860, 1.0 Mpixel), no AO, shorter distances, a locked 60: the sizes that held 60 fps on the iPad Air
         {{"r2_sun_quality", "st_opt_low"}, {"r2_ls_squality", "0.5"}, {"r2_ssao", "st_opt_off"}, {"r__detail_density", "0.4"},
          {"r__detail_radius", "30"}, {"rs_vis_distance", "0.75"}, {"r2_sun_far", "80"}, {"r__wallmark_ttl", "20"}, {"ai_use_torch_dynamic_lights", "off"},
-         {"vid_mode", "1024x768", When::WithoutUpscaler}, {"r__render_scale", "0.375", When::WithUpscaler}},
-        60, 60},
+         {"vid_mode", "1024x768", When::WithoutUpscaler}, {"r__render_scale", "0.42", When::WithUpscaler}},
+        40, 60},
     {"ipad-16gb", "iPad, 12 and 16 GB (extrapolated)", "ipad-8gb", false,
         "Not measured. The 8 GB profile with the memory headroom spent on textures, and a GPU a third faster (M4 Pro iPads) spent on render size.", "-smap2048",
         {{"texture_lod", "0"}},
-        {{"vid_mode", "1280x960", When::WithoutUpscaler}, {"r__render_scale", "0.47", When::WithUpscaler}},
-        {{"vid_mode", "1152x864", When::WithoutUpscaler}, {"r__render_scale", "0.42", When::WithUpscaler}},
-        60, 60},
+        {{"vid_mode", "1280x960", When::WithoutUpscaler}, {"r__render_scale", "0.67", When::WithUpscaler}},
+        {{"vid_mode", "1152x864", When::WithoutUpscaler}, {"r__render_scale", "0.47", When::WithUpscaler}},
+        40, 60},
     {"ipad-6gb", "iPad, 6 GB or less, or an A-series chip (extrapolated)", "ipad-8gb", false,
         "Not measured. One step down from the 8 GB profile in textures, render size and distances.", "-smap1024",
         {{"texture_lod", "2"}},
@@ -431,9 +431,14 @@ void SetMode(Mode mode) { S().mode = mode; }
 
 std::vector<int> FrameCaps()
 {
+    // The rates this display shows evenly: its refresh rate over a whole number (30 and 60 of 60 Hz; 30, 40, 60 and 120 of 120 Hz).
+    // 40 on a 60 Hz panel would alternate 16.7 and 33.3 ms (FramePacer.h)
     std::vector<int> caps = {30, 60};
     if (S().hw.max_refresh_hz >= 119.0f)
+    {
+        caps.insert(caps.begin() + 1, 40);
         caps.push_back(120);
+    }
     return caps;
 }
 
@@ -451,7 +456,9 @@ bool SetFrameCap(int fps)
     if (fps != 0)
     {
         const std::vector<int> caps = FrameCaps();
-        if (std::find(caps.begin(), caps.end(), fps) == caps.end())
+        const bool offered = std::find(caps.begin(), caps.end(), fps) != caps.end();
+        // --unlocked-graphics may ask for any rate (the uneven 40 on a 60 Hz panel is measured that way)
+        if (!offered && !(S().unlocked && fps >= 10 && fps <= 240))
             return false;
     }
     S().fps_choice = fps;
@@ -466,12 +473,14 @@ int EffectiveFrameCap()
     if (s.fps_choice)
         return s.fps_choice;
     const ProfileDef* leaf = Find(s.id);
-    int fps = leaf ? (s.mode == Mode::Quality ? leaf->fps_quality : leaf->fps_performance) : 60;
-    // the default for the mode, limited to what the display runs
+    const int fps = leaf ? (s.mode == Mode::Quality ? leaf->fps_quality : leaf->fps_performance) : 60;
+    // the default for the mode, limited to what the display shows evenly: the largest rate on offer that is not above it
     const std::vector<int> caps = FrameCaps();
-    while (fps > 0 && std::find(caps.begin(), caps.end(), fps) == caps.end())
-        fps = fps > 60 ? 60 : fps > 30 ? 30 : 0;
-    return fps;
+    int best = caps.front();
+    for (int cap : caps)
+        if (cap <= fps)
+            best = cap;
+    return best;
 }
 
 std::vector<Setting> Settings(const CommandProbe& probe)

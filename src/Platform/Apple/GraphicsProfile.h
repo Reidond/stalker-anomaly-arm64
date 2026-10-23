@@ -18,8 +18,8 @@ namespace AppleShell::Graphics
 {
 enum class Mode
 {
-    Quality,     // the best image the device sustains at 60 fps
-    Performance, // headroom: a lower render scale, 120 fps where the display has it
+    Quality,     // the best image the device sustains at the mode's rate (40 on the iPad where the display shows it evenly, else 30 or 60)
+    Performance, // a lower render scale at a locked 60 fps (120 on a Mac display that has it)
 };
 const char* ToString(Mode mode);
 bool ParseMode(const char* text, Mode& mode);
@@ -67,10 +67,12 @@ std::string Describe(); // one line for the log: profile, class, mode, frame cap
 Mode CurrentMode();
 void SetMode(Mode mode);
 
-// The frame rate caps the player may choose from on this display: 30 and 60, and 120 where the display runs 120 Hz.
+// The frame rate caps the player may choose from on this display, the ones it shows evenly (a frame lasts a whole number of refreshes):
+// 30 and 60, and 40 and 120 where the display runs 120 Hz.
 std::vector<int> FrameCaps();
 // The player's choice; 0 means "the profile's default for the mode", -1 "unlimited" (only with --unlocked-graphics or no profile).
-// SetFrameCap refuses a value that is not in FrameCaps().
+// SetFrameCap refuses a value that is not in FrameCaps() (with --unlocked-graphics any rate from 10 to 240).
+// The mode's default is the largest rate in FrameCaps() that is not above the profile's: Quality's 40 is 30 on a 60 Hz display.
 int FrameCapChoice();
 bool SetFrameCap(int fps);
 // What applies now: the choice, or the mode's default. 0: no cap, the app runs at the display's rate.

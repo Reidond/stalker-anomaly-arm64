@@ -1,10 +1,15 @@
 // Checks the device graphics profile tables (GraphicsProfile.h) and prints them for the documentation.
+#include <Platform/Apple/FramePacer.h>
 #include <Platform/Apple/GraphicsProfile.h>
 
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
+#include <map>
 #include <set>
 #include <string>
+#include <tuple>
+#include <vector>
 
 namespace G = AppleShell::Graphics;
 
@@ -151,7 +156,7 @@ void TestModesAndCaps()
 {
     G::Options options;
     G::Init(Mac("Apple M2 Pro", 2, 19, 32, 120.0f), options);
-    Check(G::FrameCaps() == std::vector<int>({30, 60, 120}), "120 Hz display: 30, 60, 120");
+    Check(G::FrameCaps() == std::vector<int>({30, 40, 60, 120}), "120 Hz display: 30, 40, 60, 120");
     G::SetMode(G::Mode::Quality);
     Check(G::EffectiveFrameCap() == 60, "Quality defaults to 60");
     G::SetMode(G::Mode::Performance);
@@ -165,10 +170,72 @@ void TestModesAndCaps()
     Check(G::FrameCaps() == std::vector<int>({30, 60}), "60 Hz display: 30, 60");
     G::SetMode(G::Mode::Performance);
     Check(G::EffectiveFrameCap() == 60, "Performance on 60 Hz stays 60");
+    G::SetMode(G::Mode::Quality);
+    Check(G::EffectiveFrameCap() == 30, "iPad Quality asks for 40, a 60 Hz panel shows 30 evenly (40 would alternate 16.7 and 33.3 ms)");
+    Check(!G::SetFrameCap(40), "40 is not on offer on a 60 Hz panel");
+
+    G::Init(Ipad(16, "Apple M4", 120.0f), options);
+    Check(G::FrameCaps() == std::vector<int>({30, 40, 60, 120}), "120 Hz iPad: 30, 40, 60, 120");
+    G::SetMode(G::Mode::Quality);
+    Check(G::EffectiveFrameCap() == 40, "iPad Quality is 40 on a 120 Hz panel (every third refresh)");
+    G::SetMode(G::Mode::Performance);
+    Check(G::EffectiveFrameCap() == 60, "iPad Performance is a locked 60, also on a 120 Hz panel");
+    G::SetMode(G::Mode::Quality);
+    G::Init(Ipad(8, "Apple M3", 120.0f), options);
+    Check(G::EffectiveFrameCap() == 40, "8 GB iPad Quality on a 120 Hz panel is 40");
 
     options.unlocked = true;
     G::Init(Ipad(8, "Apple M3"), options);
     Check(G::SetFrameCap(-1) && G::EffectiveFrameCap() == 0, "unlimited allowed when unlocked");
+    Check(G::SetFrameCap(40) && G::EffectiveFrameCap() == 40, "unlocked: any rate, 40 on a 60 Hz panel (measured as the uneven case)");
+    Check(!G::SetFrameCap(5) && !G::SetFrameCap(500), "unlocked: 10 to 240 only");
+}
+
+// Replays the pacer against a display link that ticks at every refresh of a `hz` panel, with a little jitter, over 20 s. A frame is shown
+// at the tick that runs it. Returns the share of the frame intervals by length in refreshes, and the fps.
+struct PacerRun
+{
+    std::map<int, double> share; // refreshes between two frames -> share of the frames
+    double fps;
+};
+
+PacerRun ReplayPacer(double hz, int cap, double jitter_ms)
+{
+    AppleShell::FramePacer pacer;
+    srand(1);
+    std::vector<double> starts;
+    const double period = 1000.0 / hz;
+    for (int tick = 1; tick < int(20000.0 / period); ++tick)
+    {
+        const double jitter = jitter_ms * (rand() / double(RAND_MAX) * 2.0 - 1.0);
+        const uint64_t now_ns = uint64_t((tick * period + jitter + 1000.0) * 1e6); // +1 s: the pacer reads 0 as "no schedule"
+        const AppleShell::FramePacer::Step step = pacer.Begin(now_ns, 1000000000ull / cap, 5000000ull);
+        if (step.run)
+            starts.push_back(double(now_ns) * 1e-6);
+    }
+    PacerRun run;
+    run.fps = double(starts.size()) / 20.0;
+    for (size_t i = 1; i < starts.size(); ++i)
+        run.share[int((starts[i] - starts[i - 1]) / period + 0.5)] += 1.0 / double(starts.size() - 1);
+    return run;
+}
+
+void TestPacer()
+{
+    // 30 fps on 60 Hz: every second refresh; 60 on 60 and 120 on 120: every refresh; 60 on 120: every second; 40 on 120: every third
+    for (const auto& c : {std::make_tuple(60.0, 30, 2), std::make_tuple(60.0, 60, 1), std::make_tuple(120.0, 60, 2),
+             std::make_tuple(120.0, 40, 3), std::make_tuple(120.0, 30, 4), std::make_tuple(120.0, 120, 1)})
+    {
+        const PacerRun run = ReplayPacer(std::get<0>(c), std::get<1>(c), 0.3);
+        const std::string name = std::to_string(int(std::get<0>(c))) + " Hz panel, cap " + std::to_string(std::get<1>(c));
+        Check(run.share.count(std::get<2>(c)) && run.share.at(std::get<2>(c)) > 0.99, (name + ": every frame lasts the same whole number of refreshes").c_str());
+        Check(run.fps > std::get<1>(c) - 0.5 && run.fps < std::get<1>(c) + 0.5, (name + ": the rate is the cap").c_str());
+    }
+    // 40 on 60 Hz: 1.5 refreshes, so frames alternate 17 and 33 ms (25 ms on average, none at 25)
+    const PacerRun uneven = ReplayPacer(60.0, 40, 0.3);
+    Check(uneven.share.count(1) && uneven.share.count(2) && uneven.share.at(1) > 0.45 && uneven.share.at(2) > 0.45 && uneven.share.size() == 2,
+        "40 fps on a 60 Hz panel alternates 1 and 2 refreshes (17 and 33 ms), which is why it is not offered there");
+    Check(uneven.fps > 39.5 && uneven.fps < 40.5, "40 fps on a 60 Hz panel still averages 40");
 }
 
 void TestUpscalerEntries()
@@ -179,7 +246,7 @@ void TestUpscalerEntries()
     const std::vector<G::Setting> with = G::Settings(WithUpscaler());
     Check(Value(without, "vid_mode") && !strcmp(Value(without, "vid_mode"), "1152x864"), "without MetalFX the render size is vid_mode (Quality 1152x864)");
     Check(!Value(without, "r__render_scale"), "without MetalFX no render scale is set");
-    Check(Value(with, "r__render_scale") && !strcmp(Value(with, "r__render_scale"), "0.42"), "with a render scale the iPad Quality scale is 0.42");
+    Check(Value(with, "r__render_scale") && !strcmp(Value(with, "r__render_scale"), "0.6"), "with a render scale the iPad Quality scale is 0.6");
     Check(Value(with, "r__upscaler") && !strcmp(Value(with, "r__upscaler"), "bilinear") && Value(with, "r__upscale_sharpness"), "the iPad uses bilinear with sharpening");
     Check(Value(with, "vid_mode") && !strcmp(Value(with, "vid_mode"), "2732x2048"), "with a render scale the output is the panel's native size");
 }
@@ -198,10 +265,12 @@ void TestScaleClamp()
     G::Init(Ipad(8, "Apple M3"), options);
     const std::vector<G::Setting> floor05 = G::Settings(ClampProbe(0.5f));
     const std::vector<G::Setting> floor035 = G::Settings(ClampProbe(0.35f));
-    Check(Value(floor05, "r__render_scale") && !strcmp(Value(floor05, "r__render_scale"), "0.5"), "a render scale under the renderer's minimum is clamped to it (0.42 -> 0.5)");
-    Check(Value(floor035, "r__render_scale") && !strcmp(Value(floor035, "r__render_scale"), "0.42"), "with the minimum lowered the profile's own scale is used");
+    Check(Value(floor05, "r__render_scale") && !strcmp(Value(floor05, "r__render_scale"), "0.6"), "Quality's 0.6 is inside the renderer's old range");
+    Check(Value(floor035, "r__render_scale") && !strcmp(Value(floor035, "r__render_scale"), "0.6"), "with the minimum lowered the profile's own scale is used");
     G::SetMode(G::Mode::Performance);
-    Check(Value(G::Settings(ClampProbe(0.35f)), "r__render_scale") && !strcmp(Value(G::Settings(ClampProbe(0.35f)), "r__render_scale"), "0.375"), "Performance scale 0.375");
+    Check(Value(G::Settings(ClampProbe(0.5f)), "r__render_scale") && !strcmp(Value(G::Settings(ClampProbe(0.5f)), "r__render_scale"), "0.5"),
+        "a render scale under the renderer's minimum is clamped to it (Performance 0.42 -> 0.5)");
+    Check(Value(G::Settings(ClampProbe(0.35f)), "r__render_scale") && !strcmp(Value(G::Settings(ClampProbe(0.35f)), "r__render_scale"), "0.42"), "Performance scale 0.42");
     G::SetMode(G::Mode::Quality);
 }
 
@@ -233,6 +302,7 @@ int main(int argc, char** argv)
     TestUnsupportedOff();
     TestLocks();
     TestModesAndCaps();
+    TestPacer();
     TestUpscalerEntries();
     TestScaleClamp();
     if (g_failures)
