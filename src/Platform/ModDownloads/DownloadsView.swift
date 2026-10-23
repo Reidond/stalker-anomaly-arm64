@@ -117,16 +117,19 @@ private struct BrowserBar: View {
     var body: some View {
         HStack(spacing: 6) {
             Button { browser.goBack() } label: { Image(systemName: "chevron.left") }
+                .keyboardShortcut("[", modifiers: .command)
                 .disabled(!browser.canGoBack)
                 .help("Back")
                 .accessibilityLabel("Back")
             Button { browser.goForward() } label: { Image(systemName: "chevron.right") }
+                .keyboardShortcut("]", modifiers: .command)
                 .disabled(!browser.canGoForward)
                 .help("Forward")
                 .accessibilityLabel("Forward")
             Button {
                 if browser.isLoading { browser.stop() } else { browser.reload() }
             } label: { Image(systemName: browser.isLoading ? "xmark" : "arrow.clockwise") }
+                .keyboardShortcut("r", modifiers: .command)
                 .help(browser.isLoading ? "Stop" : "Reload")
                 .accessibilityLabel(browser.isLoading ? "Stop" : "Reload")
 
@@ -167,6 +170,12 @@ private struct BrowserBar: View {
             .disabled(browser.currentURL == nil || !BrowserModel.isWebURL(browser.currentURL))
             .help("Bookmark this page")
             .accessibilityLabel("Bookmark this page")
+
+            Button { addressFocused.wrappedValue = true } label: { EmptyView() }
+                .keyboardShortcut("l", modifiers: .command) // Cmd+L: type an address
+                .frame(width: 0, height: 0)
+                .opacity(0)
+                .accessibilityHidden(true)
 
             Button { model.showPanel.toggle() } label: {
                 HStack(spacing: 4) {

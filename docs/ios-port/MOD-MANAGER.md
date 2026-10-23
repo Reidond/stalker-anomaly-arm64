@@ -66,7 +66,7 @@ bookmarks, the web page (WKWebView), and the downloads list (a side panel on wid
     (iPad pointer effects) and keyboard or controller focus all work. The system's focus engine moves between them.
   - web pages have no focus ring, so a gamepad drives the page itself: left stick or D-pad scrolls, the right stick moves a
     cursor (drawn while in use), A taps what is under it, L1 / B go back, R1 goes forward, R3 recentres the cursor. The
-    code only reads the pad (no handlers are installed), so it cannot take input from anything else. A keyboard scrolls the page as usual.
+    code only reads the pad (no handlers are installed), so it cannot take input from anything else. A hardware keyboard scrolls the page as usual, and has Cmd+L (address), Cmd+[ and Cmd+] (back, forward) and Cmd+R (reload).
 - Both layouts (wide and narrow) are in the PR as offscreen renders.
 
 ### What is downloaded, and when
