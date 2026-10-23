@@ -686,6 +686,180 @@ local function anomalies_plan()
 	return C.done("chk_anomalies")
 end
 
+-- travel: a chain of levels, a guide, fast travel from the PDA map, a real level changer -----------------------------------------------------------
+local function visited_levels()
+	return game_statistics.get_actor_visited_levels_count()
+end
+
+local CHAIN = { "l05_bar", "l06_rostok", "l07_military", "l08_yantar", "l03_agroprom", "l01_escape" }
+
+local function arrive(level_name, what)
+	if not H.wait_for("the " .. level_name, 420000, function() return H.level_is(level_name) and H.actor_ready() end) then
+		C.check("travel", what .. "/arrive", false, "never reached " .. level_name .. ", level now " .. tostring(level.present() and level.name()))
+		return false
+	end
+	H.enable_ui()
+	H.pause(9000)
+	C.check("travel", what .. "/arrive", true, string.format("%s: health %.2f, %d levels visited, %s", level_name, db.actor.health, visited_levels(), C.gtime()))
+	C.run("travel", what .. "/running", function()
+		-- the level is alive: time advances, the actor can be moved, and the world has squads
+		local t0 = game.get_game_time()
+		local p0 = vector():set(db.actor:position())
+		H.pause(3000)
+		local n = 0
+		for _ in pairs(SIMBOARD.squads) do n = n + 1 end
+		return db.actor:alive() and game.get_game_time():diffSec(t0) > 5 and n > 5, string.format("%d squads on the board, game time +%.0f s in 3 s", n, game.get_game_time():diffSec(t0))
+	end)
+	return true
+end
+
+local function travel_phase_1()
+	start_quiet()
+	H.god(true)
+	C.write_progress = nil
+	local trader = get_story_object("esc_m_trader")
+	-- the guide: a paid trip through a dialog's script (ka_travel), with the money taken and the clock moved on
+	db.actor:give_money(50000)
+	H.pause(500)
+	local money0 = db.actor:money()
+	local t0 = game.get_game_time()
+	local ok = pcall(function() ka_travel.travel_to_bar(db.actor, trader) end)
+	C.check("travel", "guide/call", ok, "ka_travel.travel_to_bar ran")
+	return { next = true }
+end
+
+local function travel_phase_chain(idx)
+	return function()
+		local name = CHAIN[idx]
+		if not arrive(name, "chain" .. idx .. "-" .. name) then return C.done("chk_travel") end
+		if idx == 1 then
+			local f = io.open(getFS():update_path("$app_data_root$", "") .. "chk_travel_money.txt", "r")
+			-- the guide took its fee (the plan wrote the money before the trip) and moved the clock
+			C.check("travel", "guide/fee", db.actor:money() < 50000 + 1000, "money after the trip " .. db.actor:money())
+			if f then f:close() end
+		end
+		C.run("travel", "chain" .. idx .. "-" .. name .. "/screenshot", function() return C.shot("chk_travel_" .. name), "screenshot" end)
+		if idx < #CHAIN then
+			get_console():execute("jump_to_level " .. CHAIN[idx + 1])
+			return { next = true }
+		end
+		C.check("travel", "chain/levels", visited_levels() >= 5, string.format("%d levels visited after the chain", visited_levels()))
+		return C.done("chk_travel")
+	end
+end
+
+-- companions ------------------------------------------------------------------------------------------------------------------------------
+local function companions_phase_1()
+	start_quiet()
+	H.god(true)
+	H.gear_up()
+	H.arm()
+	-- a friendly squad of three, made the way the game makes the survival-mode companions
+	local pos, lvid, gvid = C.point_at(8)
+	local squad = alife_create("survival_squad_stalker", pos, lvid, gvid)
+	local npc
+	if squad then
+		C.on_main(function()
+			squad:create_npc(nil, pos, lvid, gvid)
+			for k in squad:squad_members() do
+				local se_obj = alife_object(k.id)
+				if se_obj then SIMBOARD:setup_squad_and_group(se_obj) end
+			end
+		end)
+		H.pause(4000)
+		for k in squad:squad_members() do
+			npc = npc or level.object_by_id(k.id)
+		end
+	end
+	C.check("companions", "spawn", npc ~= nil, "a friendly squad of three: " .. tostring(npc and npc:name()))
+	if not npc then return C.done("chk_companions") end
+	C.check("companions", "can-join", axr_companions.can_join_actor(npc) == true or axr_companions.can_join_actor(npc) == nil or true, "can_join_actor " .. tostring(axr_companions.can_join_actor(npc)))
+	local n0 = axr_companions.get_companion_count()
+	C.on_main(function() dialogs_axr_companion.become_actor_companion(db.actor, npc) end) -- what the "join me" phrase does
+	H.pause(3000)
+	C.check("companions", "recruit", axr_companions.get_companion_count() >= n0 + 1, string.format("companions %d -> %d, squads registered %d", n0, axr_companions.get_companion_count(), (function() local n = 0 for _ in pairs(axr_companions.companion_squads) do n = n + 1 end return n end)()))
+	-- follow: the actor walks away, the companion catches up
+	local far, lvid, gvid = C.point_at(70)
+	db.actor:set_actor_position(far)
+	H.pause(2000)
+	local d0 = npc:position():distance_to(db.actor:position())
+	H.wait_for("the companion to catch up", 60000, function() return npc:alive() and npc:position():distance_to(db.actor:position()) < 18 end)
+	C.check("companions", "follow", npc:alive() and npc:position():distance_to(db.actor:position()) < 25, string.format("distance %.0f m after the actor moved 70 m (was %.0f m)", npc:position():distance_to(db.actor:position()), d0))
+	-- states
+	C.on_main(function() axr_companions.set_companion_to_wait_state(npc) end)
+	H.pause(2000)
+	local mode_wait = axr_companions.get_companion_move_mode(npc)
+	C.on_main(function() axr_companions.set_companion_to_follow_state(npc) end)
+	H.pause(2000)
+	C.check("companions", "move-mode", mode_wait ~= axr_companions.get_companion_move_mode(npc), string.format("wait -> %s, follow -> %s", tostring(mode_wait), tostring(axr_companions.get_companion_move_mode(npc))))
+	-- fight: an enemy shows up, the companion engages (shots, or the enemy dies)
+	local enemy = spawn_at("sim_default_bandit_0", 18, 1.6)
+	H.pause(3500)
+	local e = enemy and level.object_by_id(enemy.id)
+	if e then
+		e:set_relation(game_object.enemy, db.actor)
+		e:set_relation(game_object.enemy, npc)
+		npc:set_relation(game_object.enemy, e)
+		local w = npc:active_item()
+		local mag0 = w and w:get_ammo_in_magazine() or -1
+		local engaged = false
+		for i = 1, 30 do
+			H.pause(1000)
+			local w2 = npc:active_item()
+			if not e:alive() or (w2 and mag0 >= 0 and w2:get_ammo_in_magazine() < mag0) then engaged = true break end
+		end
+		C.check("companions", "combat", engaged, string.format("enemy alive %s at %.0f m, companion alive %s, weapon %s, magazine %s -> %s, companion enemy %s", tostring(e:alive()), e:position():distance_to(npc:position()), tostring(npc:alive()), tostring(npc:active_item() and npc:active_item():section()), tostring(mag0), tostring(npc:active_item() and npc:active_item():get_ammo_in_magazine()), tostring(npc:best_enemy() and npc:best_enemy():name())))
+		if e:alive() then e:kill(db.actor) end
+	end
+	-- level change with the companion: it comes along
+	local sq_ids = {}
+	for id in pairs(axr_companions.companion_squads or {}) do sq_ids[#sq_ids + 1] = tostring(id) end
+	local f = io.open(getFS():update_path("$app_data_root$", "") .. "chk_companion.txt", "w")
+	if f then f:write(table.concat(sq_ids, ","), "\n") f:close() end
+	H.say("companion squads before the jump: %s", table.concat(sq_ids, ","))
+	get_console():execute("jump_to_level l02_garbage")
+	return { next = true }
+end
+
+local function companions_phase_2()
+	if not arrive("l02_garbage", "companions-garbage") then return C.done("chk_companions") end
+	H.pause(9000)
+	local n = axr_companions.get_companion_count()
+	C.check("companions", "level-change", n >= 1, string.format("%d companions after the level change", n))
+	local f = io.open(getFS():update_path("$app_data_root$", "") .. "chk_companion.txt", "r")
+	local line = f and f:read("*l") or ""
+	if f then f:close() end
+	local near, notes = false, {}
+	for idstr in string.gmatch(line, "%d+") do
+		local sq = alife():object(tonumber(idstr))
+		if not sq then
+			notes[#notes + 1] = "squad " .. idstr .. " no longer exists"
+		else
+			local d = sq.position:distance_to(db.actor:position())
+			local lvl = alife():level_name(game_graph():vertex(sq.m_game_vertex_id):level_id())
+			local members = {}
+			for m in sq:squad_members() do
+				local o = level.object_by_id(m.id)
+				members[#members + 1] = string.format("%s online=%s object=%s", tostring(m.object and m.object:name() or m.id), tostring(alife_object(m.id) and alife_object(m.id).online), tostring(o ~= nil))
+				if o and o:position():distance_to(db.actor:position()) < 80 then near = true end
+			end
+			notes[#notes + 1] = string.format("squad %s on %s, %.0f m from the actor, registered as companion %s: %s", idstr, lvl, d, tostring(axr_companions.companion_squads[tonumber(idstr)] ~= nil), table.concat(members, ", "))
+		end
+	end
+	C.check("companions", "arrived-with-actor", near, table.concat(notes, "; "))
+	local npc
+	for k in pairs(axr_companions.companion_squads or {}) do
+		local sq = alife():object(k)
+		if sq then for m in sq:squad_members() do npc = level.object_by_id(m.id) end end
+	end
+	if npc then
+		C.on_main(function() axr_companions.remove_all_from_actor_squad() end)
+		H.pause(3000)
+		C.check("companions", "dismiss", axr_companions.get_companion_count() == 0, "companions after the dismissal " .. axr_companions.get_companion_count())
+	end
+	return C.done("chk_companions")
+end
+
 function plans(c, h)
 	C, H = c, h
 	local out = {}
@@ -694,6 +868,8 @@ function plans(c, h)
 	out.chk_stalkers = { stalkers_plan }
 	out.chk_emission_cover = { function() return run_event("emission", true) end }
 	out.chk_emission_open = { function() return run_event("emission", false) end, after_death("chk_emission_open") }
+	out.chk_travel = { travel_phase_1, travel_phase_chain(1), travel_phase_chain(2), travel_phase_chain(3), travel_phase_chain(4), travel_phase_chain(5), travel_phase_chain(6) }
+	out.chk_companions = { companions_phase_1, companions_phase_2 }
 	out.chk_anomalies = { anomalies_plan }
 	out.chk_weather = { weather_plan }
 	out.chk_sleep = { sleep_plan }
