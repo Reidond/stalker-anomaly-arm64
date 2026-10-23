@@ -838,6 +838,8 @@ local function companions_phase_1()
 	H.pause(2000)
 	C.check("companions", "move-mode", mode_wait ~= axr_companions.get_companion_move_mode(npc), string.format("wait -> %s, follow -> %s", tostring(mode_wait), tostring(axr_companions.get_companion_move_mode(npc))))
 	-- fight: an enemy shows up, the companion engages (shots, or the enemy dies)
+	-- (the companion is a plain stalker in a plain jacket: a bandit's lucky burst kills it now and then, so it is made invulnerable for the fight)
+	npc:invulnerable(true)
 	local enemy = spawn_at("sim_default_bandit_0", 18, 1.6)
 	H.pause(3500)
 	local e = enemy and level.object_by_id(enemy.id)
@@ -856,6 +858,7 @@ local function companions_phase_1()
 		C.check("companions", "combat", engaged, string.format("enemy alive %s at %.0f m, companion alive %s, weapon %s, magazine %s -> %s, companion enemy %s", tostring(e:alive()), e:position():distance_to(npc:position()), tostring(npc:alive()), tostring(npc:active_item() and npc:active_item():section()), tostring(mag0), tostring(npc:active_item() and npc:active_item():get_ammo_in_magazine()), tostring(npc:best_enemy() and npc:best_enemy():name())))
 		if e:alive() then e:kill(db.actor) end
 	end
+	npc:invulnerable(false)
 	-- level change with the companion: it comes along
 	local sq_ids = {}
 	for id in pairs(axr_companions.companion_squads or {}) do sq_ids[#sq_ids + 1] = tostring(id) end

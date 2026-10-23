@@ -71,6 +71,21 @@ local function script_api_plan()
 		local r3 = ak:install_upgrade("no_such_section")
 		return r1 == false and r2 == false and r3 == false and not ak:has_upgrade("up_gr_firstab_ak74"), string.format("results %s %s %s", tostring(r1), tostring(r2), tostring(r3))
 	end)
+	-- a fastcall that replaces itself (what a door script does when it changes the door's state from inside its own per-frame function):
+	-- the engine used to delete the call, and the condition, that was still running
+	C.run("script-api", "fastcall-replaces-itself", function()
+		local ran = { first = 0, second = 0 }
+		local ctx = {}
+		db.actor:set_fastcall(function()
+			ran.first = ran.first + 1
+			if ran.first == 1 then
+				db.actor:set_fastcall(function() ran.second = ran.second + 1 return true end, ctx)
+			end
+			return false
+		end, ctx)
+		H.pause(1500)
+		return ran.first >= 1 and ran.second >= 1 and db.actor:alive(), string.format("the first function ran %d time(s), its replacement %d", ran.first, ran.second)
+	end)
 	return C.done("chk_script_api")
 end
 
