@@ -43,7 +43,7 @@ struct EngineProbe : Gfx::CommandProbe
     {
         if (!Console)
             return false;
-        if (CCC_Float* command = smart_cast<CCC_Float*>(Console->GetCommand(name)))
+        if (CCC_Float* command = dynamic_cast<CCC_Float*>(Console->GetCommand(name)))
         {
             command->GetBounds(lo, hi);
             return true;

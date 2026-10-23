@@ -40,6 +40,14 @@ def make_script(args):
         t += 2
         out.append("%g key Left Shift" % t)
     t += 4
+    if args.soak > 0:
+        # heat the device first: the village at noon (the busiest scene), so that the scenes are measured warm (the thermal column
+        # of the table says which state each window ran in; an iPad goes from Nominal to Serious after a minute or two of load)
+        for k, c in enumerate(dict(SCENES)["village"]):
+            out.append("%g console run_string %s" % (t + k * 0.5, c))
+        out.append("%g log SOAK begin %g s" % (t + 1, args.soak))
+        t += args.soak
+        out.append("%g log SOAK end" % t)
     for mode in modes:
         if len(modes) > 1:  # a switch in the middle of a run: the menu's path, with its video restart
             out.append("%g console gfx_mode %s" % (t, mode))
@@ -160,6 +168,7 @@ def main():
     s.add_argument("--modes", default="quality", help="one mode per launch (the default), or a comma list: switched in the middle of one run")
     s.add_argument("--seconds", type=float, default=34)
     s.add_argument("--settle", type=float, default=10)
+    s.add_argument("--soak", type=float, default=0, help="seconds to stand in the village first, to measure warm (default 0: cool)")
     s.add_argument("--unlimited", action="store_true", help="run without the profile's frame cap (the run needs --unlocked-graphics)")
     w = sub.add_parser("sweep")
     w.add_argument("--save", required=True)

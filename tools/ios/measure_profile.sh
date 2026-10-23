@@ -9,6 +9,7 @@
 #     -s save      the save to load (default ipad_test)
 #     -o outdir    where the results go (default ios-profile-<time>)
 #     -k lockfile  refuse to start while this file exists (a note another session leaves when it uses the iPad)
+#     -w seconds   warm-up before the scenes (default 120; 0 measures cool)
 #
 # Needs the iPad connected and unlocked. It restores user.ltx as it found it. Never uses the Simulator.
 set -euo pipefail
@@ -19,8 +20,9 @@ save=ipad_test
 install=0
 out=ios-profile-$(date +%m%d-%H%M)
 lock=""
-while getopts "is:o:k:" opt; do
-    case $opt in i) install=1;; s) save=$OPTARG;; o) out=$OPTARG;; k) lock=$OPTARG;; *) exit 2;; esac
+soak=120
+while getopts "is:o:k:w:" opt; do
+    case $opt in i) install=1;; s) save=$OPTARG;; o) out=$OPTARG;; k) lock=$OPTARG;; w) soak=$OPTARG;; *) exit 2;; esac
 done
 if [[ -n $lock && -e $lock ]]; then echo "the iPad is in use ($lock exists)" >&2; exit 3; fi
 mkdir -p "$out"
@@ -56,7 +58,8 @@ run menu "$here/scripts/settings_menu.txt"
 mkdir -p "$out/shots"; copy_from "$appdata/screenshots" "$out/shots"
 
 for mode in quality performance; do
-    python3 -I "$repo/tools/profile_measure.py" script --save $save --modes $mode > "$out/measure_$mode.script"
+    # --soak: two minutes in the village first, so that the scenes run warm (the table's thermal column says what state each ran in)
+    python3 -I "$repo/tools/profile_measure.py" script --save $save --modes $mode --soak ${soak:-120} > "$out/measure_$mode.script"
     run measure_$mode "$out/measure_$mode.script" -dbg
 done
 python3 -I "$repo/tools/profile_measure.py" summarize "$out/measure_quality.out" "$out/measure_performance.out" > "$out/measurements.md"

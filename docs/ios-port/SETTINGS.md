@@ -47,12 +47,12 @@ measured class had it.
 ### What the profiles set
 
 `tools/graphics_profile_test --dump` prints every resolved table. The settings that matter, per profile and mode
-(Q = Quality, P = Performance; "MetalFX" is `r__render_scale`, see [render size](#render-size-and-metalfx)):
+(Q = Quality, P = Performance; the render size is `r__render_scale` of the native output, see [render size](#render-size-and-render-scale)):
 
 | Setting | ipad-8gb | ipad-16gb | ipad-6gb | mac-pro | mac-base | mac-base-8gb | mac-max | mac-ultra |
 |---|---|---|---|---|---|---|---|---|
 | texture level | 1 | 0 | 2 | 1 | 1 | 2 | 0 | 0 |
-| render size | 1280x960 / 1152x864; MetalFX 0.47 / 0.42 | 1366x1024 / 1280x960; MetalFX 0.5 / 0.47 | 1152x864 / 1024x768; MetalFX 0.42 / 0.375 | window; MetalFX 0.7 / 0.5 | window; MetalFX 0.6 / 0.45 | window; MetalFX 0.6 / 0.45 | window; MetalFX 0.8 / 0.6 | window; MetalFX 0.9 / 0.7 |
+| render size | scale 0.42 / 0.375 (without a scale: 1152x864 / 1024x768) | scale 0.47 / 0.42 (without a scale: 1280x960 / 1152x864) | scale 0.375 / 0.33 (without a scale: 1024x768 / 896x672) | scale 1.0 / 0.7 | scale 0.7 / 0.5 | scale 0.7 / 0.5 | scale 1.0 / 0.8 | scale 1.0 / 0.9 |
 | sun/shadow quality | low | low | low | medium / low | low | low | high / medium | high / medium |
 | light shadow quality | 0.5 | 0.5 | 0.5 | 1.0 / 0.7 | 0.7 / 0.5 | 0.7 / 0.5 | 1.0 | 1.0 |
 | AO level (HDAO on the iPad, SSDO on the Mac) | low / off | low / off | low / off | medium / low | low / off | low / off | high / medium | high / medium |
@@ -65,8 +65,10 @@ measured class had it.
 
 All profiles share `apple` (unsupported features off, see [below](#unsupported-features-stay-off)), plus per family:
 
-- iPad: `rs_screenmode borderless`, `rs_v_sync on`, `snd_cache_size 32`, `r__tf_aniso 4`, no MSAA, `-smap<size>` shadow map.
-- Mac: `rs_v_sync on`, `r__tf_aniso 8`, no MSAA. The window and the display mode stay the player's (a desktop has windows).
+- iPad: `rs_screenmode borderless`, `rs_v_sync on`, `snd_cache_size 32`, `r__tf_aniso 4`, no MSAA, `-smap<size>` shadow map; with a render
+  scale: native output, `r__upscaler bilinear`, `r__upscale_sharpness 0.25`.
+- Mac: `rs_v_sync on`, `r__tf_aniso 8`, no MSAA; with a render scale: `r__upscaler metalfx`. The window and the display mode stay the
+  player's (a desktop has windows).
 
 ## Modes
 
@@ -82,6 +84,13 @@ cheaper settings that keep 60 even in the worst scene and when the iPad is warm.
 Performance defaults to 120 where the profile allows it and the display runs 120 Hz) and is unit tested, but **no 120 Hz iPad was
 available to measure it**. A ProMotion iPad Pro falls in `ipad-8gb` or `ipad-16gb` and gets cap choices up to 120 with Auto at 60.
 
+**A warm iPad is the other limit.** The iPad leaves Nominal for Serious within a minute or two of load and then runs 12 to 20 % slower on the
+main thread (RENDERER.md, measured by the MetalFX session: every render scale up to 0.67 then fell to 45 to 51 fps). The two modes divide the
+problem: **Quality holds 60 fps cool**, with about 10 % of the frame to spare in the worst scene, so a warm iPad may dip under it; **Performance
+holds 60 fps warm**, with 25 % to spare (more than the 20 % slowdown). A player who wants an even frame rate whatever the temperature has the frame
+rate cap: 30 fps paces frames evenly (the app skips every other display tick). The measurement tables below have a two-minute warm-up in the
+busiest scene before the scenes and a thermal column, so they show what state each window ran in.
+
 Switching mode in the menu applies the profile's settings for that mode and restarts the video (`vid_restart`, a second or two); the
 mode is saved in `user.ltx` as `gfx_mode`. The default is Quality.
 
@@ -92,6 +101,7 @@ mode is saved in `user.ltx` as `gfx_mode`. The default is Quality.
 | Visual / Basic | Graphics mode | `gfx_mode` | the one quality choice a console offers |
 | | Frame rate | `gfx_fps` | 30 / 60 / (120): the player's choice of smoothness against battery and heat. Auto follows the mode |
 | | Brightness | `r__exposure` | rooms differ and so do screens; the stock menu already used this variable for R4 (its gamma ramp is ignored on Metal) |
+| | Text size | `ui_text_scale` | the UI text follows the screen's height by itself ([below](#ui-text-size)); this makes it larger or smaller still, for the distance the player sits at. 0.75 to 1.5, applies at the next video restart |
 | | FOV, HUD FOV | `fov`, `hud_fov` | comfort. FOV is limited to 45 to 90 |
 | | Motion blur | `r2_mblur_enabled` | a taste, and cheap. Off until the player turns it on |
 | | Screen mode (Mac only) | `rs_screenmode` | a desktop has windows |
@@ -169,19 +179,36 @@ Off in every profile and both modes (`graphics_profile_test` checks all of them)
 | MSAA, SMAA, other AA | not exercised beyond MSAA 2x and 4x, costs 0.5 to 1.3 GB at native size | `r3_msaa st_opt_off`, `r2_smaa off`, `r2_aa off` |
 | Global illumination | not exercised | `r2_gi off` |
 
-## Render size and MetalFX
+## Render size and render scale
 
-The MetalFX session adds `r__render_scale` (the 3D scene renders at a fraction of the output size, the UI at native) and
-`r__upscaler` (`metalfx` or `bilinear`). They are not in `main` yet. The profiles use them **by name and only if the console has
-them**; until then the render size is the back buffer size, as before:
+The MetalFX work (`RENDERER.md`, "Render scale and upscaling") added `r__render_scale` (0.5 to 1.0: the 3D scene renders at a fraction of the
+output size, the UI at native), `r__upscaler` (`metalfx` or `bilinear`) and `r__upscale_sharpness` (0 to 1). The profiles use them **by name and only
+if the console has them**, and `r__render_scale` is clamped to the range this build accepts (a value outside it is a syntax error in the console,
+not a clamp: a profile asking for 0.42 would leave the scale at 1.0, the iPad at native resolution and 20 fps).
 
 | | Without `r__render_scale` | With it |
 |---|---|---|
-| iPad | `vid_mode` is the render size (1366x1024 Quality, 1152x864 Performance on the 8 GB class); the Metal layer scales it to the panel | `vid_mode` is the panel's native size and `r__render_scale` the fraction |
-| Mac | the window or display size, which is the player's | the scale on top of it |
+| iPad | `vid_mode` is the render size (Quality 1152x864, Performance 1024x768 on the 8 GB class); the Metal layer scales it to the panel | `vid_mode` is the panel's native size (a sharp UI) and the scene is `r__render_scale` of it: 0.42 and 0.375, the same pixels; bilinear with sharpening 0.25 |
+| Mac | the window or display size, which is the player's | Quality 1.0 (no scaling), Performance 0.7 with MetalFX (free on the Mac: 6.5 against 6.9 ms) |
 
-The scale values in the tables are what the measurements below support at 1x scale equivalent; the MetalFX session reports its own
-measured defaults and they replace these.
+**The iPad scales are below the renderer's minimum of 0.5, and below what the MetalFX session recommends (0.6 for Quality, 0.5 for Performance).** That
+recommendation keeps the old preset's GPU cost (15.3 ms in a field in the rain, 56 to 59 fps). The on-device runs of this profile (below) show that a
+frame of that cost does not hold 60 fps in the rain (54.6 fps at 1280x960, 1.23 Mpixel: about 15 ms a Mpixel), so the profile asks for about 1.0 Mpixel of
+scene for Quality and 0.79 for Performance: scales 0.42 and 0.375 of the panel. Until the renderer's minimum is lowered (the MetalFX session offered 0.35)
+the iPad runs at 0.5 with this build, which is 1.4 Mpixel (the old preset's pixel count: Quality dips under 60 in the rain); `gfx_profile` prints the value
+that was set. The change is the `0.5f` minimum in `CMD4(CCC_RenderScale, "r__render_scale", ...)` in `xrRender_console.cpp`.
+
+## UI text size
+
+Text in the menus and on the HUD did not follow the screen: the font atlas ladder (`GetFontTextureName`, by `Device.dwHeight`) has rungs up to 2160 for a
+few HUD fonts only, most UI fonts stop at the 1200 rung, and glyphs are drawn at their atlas size. At 2048 px high the options menu's text is 16 px, the
+same as at 1024 and half as tall relative to the screen (7.8 against 15.6 per mille): the "0.64 of the old text" in the render scale notes. On Apple
+builds `CGameFont` now gives every font that is not device independent a multiplier of `Device.dwHeight / 1080` (`/ 2000` for an atlas authored for 2160;
+1 below that; at most 3), so text keeps the height, relative to the screen, it has on a 1080p PC; the player's `ui_text_scale` multiplies it. The rule is
+`apple_text_scale` in `GameFont.cpp` behind `XR_PLATFORM_APPLE`, and the engine log lists each font's multiplier at start (`* [font]
+ui\ui_font_arial_14_1600: text scale 1.90`). Checked at 2732x2048 on the Mac: the options menu, the inventory, the PDA and the loading screen
+(`scenes/26_options_keys.script`, `06_inventory`, `07_pda`, `01_loading`): the text is as tall relative to the screen as at 1366x1024 and nothing
+overflows its box. Dialogs and the in-game HUD were not checked.
 
 ## Measurements
 
@@ -194,54 +221,35 @@ and drop a window that overlapped one.
 
 ### Mac: MacBook Pro 14-inch, M2 Pro (19 GPU cores), 32 GB, 3024x1964 at 120 Hz
 
-`tools/render_harness/measure_profile.sh -u`: the `mac-pro` profile, unattended and offscreen (no window, no focus), `--unlocked-graphics`
-and `gfx_fps unlimited` so that the frame rate is what the Mac could do, not the cap; `RelWithDebInfo`, the Lua JIT on. One launch per
-mode and size, the five scenes above, each measured over its 10 s windows after 10 s of settling; a window counts only if no other `anomaly`
-process ran during it. The render sizes stand in for the render scale while `r__render_scale` is not in `main`: 3024x1964 is the native
-size (scale 1.0), 2116x1375 is scale 0.7, 1512x982 is scale 0.5. *fps* is the mean of the windows, *slowest* the slowest window, *CPU* the
-time the main thread spends in a frame (it includes waiting for the GPU), *GPU* the GPU time per frame, *footprint* the process's physical
-footprint at the end of the scene (it only grows over a run: the level streams in).
+`tools/render_harness/measure_profile.sh -u -s 3024x1964`: the `mac-pro` profile with the real `r__render_scale` (Quality 1.0, Performance 0.7 with MetalFX),
+unattended and offscreen (no window, no focus), `--unlocked-graphics` and `gfx_fps unlimited` so that the frame rate is what the Mac could do, not the cap;
+`RelWithDebInfo`, the Lua JIT on. One launch per mode, the five scenes above, each over its 10 s windows after 10 s of settling. A window counts only if no
+other `anomaly` process ran during it (the sampler of the script; the runs below had none, and an earlier set that overlapped another session's runs was
+discarded). *fps* is the mean of the windows, *slowest* the slowest window, *CPU* the time the main thread spends in a frame (it includes waiting for the
+GPU), *GPU* the GPU time per frame, *footprint* the process's physical footprint at the end of the scene (it only grows over a run: the level streams in).
 
 | Run | Scene | windows | fps | slowest | CPU ms | GPU ms | draws | footprint MB | thermal |
 |---|---|---:|---:|---:|---:|---:|---:|---:|---|
-| **Quality, native** (run 1) | field | 2 | 105.8 | 105.4 | 9.4 | 6.7 | 1685 | 4836 | Nominal |
-| | rain | 3 | 58.5 | **48.8** | 17.3 | 12.0 | 3013 | 4921 | Nominal |
-| | bunker | 2 | 88.4 | 79.6 | 11.3 | 8.7 | 921 | 4720 | Nominal |
-| | village | 2 | 111.9 | 107.1 | 8.9 | 12.4 | 1693 | 4797 | Fair |
-| | night | 3 | 79.7 | 75.6 | 12.6 | 8.3 | 1279 | 4975 | Fair |
-| **Quality, native** (run 2) | field | 2 | 103.8 | 103.6 | 9.6 | 6.9 | 1763 | 4879 | Nominal |
-| | rain | 3 | 96.8 | 90.4 | 10.3 | 7.6 | 1586 | 4953 | Nominal |
-| | bunker | 3 | 104.5 | 101.7 | 9.5 | 6.9 | 915 | 5020 | Nominal |
-| | village | 2 | 82.8 | 73.3 | 12.2 | 9.9 | 1718 | 5081 | Nominal |
-| | night | 3 | 83.0 | 58.7 | 12.9 | 8.2 | 1772 | 5221 | Nominal |
-| **Quality, scale 0.7** | field | 2 | 110.8 | 107.9 | 9.0 | 5.8 | 1465 | 4563 | Nominal |
-| | rain | 3 | 118.1 | 112.7 | 8.4 | 6.3 | 1916 | 4640 | Nominal |
-| | bunker | 2 | 98.6 | 97.8 | 10.1 | 5.2 | 911 | 4460 | Nominal |
-| | village | 2 | 135.2 | 128.0 | 7.4 | 4.7 | 1494 | 4561 | Nominal |
-| | night | 3 | 110.4 | 93.5 | 9.2 | 4.7 | 1510 | 4705 | Fair |
-| **Performance, native** | field | 2 | 102.2 | 101.4 | 9.8 | 7.0 | 1728 | 4395 | Nominal |
-| | rain | 3 | 104.3 | 96.1 | 9.6 | 6.6 | 1396 | 4508 | Nominal |
-| | bunker | 2 | 111.3 | 105.1 | 8.9 | 6.2 | 411 | 4661 | Nominal |
-| | village | 2 | 93.3 | 93.0 | 10.6 | 13.0 | 1558 | 4762 | Nominal |
-| | night | 3 | 124.4 | 115.6 | 8.0 | 9.2 | 1587 | 4863 | Nominal |
-| **Performance, scale 0.5** | field | 2 | 119.2 | 116.5 | 8.4 | 4.6 | 1273 | 4397 | Nominal |
-| | rain | 3 | 155.2 | 149.7 | 6.4 | 3.7 | 567 | 4482 | Nominal |
-| | bunker | 3 | 158.5 | 156.1 | 6.3 | 3.4 | 411 | 4585 | Nominal |
-| | village | 2 | 211.5 | 206.4 | 4.7 | 3.0 | 1078 | 4682 | Nominal |
-| | night | 3 | 178.4 | 172.4 | 5.6 | 5.9 | 1115 | 4801 | Nominal |
+| **Quality** (scale 1.0) | field | 2 | 105.8 | 105.2 | 9.4 | 6.9 | 1682 | 4923 | Nominal |
+| | rain | 3 | 99.4 | 96.4 | 10.0 | 7.3 | 1479 | 5001 | Nominal |
+| | bunker | 3 | 94.9 | 93.2 | 10.5 | 6.9 | 924 | 5072 | Nominal |
+| | village | 2 | 125.4 | 122.7 | 7.9 | 10.5 | 1687 | 5202 | Nominal |
+| | night | 3 | 86.7 | 76.6 | 11.6 | 7.8 | 1397 | 5293 | Nominal |
+| **Performance** (scale 0.7, MetalFX) | field | 2 | 108.9 | 108.4 | 9.1 | 6.7 | 1771 | 4682 | Nominal |
+| | rain | 3 | 109.2 | 108.6 | 9.1 | 7.0 | 1751 | 4768 | Nominal |
+| | bunker | 3 | 161.4 | 158.8 | 6.2 | 4.3 | 408 | 4863 | Nominal |
+| | village | 2 | 157.6 | 155.5 | 6.3 | 6.4 | 1549 | 4933 | Nominal |
+| | night | 3 | 148.5 | 138.1 | 6.7 | 5.8 | 1583 | 5052 | Nominal |
 
 What it says:
 
-- **Quality holds 60 at the native size, with dips.** Two runs, 10 scene means between 58 and 112 fps; 3 of the 25 windows were under 60 (48.8 and
-  58.7 in the rain of run 1, 58.7 at night in run 2). The rain is the worst scene: wet surfaces and the sun's shadows double the draw calls
-  (3013 against 1396 in Performance), and the frame is main-thread bound (17 ms of CPU, 12 ms of GPU). The same scene was 97 fps in run 2,
-  so a dip is an NPC or a downpour at the wrong moment, not a steady cost. With scale 0.7 every window is over 93 fps.
-- **Performance holds 93 to 124 fps at native size, 117 to 212 at scale 0.5**, so the 120 fps cap of Performance on a 120 Hz Mac is met in most
-  scenes with a render scale and in about half of them without. The frame is CPU bound below 8.3 ms of CPU: a render scale cannot buy more
-  there. The village is GPU bound at native size (13 ms) and is where a scale helps most (4.3 ms at 0.5).
-- The footprint is 4.4 to 5.2 GB, 14 to 16 % of the Mac's RAM. The 8 GB class (`mac-base-8gb`) uses one texture level less
-  (about 0.7 GB, RENDER-QA.md).
-- An early run with another game on the same GPU read 19 to 23 ms of GPU time for the same scenes: the harness now waits for a free GPU.
+- **Quality holds 60 at the native size with room to spare**: every scene is 87 to 125 fps and the slowest window of the whole run is 76.6 fps (night). The
+  GPU time is 7 to 10.5 ms; the village is the GPU's worst scene.
+- **Performance runs 109 to 161 fps at scale 0.7.** The 120 fps cap is met in the bunker, village and night; field and rain run at 109 fps because the
+  main thread is the limit there (9 ms of CPU against an 8.3 ms budget), which a render scale cannot buy back. The GPU is at 4 to 7 ms.
+- The footprint is 4.7 to 5.3 GB, 14 to 16 % of the Mac's RAM; the 8 GB class (`mac-base-8gb`) uses one texture level less.
+- A first set of Quality runs read 19 to 23 ms of GPU time for the same scenes while another game ran on the GPU: the harness waits for a free GPU now and drops
+  overlapped windows. An earlier edition of this table, taken with window sizes standing in for the render scale, is replaced by this one.
 
 ### iPad: Air 13-inch (M3, 8 GB), 2732x2048 at 60 Hz
 
