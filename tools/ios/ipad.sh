@@ -10,6 +10,9 @@
 #   tools/ios/ipad.sh put <local> <Documents-relative path>
 #   tools/ios/ipad.sh get <path under the container> <local>
 #   tools/ios/ipad.sh shot <file.png>         screenshot of the iPad's screen (devicectl device capture)
+#   tools/ios/ipad.sh pid                     the app's process id on the device (empty when it is not running)
+#   tools/ios/ipad.sh signal [SIGTERM]        send a signal to the app
+#   tools/ios/ipad.sh front <bundle id>       launch another app in front of the game (com.apple.Preferences): the game is backgrounded
 #   tools/ios/ipad.sh kill                    terminate the app
 #
 # Options (before the subcommand): --device <udid|name>  (default $ANOMALY_IPAD_UDID, else the first connected iPad)
@@ -97,6 +100,18 @@ case $cmd in
         ;;
     shot)
         dc device capture screenshot --device "$device" --destination "${1:?file.png}"
+        ;;
+    pid)
+        dc device info processes --device "$device" 2>/dev/null | awk '/anomaly\.app/ {print $1; exit}'
+        ;;
+    signal)
+        sig=${1:-SIGTERM}
+        pid=$(dc device info processes --device "$device" 2>/dev/null | awk '/anomaly\.app/ {print $1; exit}')
+        [[ -n $pid ]] && dc device process signal --device "$device" --pid "$pid" --signal "$sig" || echo "not running"
+        ;;
+    front)
+        # bring another app to the front (its bundle id, e.g. com.apple.Preferences): the game goes to the background
+        dc device process launch --device "$device" "${1:?bundle id}"
         ;;
     kill)
         pid=$(dc device info processes --device "$device" 2>/dev/null | awk '/anomaly\.app/ {print $1; exit}')
