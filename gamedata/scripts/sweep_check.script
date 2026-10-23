@@ -197,3 +197,20 @@ function C.point_at(dist, skip)
 	if not best then return nil end
 	return best.pos, best.lvid, best.gvid, best.pos:distance_to(ap)
 end
+
+-- Runs fn on the game's main Lua state (a time event, not the driver's coroutine) and waits until it has run. Script windows
+-- (CUIScriptWnd) keep the lua_State they were made on for their callbacks; made inside the driver's coroutine they would call back
+-- into a suspended thread. Returns ok, result.
+local main_seq = 0
+function C.on_main(fn)
+	main_seq = main_seq + 1
+	local name = "sweep_check_main_" .. main_seq
+	local done, ok, res = false, nil, nil
+	CreateTimeEvent("sweep_check", name, 0, function()
+		ok, res = pcall(fn)
+		done = true
+		return true
+	end)
+	H.wait_for("a main-state call", 10000, function() return done end)
+	return ok, res
+end

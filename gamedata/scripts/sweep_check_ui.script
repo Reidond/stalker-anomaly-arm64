@@ -124,8 +124,8 @@ local function stash_plan()
 	start_quiet()
 	-- the game fills one of its inventory boxes and marks it on the map
 	local box_id, name
-	for attempt = 1, 20 do
-		local id, nm = treasure_manager.get_random_stash(false, "stash", true, true)
+	for attempt = 1, 80 do
+		local id, nm = treasure_manager.get_random_stash(false, "stash", attempt > 40, false)
 		if id then
 			local se = alife_object(id)
 			if se and game_graph():vertex(se.m_game_vertex_id):level_id() == game_graph():vertex(db.actor:game_vertex_id()):level_id() then
@@ -169,52 +169,57 @@ end
 local function mechanics_plan()
 	start_quiet()
 	give("wpn_ak74", 1)
-	give("repair_kit_1", 1)
+	give("cleaning_kit_r5", 1) -- a rifle_5 cleaning kit: repairs 5.45 and 5.56 rifles
 	give("ammo_5.45x39_fmj", 1, 30)
 	H.pause(2500)
 	local ak = db.actor:object("wpn_ak74")
 
 	-- repair kit: the game's own dialog, with the weapon picked and "repair" pressed
 	C.run("mechanics", "repair-kit", function()
-		ak:set_condition(0.35)
+		ak:set_condition(0.8) -- a cleaning kit works on weapons between 0.75 and 0.99
 		H.pause(500)
-		local kit = db.actor:object("repair_kit_1")
-		item_repair.start(kit, "repair_kit_1")
+		local kit = db.actor:object("cleaning_kit_r5")
+		if not kit then return false, "no cleaning kit in the inventory" end
+		C.on_main(function() item_repair.start(kit, "cleaning_kit_r5") end)
 		H.pause(2500)
 		local gui = item_repair.GUI
 		if not (gui and gui:IsShown()) then return false, "the repair dialog did not open" end
 		C.shot("chk_repair")
 		local listed = 0
 		for _, ci in pairs(gui.CC[1].cell) do if ci:IsShown() then listed = listed + 1 end end
-		gui.CC[1]:On_Select(1)
+		C.on_main(function() gui.CC[1]:On_Select(1) gui:On_CC_Mouse1(1, 1) end) -- what a click on the first cell does
 		H.pause(800)
 		local c0 = ak:condition()
-		gui:OnRepair()
+		C.on_main(function() gui:OnRepair() end)
 		H.pause(1500)
 		return ak:condition() > c0 + 0.05 and not gui:IsShown(), string.format("%d repairable items listed; condition %.2f -> %.2f", listed, c0, ak:condition())
 	end)
 
 	-- upgrades: installed by the engine, remembered, and they change the weapon
 	C.run("mechanics", "upgrade", function()
-		local id = "up_gr_firstab_ak74"
+		local id = "up_firsta_ak74" -- an element of the group up_gr_firstab_ak74: the installable upgrade (the group id is not one)
+		inventory_upgrades.force_upgrade = true -- the precondition script asks for a mechanic to be talking; this is its own override
 		local rpm0 = ak:cast_Weapon():RPM()
+		local cost = ini_sys:r_float_ex("up_sect_firsta_ak74", "cost")
 		local ok = ak:install_upgrade(id)
+		inventory_upgrades.force_upgrade = false
 		H.pause(1500)
 		local has = ak:has_upgrade(id)
 		return has, string.format("install_upgrade(%s) returned %s, has_upgrade %s", id, tostring(ok), tostring(has))
 	end)
-	-- the upgrade survives a save and load
-	C.run("mechanics", "upgrade-saved", function()
-		return true, "checked after the reload by the next phase"
-	end)
+	-- the upgrade and the repair survive a save and a load (the next phase looks)
+	get_console():execute("save chk_mech")
+	H.pause(4000)
+	return { reload = "chk_mech" }
+end
 
-	-- repair by weapon condition degrading and restoring through the script that does it for a mechanic
-	C.run("mechanics", "weapon-wear", function()
-		ak:set_condition(1)
-		local w = ak:condition()
-		ak:set_condition(0.5)
-		return math.abs(ak:condition() - 0.5) < 0.01 and w > 0.99, string.format("set_condition round trip %.2f -> %.2f", w, ak:condition())
-	end)
+local function mechanics_after_load()
+	H.wait_for("the load", 240000, H.actor_ready)
+	H.enable_ui()
+	H.pause(6000)
+	local ak = db.actor:object("wpn_ak74")
+	C.check("mechanics", "upgrade-persists", ak ~= nil and ak:has_upgrade("up_firsta_ak74"), "has_upgrade after the load: " .. tostring(ak and ak:has_upgrade("up_firsta_ak74")))
+	C.check("mechanics", "repair-persists", ak ~= nil and math.abs(ak:condition() - 0.89) < 0.02, string.format("condition after the load %.3f", ak and ak:condition() or -1))
 	return C.done("chk_mechanics")
 end
 
@@ -265,7 +270,7 @@ function plans(c, h)
 	out.chk_pda = { pda_plan }
 	out.chk_tasks = { tasks_plan }
 	out.chk_stash = { stash_plan }
-	out.chk_mechanics = { mechanics_plan }
+	out.chk_mechanics = { mechanics_plan, mechanics_after_load }
 	out.chk_hud = { hud_plan }
 	return out
 end
