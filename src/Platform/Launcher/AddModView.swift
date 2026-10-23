@@ -93,8 +93,7 @@ struct AddModView: View {
             }
             HStack(spacing: 10) {
                 ConsoleButton(id: "add.paste", title: "Paste", systemImage: "doc.on.clipboard") { paste() }
-                ConsoleButton(id: "add.download", title: "Download", subtitle: linkURL == nil ? "Enter a link first" : nil,
-                              systemImage: "arrow.down.circle.fill", enabled: linkURL != nil) { start() }
+                ConsoleButton(id: "add.download", title: "Download", systemImage: "arrow.down.circle.fill", enabled: linkURL != nil) { start() }
             }
         }
     }

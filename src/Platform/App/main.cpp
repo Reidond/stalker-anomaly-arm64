@@ -868,6 +868,8 @@ void CloseLauncher(App& app)
     for (SDL_Gamepad* pad : app.launcher_pads)
         SDL_CloseGamepad(pad);
     app.launcher_pads.clear();
+    if (!app.unattended)
+        SDL_ResetHint(SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS); // only the launcher took pad input while another app was in front
     app.launcher.reset();
     if (app.renderer)
         SDL_DestroyRenderer(app.renderer);

@@ -18,15 +18,17 @@ var logoPath: String?
 var only: String?
 var outputDirectory: URL?
 var selfTest = false
+var makeFixtures = false
 while !arguments.isEmpty {
     let argument = arguments.removeFirst()
     if argument == "--selftest" { selfTest = true }
+    else if argument == "--fixtures" { makeFixtures = true }
     else if argument == "--logo", !arguments.isEmpty { logoPath = arguments.removeFirst() }
     else if argument == "--only", !arguments.isEmpty { only = arguments.removeFirst() }
     else { outputDirectory = URL(fileURLWithPath: argument) }
 }
 guard let outputDirectory else {
-    FileHandle.standardError.write(Data("usage: launcher_snapshot <out-dir> [--logo <png>] [--only <name>] | --selftest <work-dir>\n".utf8))
+    FileHandle.standardError.write(Data("usage: launcher_snapshot <out-dir> [--logo <png>] [--only <name>] | --selftest <work-dir> | --fixtures <mods-root>\n".utf8))
     exit(2)
 }
 
@@ -129,6 +131,12 @@ func run() throws {
 MainActor.assumeIsolated {
     NSApplication.shared.setActivationPolicy(.prohibited)
     do {
+        if makeFixtures {
+            // a made-up mods root (four invented mods, one of them off) for runs of the app: ANOMALY_MODS_ROOT=<dir>
+            try Fixtures.build(into: outputDirectory)
+            print("fixtures in \(outputDirectory.path)")
+            exit(0)
+        }
         if selfTest {
             try FileManager.default.createDirectory(at: outputDirectory, withIntermediateDirectories: true)
             exit(try SelfTest.run(root: outputDirectory, logo: logoPath))

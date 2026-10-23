@@ -156,6 +156,11 @@ flags the profile adds (`-smap1536`). Details, tables and measurements: [SETTING
 
 ## Launcher
 
+The `anomaly` app's first screen is the SwiftUI launcher (Play, mods, adding mods; it also shows the game-data check below and how to
+copy the data when it is not `Ok`): [MOD-MANAGER.md](MOD-MANAGER.md#launcher). `--script`, `--exit-after`, `--unattended` and
+`--no-launcher` skip it. What follows is the shell's own launcher, which `shell_lab` uses and the app falls back to when the SwiftUI one
+cannot be hosted.
+
 `AppleShell::Launcher` draws with SDL_Renderer debug text: game-data status (and the copy instructions when
 it is not `Ok`), memory budget, thermal state, Low Power Mode, free storage, display info, previous-crash notes
 and, optionally, the live event list. Buttons: Start (enabled only with valid data), Rescan, Quit (macOS) and
