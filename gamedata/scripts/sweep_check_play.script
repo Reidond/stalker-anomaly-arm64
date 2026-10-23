@@ -408,15 +408,28 @@ local function weapons()
 	end)
 	db.actor:restore_weapon()
 	H.pause(4000)
-	if not db.actor:active_item() then db.actor:make_item_active(ak) H.pause(3000) end
+	-- (the jam test left the rifle at condition 0.04, where it jams after a shot or two: a new one for the rest)
+	ak:set_condition(1.0)
+	-- (the rifle has to be the item in the hands: after hide_weapon / restore_weapon the hands can be empty or hold the item used before)
+	local in_hands = db.actor:active_item()
+	if not in_hands or in_hands:id() ~= ak:id() then db.actor:make_item_active(ak) H.pause(3500) end
 	local m4 = ak:get_ammo_in_magazine()
-	-- (the rifle may still be coming up after restore_weapon on a slow frame: burst again, a few times, until it fires)
-	for _ = 1, 4 do
+	-- (the rifle may still be coming up after restore_weapon on a slow frame: burst again, a few times, until it fires; a weapon that still
+	-- does not fire is taken to be jammed (it was worn a moment ago): the reload key clears that, and the burst is the last one)
+	local cleared = false
+	for round = 1, 5 do
 		H.fire_burst(nil, 1000)
 		H.pause(500)
 		if ak:get_ammo_in_magazine() < m4 then break end
+		if round == 4 then
+			cleared = true
+			H.press(key_bindings.kWPN_RELOAD, 100)
+			H.pause(5000)
+			m4 = ak:get_ammo_in_magazine()
+		end
 	end
-	C.check("weapons", "silenced-fire", ak:get_ammo_in_magazine() < m4, string.format("magazine %d -> %d", m4, ak:get_ammo_in_magazine()))
+	local held = db.actor:active_item()
+	C.check("weapons", "silenced-fire", ak:get_ammo_in_magazine() < m4, string.format("magazine %d -> %d%s, in the hands %s, condition %.2f", m4, ak:get_ammo_in_magazine(), cleared and " (after a reload that clears a jam)" or "", tostring(held and held:section()), ak:condition()))
 	db.actor:hide_weapon()
 	H.pause(2000)
 	C.run("weapons", "silencer-detach", function()
