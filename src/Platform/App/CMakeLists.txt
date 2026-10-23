@@ -10,6 +10,7 @@ if(NOT (TARGET xrEngine AND TARGET xrGame AND TARGET xrRender_R4))
 endif()
 
 include(AnomalyGameApp)
+include(AnomalyLauncherBackdrop)
 
 add_executable(anomaly main.cpp Unattended.mm)
 target_include_directories(anomaly PRIVATE "${PROJECT_SOURCE_DIR}/src")
@@ -42,4 +43,12 @@ if(anomaly_app_icon_dir AND EXISTS "${anomaly_app_icon_dir}/icon-1024.png")
     add_custom_command(TARGET anomaly POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy "${anomaly_app_icon_dir}/icon-1024.png" "${anomaly_resources_dir}/launcher-logo.png"
         COMMENT "anomaly: copying the launcher logo into the bundle")
+endif()
+
+# The launcher's backdrop (cmake/AnomalyLauncherBackdrop.cmake): the game's menu art blurred behind the glass; a gradient without it.
+get_property(anomaly_launcher_backdrop GLOBAL PROPERTY ANOMALY_LAUNCHER_BACKDROP)
+if(anomaly_launcher_backdrop AND EXISTS "${anomaly_launcher_backdrop}")
+    add_custom_command(TARGET anomaly POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy "${anomaly_launcher_backdrop}" "${anomaly_resources_dir}/launcher-backdrop.jpg"
+        COMMENT "anomaly: copying the launcher backdrop into the bundle")
 endif()

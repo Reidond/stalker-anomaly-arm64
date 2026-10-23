@@ -428,15 +428,37 @@ SDL_AppIterate: AppleShell::Update, poll anomaly_launcher_result
 
 ### Look
 
-It is a system app, not a themed one: the stock SwiftUI controls, so that it looks like iPadOS 27 (and macOS) and follows what the
-system does. A `NavigationStack` with large titles and the back button, inset-grouped lists (a grouped `Form` on the Mac), system
-switches, `LabeledContent`, `ContentUnavailableView` for empty and result states, disclosure groups for the file conflicts, swipe
-actions and context menus, system sheets for the import flow and the remove confirmation, SF Symbols, Dynamic Type text styles and
-semantic colors (light and dark follow the system). The primary buttons (Play, Add Anyway) use the Liquid Glass styles on iPadOS and
-macOS 26 and later, and the bordered-prominent style before. The only custom things are the amber accent of the game's menus and the
-Anomaly logo on the home screen: the generated app icon (`tools/make_app_icon.sh`: the logo of `AnomalyLauncher.exe` when the game
-data was there at configure time, the repository's fallback artwork otherwise), copied into the bundle as `launcher-logo.png`; a
-plain mark is drawn without it. The Anomaly artwork is never committed.
+Everything from app start until the game launches is Liquid Glass over the Zone, in the game's colors, on both platforms.
+
+- **Backdrop** (`Backdrop.swift`): the Pripyat scene of the game's own main-menu art (`textures/ui/ui_actor_main_menu_one.dds`), blurred
+  (26 pt), desaturated to 35 % and darkened, with a rust glow from the top left and a faint radiation green at the bottom. It is made at
+  configure time by `tools/make_launcher_backdrop.sh` (a host build of `xrdb_unpack` reads it from `textures_ui.db0`, `sips` decodes the
+  DDS; `cmake/AnomalyLauncherBackdrop.cmake` runs it into the build tree and `anomaly` copies it into the bundle as
+  `launcher-backdrop.jpg`). It is GSC artwork: never committed. Without the game data at configure time the launcher draws the same
+  glows on a plain dark gradient.
+- **Glass** (`Glass.swift`): `glassSurface` is the one place that decides how a surface is drawn. iPadOS / macOS 26 and later: `glassEffect`
+  (regular glass, tinted amber or rust where it speaks, `interactive` for controls); the buttons are `.glass` and `.glassProminent`; glass
+  that sits together is in a `GlassGroup` (a `GlassEffectContainer`) so that it blends, and Play morphs into "Starting" with
+  `glassEffectID`. Before that, or with Reduce Transparency on: a material (opaque dark for Reduce Transparency), a 1 px hairline and a soft shadow,
+  the same shapes and sizes. Sheets are system sheets, which are glass on iPadOS / macOS 26.
+- **Colors** (`Theme.swift`): amber (`#F5AB33`) is the accent: focus, the primary button, links. Rust (`#C75424`) is the warm glow, conflicts,
+  warnings and destructive actions. Radiation yellow-green (`#B8D93D`) is used sparingly: a switch that is on, a success. Text is white at
+  96 / 68 / 46 %.
+- **Type and size**: system fonts, at the iPad's distance (row titles 20 pt semibold, titles 34 to 44 pt, one line below at 15 pt), tabular figures for
+  counts and sizes, a soft shadow behind large type. Rows and buttons are at least 56 pt high (a 44 pt icon tile with 14 pt around it makes a row 72).
+- **Shapes**: radii are concentric: a row is 22 with 14 of padding around an 8 pt icon tile; a card is 28 with 16 of padding around fields and
+  buttons of 12; a sheet's buttons and warnings share 14. The logo has the 1 px white-at-10 % outline an image gets.
+- **Motion** (`LauncherMotion`): purposeful and quick. A screen change is a fade with a 10 pt settle on a spring of 0.3 s with no bounce; Home's
+  pieces enter once per launch, staggered 50 ms, from 12 pt below; the focus ring changes in 0.1 s ease-out (the stick repeats every 90 ms, so
+  it must not lag); pressed rows give way to 0.97 where the system's glass does not do it itself. No animation repeats and nothing moves for its own
+  sake. Reduce Motion keeps the fades and drops the movement and the lift; Reduce Transparency draws opaque surfaces.
+- **Focus on glass**: an amber ring (white on the amber prominent buttons, where amber would vanish) with a glow and a 2 % lift, drawn on the row
+  itself; it only shows while a pad or a keyboard is in use.
+- **Logo**: the generated app icon (`tools/make_app_icon.sh`: the logo of `AnomalyLauncher.exe` when the game data was there at configure time,
+  the repository's fallback artwork otherwise) as `launcher-logo.png`; a plain mark is drawn without it.
+
+The game's own UI after Play is unchanged. In the offscreen snapshot tool the glass is drawn as the material fallback (an offscreen window has
+no compositor), and the prominent button as an amber capsule; the real glass is on the device.
 
 ### Screens
 
@@ -454,7 +476,7 @@ start; there is no in-process engine restart (iOS cannot relaunch an app).
 
 ### Controls
 
-Touch, and the mouse and keyboard on the Mac, work on the stock controls as on any app. On top of that the whole launcher can be
+Touch, and the mouse and keyboard on the Mac, work on the controls as on any app. On top of that the whole launcher can be
 driven from a pad: a layer that knows the reachable rows of the screen (the model builds them: `LauncherModel.focusItems`), moves a
 focus ring along them and runs the row's action. It is data-driven, so it does not depend on what the views draw, and the cards that
 sit on top (the import sheet, the remove confirmation) take the focus until they are gone.
@@ -463,7 +485,7 @@ sit on top (the import sheet, the remove confirmation) take the focus until they
 |---|---|---|---|
 | Move focus | D-pad up/down, left stick | arrow keys | tap / click |
 | Select, switch a mod on/off | Cross | Return, Space | tap the row's control |
-| Back | Circle | Esc | back button, swipe from the edge |
+| Back | Circle | Esc | the back button |
 | Details of the focused mod | Triangle | I | tap the row |
 | Reorder | hold Square, then D-pad up/down | Option + arrow up/down | Edit, drag the handle |
 | Play | Options (home, mods) | P | the Play button |
@@ -537,10 +559,11 @@ n ms.
 
 | | |
 |---|---|
-| `src/Platform/Launcher/*.swift` | `LauncherModel` (state, and the rows the pad can reach), `Focus` (pad layer), `HomeView`, `ModsView`, `DetailsView`, `AddModView`, `ImportOverlay` (the sheets) + `ImportCoordinator` (the flow), `ScreenChrome`, `Components`, `Theme`, `LauncherEntry` (C entry, hosting) |
+| `src/Platform/Launcher/*.swift` | `LauncherModel` (state, and the rows the pad can reach), `Focus` (pad layer), `HomeView`, `ModsView`, `DetailsView`, `AddModView`, `ImportOverlay` (the sheets) + `ImportCoordinator` (the flow), `ScreenChrome`, `Glass` (surfaces, groups, morph), `Backdrop`, `Components`, `Theme` (palette, radii, motion), `LauncherEntry` (C entry, hosting) |
 | `src/Platform/Launcher/Stubs.swift` | stand-in for `ModDownloads` (`DownloadsView`, `LinkDownloader`) while it is not on `main`; compiles out when `canImport` finds the real module, deleted when it lands |
 | `src/Platform/App/main.cpp` | opening, input mapping, script and handover (`OpenLauncher`, `LauncherEvent`, `RunLauncherScript`, `SDL_AppIterate`) |
 | `cmake/targets/launcher.cmake`, `src/Platform/Launcher/CMakeLists.txt` | `enable_language(Swift)`, the `anomaly_launcher` static library |
+| `tools/make_launcher_backdrop.sh`, `cmake/AnomalyLauncherBackdrop.cmake` | the backdrop picture, made at configure time from the game data |
 | `tools/launcher_snapshot` | renders every screen offscreen; `--selftest` drives the pad logic; `--fixtures` makes a mods root of invented mods |
 
 Build notes: the library is Swift 5 mode, built for the deployment target (CMake does not pass it to `swiftc`), and `anomaly` links with the

@@ -1,7 +1,65 @@
 // The sheets that sit on top of the launcher: the import flow (reading, warnings, FOMOD wizard, installing, result) and the
-// confirmation before a mod is removed. System sheets, so they get the system's presentation and glass on iPadOS and macOS.
+// confirmation before a mod is removed. System sheets, so they get the system's glass presentation on iPadOS and macOS 26.
 import SwiftUI
 import ModManagerCore
+
+/// An icon, a title and a sentence: the result states of a sheet.
+struct SheetMessage: View {
+    let systemImage: String
+    var tint: Color = Theme.amber
+    let title: String
+    var message: String?
+
+    var body: some View {
+        VStack(spacing: 12) {
+            Image(systemName: systemImage).font(.system(size: 54, weight: .medium)).foregroundStyle(tint).padding(.bottom, 4)
+            Text(title).font(.title2.weight(.bold)).foregroundStyle(Theme.primaryText).multilineTextAlignment(.center)
+            if let message {
+                Text(message).font(.body).foregroundStyle(Theme.secondaryText).multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .frame(maxWidth: 440)
+    }
+}
+
+/// The buttons at the foot of a sheet, full width, at a size a finger and a pad can hit.
+private struct SheetButton: View {
+    let title: String
+    var systemImage: String?
+    var style: Style = .glass
+    let action: () -> Void
+    enum Style { case prominent, glass, destructive }
+    /// the same radius as the warnings above the buttons, so that the corners of a sheet's content agree
+    static let radius: CGFloat = 14
+
+    var body: some View {
+        Button(action: action) {
+            Group {
+                if let systemImage { Label(title, systemImage: systemImage) } else { Text(title) }
+            }
+            .font(.headline)
+            .frame(maxWidth: .infinity, minHeight: 52)
+        }
+        .modifier(SheetButtonStyle(style: style))
+        .buttonBorderShape(.roundedRectangle(radius: SheetButton.radius))
+        .controlSize(.large)
+    }
+}
+
+enum SheetButtonRadius { static let value: CGFloat = 14 }
+
+private struct SheetButtonStyle: ViewModifier {
+    let style: SheetButton.Style
+
+    func body(content: Content) -> some View {
+        switch style {
+        case .prominent: content.prominentButton().tint(Theme.amber)
+        case .glass: content.glassButton()
+        case .destructive: content.prominentButton().tint(Theme.rust)
+        }
+    }
+}
 
 struct ImportSheet: View {
     @EnvironmentObject private var model: LauncherModel
@@ -10,20 +68,29 @@ struct ImportSheet: View {
     var body: some View {
         NavigationStack {
             content
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .navigationTitle(title)
                 #if os(iOS)
                 .navigationBarTitleDisplayMode(.inline)
                 #endif
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
-                        if showsCancel { Button("Cancel") { imports.cancel() }.keyboardShortcut(.cancelAction) }
+                        if showsCancel { Button("Cancel") { imports.cancel() } }
                     }
                 }
         }
+        .preferredColorScheme(.dark)
+        .tint(Theme.amber)
         #if os(macOS)
-        .frame(minWidth: 520, minHeight: 360)
+        .frame(minWidth: 560, minHeight: 420)
         #endif
+        .presentationDetents(isFomod ? [.large] : [.medium, .large])
         .interactiveDismissDisabled(imports.isInstalling)
+    }
+
+    private var isFomod: Bool {
+        if case .fomod = imports.stage { return true }
+        return false
     }
 
     private var title: String {
@@ -48,34 +115,44 @@ struct ImportSheet: View {
             EmptyView()
         case .working(let title, let detail, let progress):
             VStack(spacing: 18) {
-                Spacer()
                 if let progress {
-                    ProgressView(value: progress) { Text(title).font(.headline) } currentValueLabel: { Text("\(Int(progress * 100)) %") }
-                        .frame(maxWidth: 360)
+                    ProgressView(value: progress) {
+                        Text(title).font(.title3.weight(.semibold)).foregroundStyle(Theme.primaryText)
+                    } currentValueLabel: {
+                        Text("\(Int(progress * 100)) %").font(.callout.monospacedDigit()).foregroundStyle(Theme.secondaryText)
+                    }
+                    .tint(Theme.amber)
+                    .frame(maxWidth: 380)
                 } else {
-                    ProgressView { Text(title).font(.headline) }.controlSize(.large)
+                    ProgressView { Text(title).font(.title3.weight(.semibold)).foregroundStyle(Theme.primaryText) }
+                        .controlSize(.large)
                 }
-                Text(detail).font(.subheadline).foregroundStyle(.secondary).lineLimit(2).multilineTextAlignment(.center)
-                Spacer()
+                Text(detail).font(.callout).foregroundStyle(Theme.secondaryText).lineLimit(2).multilineTextAlignment(.center)
             }
             .padding(32)
-            .frame(maxWidth: .infinity)
         case .review(let plan):
-            List {
-                Section {
+            VStack(spacing: 20) {
+                Spacer(minLength: 0)
+                SheetMessage(systemImage: "exclamationmark.triangle.fill", title: "Check before adding")
+                VStack(spacing: 8) {
                     ForEach(plan.warnings, id: \.self) { warning in
-                        Label(warning, systemImage: "exclamationmark.triangle.fill").symbolRenderingMode(.multicolor)
+                        Text(warning).font(.callout).foregroundStyle(Theme.primaryText)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(14)
+                            .background(RoundedRectangle(cornerRadius: SheetButtonRadius.value, style: .continuous).fill(Theme.rust.opacity(0.30)))
                     }
-                } header: {
-                    Text("Check before adding")
                 }
-                Section {
-                    Button { imports.install(plan, choices: nil) } label: { Label("Add Anyway", systemImage: "square.and.arrow.down") }
-                        .padFocus("import.install")
-                    Button { imports.cancel() } label: { Label("Cancel", systemImage: "xmark") }
-                        .padFocus("import.cancel")
+                .frame(maxWidth: 480)
+                VStack(spacing: 10) {
+                    SheetButton(title: "Add Anyway", systemImage: "square.and.arrow.down", style: .prominent) { imports.install(plan, choices: nil) }
+                        .padFocus("import.install", radius: SheetButtonRadius.value, ring: .white)
+                    SheetButton(title: "Cancel") { imports.cancel() }
+                        .padFocus("import.cancel", radius: SheetButtonRadius.value)
                 }
+                .frame(maxWidth: 480)
+                Spacer(minLength: 0)
             }
+            .padding(24)
         case .fomod(let plan):
             if let session = imports.fomodSession {
                 FomodWizardView(session: session,
@@ -83,54 +160,35 @@ struct ImportSheet: View {
                                 onCancel: { imports.cancel() })
             }
         case .done(let mod):
-            VStack(spacing: 0) {
-                ContentUnavailableView {
-                    Label("\(mod.name) was added", systemImage: "checkmark.circle.fill").symbolRenderingMode(.multicolor)
-                } description: {
-                    Text("\(Format.count(mod.fileCount, "file")), \(Format.bytes(mod.sizeBytes)). "
-                         + (mod.enabled ? "It is on and loads the next time the game starts." : "It is off: switch it on to use it."))
-                }
+            VStack(spacing: 24) {
+                Spacer(minLength: 0)
+                SheetMessage(systemImage: "checkmark.circle.fill", tint: Theme.radiation, title: "\(mod.name) was added",
+                             message: "\(Format.count(mod.fileCount, "file")), \(Format.bytes(mod.sizeBytes)). "
+                                    + (mod.enabled ? "It is on and loads the next time the game starts." : "It is off: switch it on to use it."))
                 VStack(spacing: 10) {
                     if !mod.enabled {
-                        Button { model.enableAfterImport(mod) } label: { Text("Switch On").frame(maxWidth: .infinity) }
-                            .prominentButton().controlSize(.large).padFocus("import.enable")
+                        SheetButton(title: "Switch On", systemImage: "power", style: .prominent) { model.enableAfterImport(mod) }
+                            .padFocus("import.enable", radius: SheetButtonRadius.value, ring: .white)
                     }
-                    Button { model.openModsAfterImport() } label: { Text("Open Mods").frame(maxWidth: .infinity) }
-                        .modifier(ConditionalProminent(prominent: mod.enabled)).controlSize(.large).padFocus("import.mods")
-                    Button { imports.dismiss() } label: { Text("Done").frame(maxWidth: .infinity) }
-                        .buttonStyle(.plain).foregroundStyle(Color.accentColor).padding(.top, 4).padFocus("import.done")
+                    SheetButton(title: "Open Mods", style: mod.enabled ? .prominent : .glass) { model.openModsAfterImport() }
+                        .padFocus("import.mods", radius: SheetButtonRadius.value)
+                    SheetButton(title: "Done") { imports.dismiss() }
+                        .padFocus("import.done", radius: SheetButtonRadius.value)
                 }
-                .padding(.horizontal, 32)
-                .padding(.bottom, 28)
                 .frame(maxWidth: 480)
+                Spacer(minLength: 0)
             }
+            .padding(24)
         case .failed(let title, let message):
-            VStack(spacing: 0) {
-                ContentUnavailableView {
-                    Label(title, systemImage: "exclamationmark.triangle.fill").symbolRenderingMode(.multicolor)
-                } description: {
-                    Text(message)
-                }
-                Button { imports.dismiss() } label: { Text("Close").frame(maxWidth: .infinity) }
-                    .prominentButton().controlSize(.large).padFocus("import.close")
-                    .padding(.horizontal, 32).padding(.bottom, 28).frame(maxWidth: 480)
+            VStack(spacing: 24) {
+                Spacer(minLength: 0)
+                SheetMessage(systemImage: "exclamationmark.triangle.fill", tint: Theme.rust, title: title, message: message)
+                SheetButton(title: "Close", style: .prominent) { imports.dismiss() }
+                    .padFocus("import.close", radius: SheetButtonRadius.value, ring: .white)
+                    .frame(maxWidth: 480)
+                Spacer(minLength: 0)
             }
-        }
-    }
-}
-
-private struct ConditionalProminent: ViewModifier {
-    let prominent: Bool
-
-    func body(content: Content) -> some View {
-        if prominent {
-            content.prominentButton()
-        } else {
-            #if os(iOS)
-            if #available(iOS 26.0, *) { content.buttonStyle(.glass) } else { content.buttonStyle(.bordered) }
-            #else
-            content.buttonStyle(.bordered)
-            #endif
+            .padding(24)
         }
     }
 }
@@ -140,29 +198,24 @@ struct RemoveSheet: View {
     let id: String
 
     var body: some View {
-        NavigationStack {
-            VStack(spacing: 0) {
-                ContentUnavailableView {
-                    Label("Remove \(model.name(of: id))?", systemImage: "trash")
-                } description: {
-                    Text("The mod's files are deleted from this device. Add it again from its source if you want it back; your saves are not touched.")
-                }
-                VStack(spacing: 10) {
-                    Button(role: .destructive) { model.remove(id) } label: { Text("Remove").frame(maxWidth: .infinity) }
-                        .buttonStyle(.borderedProminent).tint(.red).controlSize(.large).padFocus("remove.confirm")
-                    Button { model.removalCandidate = nil } label: { Text("Keep It").frame(maxWidth: .infinity) }
-                        .buttonStyle(.bordered).controlSize(.large).padFocus("remove.cancel")
-                }
-                .padding(.horizontal, 32)
-                .padding(.bottom, 28)
-                .frame(maxWidth: 480)
+        VStack(spacing: 24) {
+            Spacer(minLength: 0)
+            SheetMessage(systemImage: "trash", tint: Theme.rust, title: "Remove \(model.name(of: id))?",
+                         message: "The mod's files are deleted from this device. Add it again from its source if you want it back; your saves are not touched.")
+            VStack(spacing: 10) {
+                SheetButton(title: "Remove", style: .destructive) { model.remove(id) }
+                    .padFocus("remove.confirm", radius: SheetButtonRadius.value, ring: .white)
+                SheetButton(title: "Keep It") { model.removalCandidate = nil }
+                    .padFocus("remove.cancel", radius: SheetButtonRadius.value)
             }
-            #if os(iOS)
-            .navigationBarTitleDisplayMode(.inline)
-            #endif
+            .frame(maxWidth: 480)
+            Spacer(minLength: 0)
         }
+        .padding(24)
+        .preferredColorScheme(.dark)
+        .tint(Theme.amber)
         #if os(macOS)
-        .frame(minWidth: 460, minHeight: 320)
+        .frame(minWidth: 480, minHeight: 360)
         #endif
         .presentationDetents([.medium])
     }

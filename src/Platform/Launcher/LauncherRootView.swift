@@ -1,41 +1,39 @@
-// The launcher's root: a NavigationStack over home, the hint bar for pad and keyboard, the sheets, and the wiring of the file
-// picker and toasts.
+// The launcher's root: the Zone's backdrop, the current screen on it, the hint bar for pad and keyboard, the sheets, and the wiring
+// of the file picker and toasts. Screens change with a soft spring (a fade and a settle of 10 pt: nothing slides across the glass);
+// Reduce Motion keeps the fade.
 import SwiftUI
 import UniformTypeIdentifiers
 
 struct LauncherRootView: View {
     @ObservedObject var model: LauncherModel
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        NavigationStack(path: $model.path) {
-            HomeView()
-                .navigationDestination(for: Screen.self) { screen in
-                    switch screen {
-                    case .home: HomeView()
-                    case .mods: ModsView()
-                    case .details(let id): DetailsView(id: id)
-                    case .add: AddModView()
-                    case .browse: BrowseView()
-                    }
-                }
-        }
-        .safeAreaInset(edge: .bottom, spacing: 0) { HintBar(hints: hints) }
-        .overlay(alignment: .bottom) {
-            if let toast = model.toast {
-                ToastView(toast: toast)
-                    .padding(.bottom, 72)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
-                    .allowsHitTesting(false)
+        let motion = LauncherMotion(reduced: reduceMotion)
+        ZStack {
+            LauncherBackdrop(path: model.config.backdropPath)
+
+            ZStack {
+                screen
+                    .id(model.screen)
+                    .transition(.asymmetric(
+                        insertion: reduceMotion ? .opacity : .opacity.combined(with: .offset(y: 10)),
+                        removal: .opacity))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-        }
-        .overlay {
-            if model.launching {
-                ZStack {
-                    Color.black.opacity(0.25)
-                    ProgressView().controlSize(.large).padding(24).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .animation(motion.screen, value: model.screen)
+
+            VStack(spacing: 10) {
+                Spacer()
+                if let toast = model.toast {
+                    ToastView(toast: toast)
+                        .transition(reduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity))
                 }
-                .ignoresSafeArea()
+                HintBar(hints: hints)
             }
+            .animation(motion.content, value: model.toast)
+            .animation(motion.content, value: model.focus.device)
+            .allowsHitTesting(false)
         }
         .sheet(isPresented: Binding(get: { model.imports.isActive }, set: { if !$0 { model.imports.back() } })) {
             ImportSheet(imports: model.imports)
@@ -59,11 +57,21 @@ struct LauncherRootView: View {
         }
         .environmentObject(model)
         .environmentObject(model.focus)
-        .animation(.easeOut(duration: 0.2), value: model.toast)
-        .animation(.easeOut(duration: 0.2), value: model.focus.device)
         // a touch or a click is the pointer again: the pad's focus ring and the hints go away
         .simultaneousGesture(TapGesture().onEnded { model.focus.device = .pointer })
-        .tint(Theme.accent)
+        .preferredColorScheme(.dark)
+        .tint(Theme.amber)
+    }
+
+    @ViewBuilder
+    private var screen: some View {
+        switch model.screen {
+        case .home: HomeView()
+        case .mods: ModsView()
+        case .details(let id): DetailsView(id: id)
+        case .add: AddModView()
+        case .browse: BrowseView()
+        }
     }
 
     private var hints: [Hint] {

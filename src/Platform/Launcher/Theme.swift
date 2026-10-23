@@ -1,9 +1,28 @@
-// The launcher uses the system's own look: stock controls, semantic colors, Dynamic Type text styles, and on iPadOS / macOS 26 and
-// later the Liquid Glass button styles. The only thing of its own is the accent: the amber of the game's menus.
+// The launcher's look: Liquid Glass over a dark backdrop of the Zone, in the game's colors. The palette is rust and amber, with the
+// radiation yellow-green used sparingly (what is switched on, what succeeded). Everything is guarded for the deployment minimum
+// (iOS 17 / macOS 14): where Liquid Glass is missing, or Reduce Transparency is on, the same shapes are drawn in a material or opaque.
 import SwiftUI
 
 enum Theme {
-    static let accent = Color(red: 0.93, green: 0.58, blue: 0.08)
+    /// The accent: amber, the color of the game's menus. Focus, the primary button, links.
+    static let amber = Color(red: 0.96, green: 0.67, blue: 0.20)
+    /// Rust: the warm glow of the backdrop, conflicts and warnings, destructive actions.
+    static let rust = Color(red: 0.78, green: 0.33, blue: 0.14)
+    /// Radiation yellow-green. Sparingly: a switch that is on, a success.
+    static let radiation = Color(red: 0.72, green: 0.85, blue: 0.24)
+
+    static let primaryText = Color.white.opacity(0.96)
+    static let secondaryText = Color.white.opacity(0.68)
+    static let tertiaryText = Color.white.opacity(0.46)
+
+    /// Concentric radii: a surface's radius is the radius of what it holds plus the padding between them.
+    static let cardRadius: CGFloat = 28
+    static let rowRadius: CGFloat = 22
+    static let rowPadding: CGFloat = 14
+    static let cardPadding: CGFloat = 16
+    static var cardInnerRadius: CGFloat { cardRadius - cardPadding }   // a field or a button inside a card's padding
+    static var tileRadius: CGFloat { rowRadius - rowPadding }   // an icon tile inside a row's padding
+    static let minHit: CGFloat = 56                             // rows and buttons: well above 44 pt, for a pad and a couch
 }
 
 enum Format {
@@ -34,45 +53,64 @@ extension ISO8601DateFormatter {
     }()
 }
 
-/// The prominent button of a screen (Play, Add anyway): Liquid Glass on iPadOS 26 and later, the bordered style elsewhere (the Mac's own).
+/// True where Liquid Glass exists (iPadOS / macOS 26 and later).
+var liquidGlassAvailable: Bool {
+    if #available(iOS 26.0, macOS 26.0, *) { return true }
+    return false
+}
+
+/// Motion that is quick and has a purpose: a spring that settles without bounce for what moves between places, a short ease-out for
+/// feedback. Reduce Motion keeps the state change and drops the movement.
+struct LauncherMotion {
+    let reduced: Bool
+    var screen: Animation { reduced ? .easeOut(duration: 0.12) : .spring(duration: 0.3, bounce: 0) }
+    var content: Animation { reduced ? .easeOut(duration: 0.12) : .spring(duration: 0.28, bounce: 0) }
+    /// Moving the focus is as frequent as pressing a key (the stick repeats every 90 ms): nearly instant.
+    var focus: Animation { .easeOut(duration: 0.1) }
+    var press: Animation { .easeOut(duration: 0.14) }
+}
+
+/// The prominent button of a screen (Play, Add Anyway): Liquid Glass on iPadOS / macOS 26 and later, the bordered style elsewhere (and in
+/// the snapshot tool: an offscreen window has no compositor to draw glass, so it shows the fallback).
 struct ProminentButtonStyle: ViewModifier {
+    @Environment(\.launcherSnapshot) private var snapshot
+
     func body(content: Content) -> some View {
-        #if os(iOS)
-        if #available(iOS 26.0, *) {
+        if snapshot {
+            content.buttonStyle(SnapshotProminentStyle())
+        } else if #available(iOS 26.0, macOS 26.0, *) {
             content.buttonStyle(.glassProminent)
         } else {
             content.buttonStyle(.borderedProminent)
         }
-        #else
-        content.buttonStyle(.borderedProminent)
-        #endif
+    }
+}
+
+/// What the prominent button looks like in the snapshot tool: an amber capsule with dark type, as the tinted glass button reads.
+struct SnapshotProminentStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .foregroundStyle(Color.black.opacity(0.85))
+            .background(Capsule().fill(Theme.amber.opacity(isEnabled ? 1 : 0.35)))
+    }
+}
+
+/// The ordinary button on glass.
+struct GlassButtonStyleModifier: ViewModifier {
+    @Environment(\.launcherSnapshot) private var snapshot
+
+    func body(content: Content) -> some View {
+        if #available(iOS 26.0, macOS 26.0, *), !snapshot {
+            content.buttonStyle(.glass)
+        } else {
+            content.buttonStyle(.bordered)
+        }
     }
 }
 
 extension View {
     func prominentButton() -> some View { modifier(ProminentButtonStyle()) }
-}
-
-/// The grouped sections of Settings: an inset-grouped list on iPadOS, a grouped form on the Mac.
-struct LauncherForm<Content: View>: View {
-    @ViewBuilder var content: () -> Content
-
-    var body: some View {
-        #if os(macOS)
-        Form { content() }.formStyle(.grouped)
-        #else
-        List { content() }.listStyle(.insetGrouped)
-        #endif
-    }
-}
-
-extension View {
-    /// The grouped list of Settings on iPadOS; the plain inset list on the Mac.
-    func launcherListStyle() -> some View {
-        #if os(iOS)
-        listStyle(.insetGrouped)
-        #else
-        listStyle(.inset)
-        #endif
-    }
+    func glassButton() -> some View { modifier(GlassButtonStyleModifier()) }
 }

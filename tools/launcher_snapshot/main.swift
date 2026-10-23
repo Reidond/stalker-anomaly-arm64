@@ -1,6 +1,6 @@
 // Renders every launcher screen to a PNG without showing a window:
 //
-//   launcher_snapshot <out-dir> [--logo <png>] [--only <name>] [--dark]
+//   launcher_snapshot <out-dir> [--logo <png>] [--backdrop <jpg>] [--only <name>] [--dark]
 //   launcher_snapshot --selftest <work-dir>     the pad logic: focus, reordering, sheets, what Play writes
 //   launcher_snapshot --fixtures <mods-root>    four invented mods, for ANOMALY_MODS_ROOT
 //
@@ -13,6 +13,7 @@ import ModManagerCore
 
 var arguments = Array(CommandLine.arguments.dropFirst())
 var logoPath: String?
+var backdropPath: String?
 var only: String?
 var outputDirectory: URL?
 var selfTest = false
@@ -24,11 +25,12 @@ while !arguments.isEmpty {
     else if argument == "--fixtures" { makeFixtures = true }
     else if argument == "--dark" { dark = true }
     else if argument == "--logo", !arguments.isEmpty { logoPath = arguments.removeFirst() }
+    else if argument == "--backdrop", !arguments.isEmpty { backdropPath = arguments.removeFirst() }
     else if argument == "--only", !arguments.isEmpty { only = arguments.removeFirst() }
     else { outputDirectory = URL(fileURLWithPath: argument) }
 }
 guard let outputDirectory else {
-    FileHandle.standardError.write(Data("usage: launcher_snapshot <out-dir> [--logo <png>] [--only <name>] [--dark] | --selftest <work-dir> | --fixtures <mods-root>\n".utf8))
+    FileHandle.standardError.write(Data("usage: launcher_snapshot <out-dir> [--logo <png>] [--backdrop <jpg>] [--only <name>] [--dark] | --selftest <work-dir> | --fixtures <mods-root>\n".utf8))
     exit(2)
 }
 
@@ -42,7 +44,7 @@ func settle(_ seconds: Double = 0.35) {
 func writePNG<V: View>(_ view: V, size: CGSize, to url: URL) {
     let host = NSHostingView(rootView: view.environment(\.launcherSnapshot, true))
     let window = NSWindow(contentRect: CGRect(origin: .zero, size: size), styleMask: [.titled], backing: .buffered, defer: false)
-    window.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
+    window.appearance = NSAppearance(named: .darkAqua)
     window.contentView = host
     host.frame = CGRect(origin: .zero, size: size)
     for _ in 0..<4 {
@@ -60,7 +62,7 @@ func writePNG<V: View>(_ view: V, size: CGSize, to url: URL) {
 @MainActor
 func model(root: URL, data: DataStatus = DataStatus(state: "ok", summary: "Game data OK"), platform: String = "macos") -> LauncherModel {
     let config = LauncherConfig(modsRoot: root.path, downloadsDir: root.appendingPathComponent(".downloads").path, version: "0.1",
-                                platform: platform, allowQuit: platform == "macos", logoPath: logoPath,
+                                platform: platform, allowQuit: platform == "macos", logoPath: logoPath, backdropPath: backdropPath,
                                 deviceLine: platform == "ios" ? "iPad15,5 · iPadOS 27.0" : "Mac15,3 · macOS 27.0", notices: [])
     return LauncherModel(config: config, data: data)
 }
@@ -78,9 +80,16 @@ struct Shot {
     var setup: (LauncherModel) -> Frame
 }
 
+/// A sheet's content on its own, on a panel over the backdrop (the system draws the real sheet's glass).
 @MainActor
 func sheet<V: View>(_ view: V, _ model: LauncherModel) -> Frame {
-    .sheet(AnyView(view.environmentObject(model).environmentObject(model.focus)))
+    .sheet(AnyView(
+        ZStack {
+            LauncherBackdrop(path: backdropPath)
+            view.background(.regularMaterial)
+        }
+        .environmentObject(model).environmentObject(model.focus).preferredColorScheme(.dark)
+    ))
 }
 
 @MainActor

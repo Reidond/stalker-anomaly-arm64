@@ -150,27 +150,34 @@ final class FocusStore: ObservableObject {
 
 // MARK: view side
 
-/// The ring that shows where the pad's focus is: the accent color around the row, and a tint behind it in a list.
+/// Where the pad's focus is, on glass: an amber ring with a glow (it holds against the bright and the dark parts of the backdrop) and
+/// a small lift. Moving the focus is as frequent as pressing a key, so the change is nearly instant; Reduce Motion drops the lift.
 struct PadFocusModifier: ViewModifier {
     @EnvironmentObject private var focus: FocusStore
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let id: String
+    var radius: CGFloat
+    var ring: Color
 
     func body(content: Content) -> some View {
         let focused = focus.isFocused(id)
         content
             .overlay {
-                if focused {
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .strokeBorder(Color.accentColor, lineWidth: 3)
-                        .padding(1)
-                        .allowsHitTesting(false)
-                }
+                RoundedRectangle(cornerRadius: radius, style: .continuous)
+                    .strokeBorder(ring, lineWidth: 3)
+                    .shadow(color: ring.opacity(0.5), radius: 10)
+                    .opacity(focused ? 1 : 0)
+                    .allowsHitTesting(false)
             }
-            .listRowBackground(focused ? Color.accentColor.opacity(0.16) : nil)
+            .scaleEffect(focused && !reduceMotion ? 1.02 : 1)
+            .animation(LauncherMotion(reduced: reduceMotion).focus, value: focused)
             .id(id)
     }
 }
 
 extension View {
-    func padFocus(_ id: String) -> some View { modifier(PadFocusModifier(id: id)) }
+    /// `ring`: amber on glass; white on the amber prominent buttons, where an amber ring would vanish.
+    func padFocus(_ id: String, radius: CGFloat = Theme.rowRadius, ring: Color = Theme.amber) -> some View {
+        modifier(PadFocusModifier(id: id, radius: radius, ring: ring))
+    }
 }
