@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <functional>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 struct SDL_Window;
@@ -139,7 +140,8 @@ void RunInAutoreleasePool(void (*fn)(void*), void* arg);
 template <class F>
 inline void WithAutoreleasePool(F&& f)
 {
-    RunInAutoreleasePool([](void* p) { (*static_cast<F*>(p))(); }, &f);
+    using Fn = std::remove_reference_t<F>;
+    RunInAutoreleasePool([](void* p) { (*static_cast<Fn*>(p))(); }, &f);
 }
 
 // Bytes the OS charges this process (phys_footprint: what jetsam counts, Metal and compressed memory included). Cheap.
