@@ -1,7 +1,7 @@
 # Sanitizers and the crash sweep
 
-How to build `anomaly` with AddressSanitizer + UndefinedBehaviorSanitizer on the Mac, how to drive the game through a set of
-scenarios unattended while it runs under them, and what the first sweep found.
+How to build `anomaly` with AddressSanitizer + UndefinedBehaviorSanitizer (or ThreadSanitizer) on the Mac, how to drive the game through a set of
+scenarios unattended while it runs under them, and what the sweeps found.
 
 ## Build
 
@@ -17,7 +17,7 @@ The preset is `macos-arm64-release` plus `ANOMALY_SANITIZE="address;undefined"` 
 |---|---|
 | `address` | `-fsanitize=address -fsanitize-recover=address`; stack-use-after-scope is on, stack-use-after-return is a runtime option (below) |
 | `undefined` | `-fsanitize=undefined,float-cast-overflow -fno-sanitize=vptr,function -fsanitize-recover=undefined`, and `-fno-sanitize=alignment` unless `alignment` is also listed |
-| `thread` | only on its own |
+| `thread` | `-fsanitize=thread`; only on its own (`cmake --preset macos-arm64-tsan`, below) |
 
 It reaches every target defined after the file is included: all engine modules, the third-party libraries built from `external/`,
 the shell, the app. LuaJIT (built by its own Makefile, `cmake/deps/LuaJIT.cmake`) gets the same flags on its target code
@@ -37,6 +37,31 @@ Why the checks are what they are:
   turns it back on to look for a case that does.
 
 A full build takes 35 to 45 minutes on 12 cores while other builds run (the binary is 280 MB); the iOS build and the plain macOS presets are unchanged.
+
+### ThreadSanitizer
+
+```bash
+cmake --preset macos-arm64-tsan                       # build/macos-arm64-tsan, RelWithDebInfo, every module + the app
+cmake --build --preset macos-arm64-tsan --target anomaly            # or --target xrcore_smoke: the log race test, a few minutes
+tools/sweep/run.sh --tsan --scale 3 --timeout 3000 smoke            # the same plans as under ASan; stderr.txt holds the reports
+```
+
+`--tsan` selects that build and `TSAN_OPTIONS` (`tools/sweep/tsan.supp`, `halt_on_error=0`, `report_thread_leaks=0`: the engine's detached threads are
+never joined by design; `history_size=5`), and `triage.py` groups the reports by kind and the two accesses' top frames in the engine's code. The game
+runs 5 to 15 times slower, so use `--scale 3` or more. Two things differ from the plain build, on purpose:
+
+- **LuaJIT is built with `LUAJIT_UNWIND_INTERNAL` and without the JIT** (the iPad's configuration). The JIT's machine code is not instrumented, so TSan could
+  not see what it does, and the stock Mac build unwinds Lua errors through the C frames with the system unwinder.
+- **The link uses `-Wl,-no_compact_unwind`.** ThreadSanitizer adds an unwind cleanup (the `__tsan_func_exit` call) to every function that calls something
+  that may throw, and clang gives those the C personality routine; with the C++ one, the Objective-C one (SDL, the DualSense code) and LuaJIT's interpreter's
+  that is four, one more than compact unwind can encode (`ld: Too many personality routines for compact unwind to encode`). With external unwinding and
+  this flag the first Lua error that crosses a C frame ended the process with `exit(1)` in `lj_err_throw` and no report at all (found with
+  `SWEEP_LLDB=1 tools/sweep/run.sh`, which attaches lldb in batch mode and prints every thread's stack when the app calls `exit`, `_exit` or `abort`).
+  A C++ exception that is really thrown cannot be unwound in this build.
+
+`xrcore_smoke --log-race [seconds]` is the quick check of the log and the file system: threads that log (with repeated lines), the freeze watchdog flushing
+the log, the console reading the last lines, `clear_log`, and then `Core._destroy()` while the watchdog still runs, as the engine's shutdown does.
+Reports show even when the run does not crash. `-DXRCORE_SMOKE_OLD_LOG_API=ON` builds it against the log code as it was before log_lines.h (for a before run).
 
 ## Running under the sanitizers
 
@@ -158,6 +183,37 @@ Last run of the whole matrix on the final binary (RelWithDebInfo, ASan+UBSan). T
 | `smoke` from the menu with a **cold shader cache** (a fresh `ANOMALY_STATE_ROOT`: every shader is translated by ShaderXlat/vkd3d during the run, 464 cache files written) | the whole plan, new game included | **clean**: 0 ASan reports, no crash file, driver reaches `DONE`, 265 s. An earlier cold run that sat on the loading screen's "press any key" for 24 minutes (the runner did not tap keys in the new-game path then; it does now) was clean too |
 | `quit_menu` `quit_loading` `quit_inventory` `quit_pda` `quit_dialog` `quit_combat` `quit_dead` `quit_surge` `quit_level` | quit from each state | all exit 0 and shut down by themselves, 20 to 60 s each, no ASan report, no crash file |
 
+### ThreadSanitizer and the quit runs
+
+Run on `macos-arm64-tsan` (`tools/sweep/run.sh --tsan --scale 3`, `tools/sweep/quit_runs.sh --tsan`), with `tools/sweep/tsan.supp`:
+
+| Run | State | Result |
+|---|---|---|
+| `xrcore_smoke --log-race 3`, the log code before this work | | 8 reports: `m_files.clear()` (`CLocatorAPI::_destroy`) against `Register` and `m_files.insert` from `FlushLog`'s `FS.w_close`, `xr_delete(xr_FS)` against `FlushLog`, the console's reads of `LogFile` (size, strings being destroyed) against the push_backs and clears |
+| `xrcore_smoke --log-race 3`, the new log code | | first run 21 reports, all `Memory.stat_calls++` in `mem_alloc`/`mem_free` (finding 33); then 0 |
+| `smoke` | fresh state, **cold shader cache**, from `sweep_base` | `DONE plan smoke`, exit 0, 730 s, **0 reports** |
+| `quit_menu` `quit_loading` `quit_level` `quit_combat` `quit_inventory` `quit_pda` `quit_dialog` `quit_dead` `quit_surge` | the smoke run's state | all nine exit 0 by themselves, **0 reports** (65 to 300 s each under TSan; `quit_loading` takes 27.6 s to quit: the load step it interrupts must finish) |
+
+Without `tsan.supp` the same `smoke` run reports 477 races in 66 places. 301 are `CRandom::randI` (the one global generator, advanced by every thread);
+the rest are the by-design overlap of the secondary thread with the render phase (below). None is a container or a lifetime: those were the ones
+fixed in findings 27 to 35 (the first TSan runs, before the fixes, also had them: `CModelPool::Delete` and `CBlender_Compile` against the
+prefetcher's thread, `s_bones_array_const`, and `FS.dwOpenCounter` from the texture loader's GCD workers).
+
+`tools/sweep/tsan.supp` names every function it hides and why. The by-design class: the secondary thread (`mt_Thread`: `Device.seqParallel`,
+`seqFrameMT`, the ALife update, the network processor, the sound update, the HOM and detail-manager work) runs while the primary thread renders; the
+engine hands data over with `mt_csEnter`/`mt_csLeave` and with per-frame counters (`Device.dwFrame`, `m_frame_calc`, ...), not with locks around the data, so
+TSan sees scalars and flags that one side writes and the other reads a frame earlier or later. A stale value costs a frame of wrong occlusion or a
+fade; `CDetailManager` is the one place where it could be more (open item 10).
+
+Thirty plain quits on the RelWithDebInfo build (`tools/sweep/quit_runs.sh -n 30 --plain`, a state with `sweep_base`; the time is from the request to the
+shell's `quit (ok)` line, for `quit_level` from the engine's last frame, after the level is disconnected):
+
+| Quit from | Runs | Hangs, crashes | Quit time, median (min to max) |
+|---|---|---|---|
+| the main menu (`quit_menu`) | 10 | 0 | 0.08 s (0.06 to 0.12) |
+| a level (`quit_level`) | 10 | 0 | 0.29 s (0.23 to 0.34) |
+| the new game's loading screen (`quit_loading`) | 10 | 0 | 0.21 s (0.15 to 0.25) |
+
 Commands that need the debug build (`-dbg`; the runner passes it): `g_god` (all fights), `jump_to_level` (`transition`, `smoke`, `quit_level`). The rest is Lua exports and keys.
 
 Before the fixes in the table below these runs showed use-after-free reports in the main menu, the space restriction holder and the crow list, a
@@ -198,6 +254,15 @@ The sweep's fixes, in the order they were made. Module is the commit prefix.
 | 24 | xrCore | fatal handler | The SIGSEGV handler saved the game (and could spin for minutes) before it wrote the log. Writes the log first, flushes, and a 20 s `SIGALRM` watchdog ends the process. |
 | 25 | 3rd party/luabind, xrServerEntities | heap-use-after-free at `lua_close` | `weak_ref` and `lua_reference` keep the `lua_State*` they were made on, almost always a script coroutine, collected long before the reference is released (when a C++ object holding a functor dies, or when the VM closes). The release then pushes onto a freed stack. `luabind::open` makes a thread of its own, anchored in the registry, and every release goes through it (never the main thread: while it runs a coroutine its stack must not be touched). |
 | 26 | xrCore | out-of-bounds read, shift into the sign bit | `apx_InvSqrt` (unused) did `*(long*)&float` and kept the result in a `long`, which is 64 bits on Apple (four bytes past the float); `CColor::get_windows` (unused) shifted a `BYTE` promoted to `int` by 24. Same-size types and `u32` shifts. |
+| 27 | xrEngine, xrGame | heap use after free at quit (probably the quit hang) | The spawn prefetcher (`SPAWN_ANTIFREEZE`, thread "Pre-Spawn Prefetcher Thread": loads the models of spawn events ahead of time) was stopped by `~CLevel` *after* it deleted the queues the thread works on, by a flag that is a member of the level being destroyed, and nothing waited for the thread: it went on loading models and textures while `~IGame_Level` walked the texture map in `_DumpMemoryUsage`, which is the SIGSEGV in `Log`/`std::string` the quit hang started with. `~CLevel` now stops the thread first (own flags, the event set until the thread reports it finished, 30 s limit) and only then frees the queues; `_DumpMemoryUsage` holds the creation lock. |
+| 28 | xrRender | data race, heap corruption | The same thread calls `Render->models_PrefetchOne` (`CModelPool::Create`/`Delete`) while the primary thread creates and releases the models of the objects it spawns: `Models`, `Registry` and `Pool` are plain containers with no lock. One recursive lock for the pool. |
+| 29 | xrCore | data race, heap corruption | `CLocatorAPI::m_files` (a `std::set`, every file the game can open) was written by `Register()` from every thread that closes a file writer (the prefetcher compiling shaders writes each to the shader cache; the log flush of the freeze watchdog did, every 5 s while the primary thread was busy) and read by every thread that opens one. One recursive lock around the registry functions. |
+| 30 | xrCore | data race, use after free at quit | `FlushLog` (called from the freeze watchdog thread, which never ended) tested `xr_FS` before taking the log lock, registered the log file in `m_files` through `FS.w_close`, and ran against `CloseLog`'s unlocked `LogFile.clear()` and `Core._destroy`'s `m_files.clear()` / `xr_delete(xr_FS)`: eight TSan reports in `xrcore_smoke --log-race`. The lock is taken first, `CloseLog` closes the log under it, the flush no longer registers the file. |
+| 31 | xrEngine | data race, use after free | The console's log window read `LogFile` while other threads pushed to it (a reallocation frees the buffer being read), `clear_log` cleared it unlocked: `ClearLog`, `LogLineCount`, `LogCopyLines` (`log_lines.h`) copy under the log lock. |
+| 32 | xrEngine | thread lifetime | The freeze watchdog is stopped in `CRenderDevice::RunEnd` (3 s limit) before the core and the log are torn down; what it reads from the primary thread (the time of its last frame, whether a level is loading) is atomic, not a `CTimer` and the live `g_loading_events` list. |
+| 33 | xrCore, xrEngine, xrGame, Metal shim | data race (formal) | Plain integers that several threads change: `shared_str`'s reference count (Apple: `__atomic` add and sub), `mt_bMustExit` and `mt_Thread_marker` (the secondary thread's hand-shake), `Memory.stat_calls` (every allocation of every thread: all of the first 21 TSan reports), `CPU::qpc_counter`, `FS.dwOpenCounter` (the disk icon), and the Metal shim's poll of `Query::done` (set by the completion handler's thread) outside the lock that guards it. |
+| 34 | ShaderXlat | guard | The translation hook holds a mutex: vkd3d-shader and SPIRV-Cross are reentrant and the resource manager already serialises shader creation (`creationGuard`), so this is insurance against a second caller. |
+| 35 | xrCore | infinite recursion in the crash handler | After the static destructors have run, `Msg` locks a destroyed `std::recursive_mutex`, which throws `std::system_error`; nothing catches it, `std::terminate` calls the engine's `terminate_handler`, which reports with `Msg`, which throws: for ever, deeper and deeper (`sample` of a process that aborted at exit showed `terminate_handler` > `Msg` > `AddOne` > `recursive_mutex::lock` > `__cxa_throw` > `terminate` > ... 896 samples of the same cycle). This is the crash handler "spinning for minutes". `terminate_handler` reports once and `_exit`s the second time; `AddOne` and `FlushLog` write to stderr / return once the log's statics are gone (an object defined after them sets a flag as the first of them to be destroyed). |
 
 ### Suppressions
 
@@ -222,9 +287,12 @@ Compiled out instead of suppressed: `vptr`, `function` and `alignment` (see Buil
    the value, so it passes unnoticed); not an arm64 difference. The script is in the game's archives, not in the repo; the fix is there (use the returned object), or
    the export could keep the old pointer valid until the end of the frame. Not changed here.
 2. **The quit hang M2 saw once in ten runs** (a SIGSEGV in `Log`/`std::string` under `IGame_Level::~IGame_Level` to `CResourceManager::_DumpMemoryUsage`, then the crash handler
-   spinning for minutes in the game-over save) was **not reproduced**: 12 quits from the Cordon, Garbage and the menu and the 9 `quit_*` plans, all clean. The probable cause
-   is finding 23 (log dedupe `erase(end() - 1)` on an empty `LogFile`; it corrupts the vector, and a line logged twice at quit is enough), and finding 24 makes the handler
-   write the log first and end the process after 20 s. If it comes back, run with `SWEEP_ASAN_EXTRA=quarantine_size_mb=3072` and read the first report.
+   spinning for minutes): **two causes, both fixed.** The SIGSEGV: the spawn prefetcher thread was still loading models and textures while the level was destroyed
+   (finding 27; the same thread shared the model pool and the file registry with the primary thread without a lock, findings 28 and 29). The spin: `terminate_handler` recursing
+   through `Msg` once the log's mutex was gone (finding 35), which a fatal signal during `exit()` reaches; it reproduced on demand (a TSan run that reported anything aborts at exit)
+   and is gone. The earlier suspects, findings 23 and 24, stay fixed. Not reproduced before this on the Mac (about 100 quits), so the evidence for the first is the code and the
+   thread's TSan reports, not a crash; after: 30 plain quits and the 9 `quit_*` plans under TSan, none hung. If it comes back: `SWEEP_LLDB=1 tools/sweep/run.sh` and
+   `sample <pid>` on the stuck process show where it is.
 3. **Renderer** (not ours, reported to M2): null `ShaderElement` through the `this == 0` idiom (`Shader.cpp:146-161` `ShaderElement::equal`/`Shader::equal`,
    `xr_resource.h:131`, `r__dsgraph_build.cpp:56`, `:914`, `:1134` reference to a null `Fmatrix`): benign while `-fno-delete-null-pointer-checks` is on, reported once per
    run at start and in the dynamic-visual path; the `sigaltstack` replacement in `FrontendVkd3d.cpp` (`struct AltStack`), the same bug as finding 11, fatal under ASan if the thread exits;
@@ -233,17 +301,28 @@ Compiled out instead of suppressed: `vptr`, `function` and `alignment` (see Buil
    (x64's bit trick gave garbage); UBSan reports it (`float-cast-overflow`). Which model has it is not known.
 5. **`CTimer::GetElapsed_ticks`** (`xrCore/FTimer.h:81`): the `u64` delta wraps when the ALife update thread reads the counter behind `m_real_ticks`, and the wrapped value converted to `double`
    and back is out of range (`float-cast-overflow`). Harmless in effect (about one tick). Suppressed; the fix is an xrCore header edit that rebuilds everything.
-6. **The iPad's intermittent heap corruption** ("pointer being freed was not allocated" in vkd3d `preproc_free_macro`/`preproc_yyparse`, in `CloseLog`): **not caught on the Mac.**
-   Whole-engine ASan runs with an empty shader cache (a fresh `ANOMALY_STATE_ROOT`: two cold-cache `smoke` runs, the table above) found nothing in ShaderXlat or vkd3d. What the sweep did
-   find are two writes to freed or out-of-range memory in code that runs at the end of a session: finding 23 (`LogFile.erase(end() - 1)` on an empty vector, and the next `push_back` writes
-   there) and finding 25 (luabind releasing slots on the stacks of collected coroutines at `lua_close`). Either could corrupt the heap an unrelated allocator later trips over; that they are
-   the cause on the iPad is plausible, not shown. If it still happens with this PR, run the iPad build's equivalent under ASan (`-fsanitize=address` is refused on iOS by the option; use
-   Malloc debugging in Xcode instead, `MallocScribble`/`MallocGuardEdges`) and keep the first report.
+6. **The iPad's intermittent heap corruption** ("pointer being freed was not allocated" in vkd3d `preproc_free_macro`/`preproc_yyparse`, in `CloseLog`, once in a system
+   framework): **not caught on the Mac by ASan** (two cold-cache `smoke` runs found nothing in ShaderXlat or vkd3d), and **not by TSan either in the code that was suspected**:
+   ShaderXlat/vkd3d has one caller at a time (the resource manager's `creationGuard`, and now a mutex in the hook), no shared state of its own, and no TSan report. What TSan and
+   a reading of the threads did find are the writers that share the heap with it: the spawn prefetcher (findings 27 to 29: unlocked `CModelPool` and `m_files`, containers
+   resized and erased by two threads), the freeze watchdog's log flush against the file system's teardown (30), unlocked `LogFile` (30, 31). Any of them corrupts the heap; vkd3d's
+   macro table and the log's strings, which are freed in bulk, are where libmalloc notices. On the iPad (cold shader cache, a slower primary thread, so more spawn events in
+   flight and longer stale-timer intervals) they have the room to; on the Mac's warm cache they rarely do. The baseline did not reproduce it either: see IPAD.md for the runs
+   before and after. If it still happens: `lua_parallel_gc 0` first (item 11), then `MallocStackLogging` with `MallocErrorAbort` and read the allocation stack of the block.
 7. **`stop_hud_motion`** in the engine log of every `smoke` is exported and runs; the line `![player_hud::StopScriptAnim()] invalid script_anim_part 255` is the engine's own diagnostic
    when a script stops a hud animation that is not playing (`print_bone_warnings`), same on the PC. M2 reported the export as missing: it is not.
 8. **Opening the trade window from a script**: `db.actor:start_trade(trader)` returns without showing it (the Lua hook `CUIActorMenu_OnMode_Trade` or a missing trader state; not investigated).
    The `trade` plan covers the talk dialog; it logs `trade open: false` and goes on.
 9. **`--script` has no step that waits for a log line.** The runner taps Left Shift every 15 s so each loading screen's "press any key" gets pressed. A `waitlog <text>` step would make it independent of the clock (app side).
+
+10. **The grass (`CDetailManager`) hand-off between the secondary and the primary thread** (TSan: `hw_Render_dump` against `UpdateVisibleM`/`MT_CALC`, about 40 reports in a `smoke`, hidden
+    in `tsan.supp`). `MT_CALC` on the secondary thread fills next frame's visible-slot vectors once `m_frame_rendered + 1 == Device.dwFrame`; the render phase dumps this frame's from the same
+    vectors; if any pass dumps after `m_frame_rendered` is set (the ssfx grass shadows render the dump again for the lights; not checked) the two overlap. The counters are `volatile`, not acquire/release, and `Device.dwFrame` changes in
+    `End()` while the secondary thread is still running. A vector that grows (`push_back`) while the render phase iterates it is a read of freed memory (a crash, not a heap corruption). Not
+    changed: it needs the renderer's owner; a lock held by `Render()` for the dump would close it.
+11. **`lua_parallel_gc`** (default on, `device.cpp`): the secondary thread runs `lua_gc` steps on the script VM while the primary thread renders. TSan cannot see into the interpreter's
+    assembly (`lj_vm.S`) and the script paths it saw were quiet, but the VM is not thread safe; if the render phase ever runs a script callback, the two collide. `lua_parallel_gc 0` is the
+    switch; not changed.
 
 ## Reading a report
 
