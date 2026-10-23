@@ -726,7 +726,11 @@ SDL_AppResult SDL_AppIterate(void* appstate)
         }
         app->last_frame_start_ns = frame_start_ns;
         if (!xr_engine::Frame())
+        {
+            // the last frame: the level is gone, what follows is xr_engine::Shutdown() (the "quit (ok)" line ends it)
+            AppleShell::Log("anomaly: the engine asked to quit");
             return SDL_APP_SUCCESS;
+        }
         // one line in the shell log every 10 s: frames per second of the main loop, the CPU time of a frame (time inside
         // Frame(): the rest of the frame interval is the wait for the GPU and the display), and the memory the OS charges us
         ++app->fps_frames;

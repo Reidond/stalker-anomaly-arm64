@@ -8,11 +8,13 @@
 #   -o     where the runs go (default build/quit-runs/<time>); each run is <outdir>/run-NN-<plan>/ as run.sh writes it
 #   other options (--tsan, --plain, --app, --scale, --timeout, --state, ...) are handed to run.sh as they are
 #
-# One line per run in <outdir>/results.txt:  run plan result wall-seconds quit-seconds
+# One line per run in <outdir>/results.txt:  run plan result wall-seconds quit-seconds [tsan=<reports in stderr.txt>]
 #   result  ok      the shell logged "anomaly: quit (ok)" and no crash file was written
 #           crash   a crash file or a sanitizer report of the fatal kind
 #           hang    the runner's watchdog had to stop the app (--timeout), or the log has no quit line
-#   quit-seconds is the time between "script asked to quit" and the shell's "quit (...)" line: the engine's whole shutdown
+#   quit-seconds is the time between "script asked to quit" (a quit of the --script: quit_menu, quit_loading) and the shell's "quit (...)" line,
+#   the whole shutdown; for a quit the Lua driver asks for it is the time from the engine's last frame ("the engine asked to quit",
+#   after the level is disconnected) to that line
 set -u
 here="$(cd "$(dirname "$0")" && pwd)"
 repo="$(cd "$here/../.." && pwd)"
@@ -47,6 +49,9 @@ for ((i = 1; i <= runs; i++)); do
     result=ok
     shell_log="$dir/shell.log"
     quit_a=$(grep -a "script asked to quit" "$shell_log" 2>/dev/null | tail -1 | sed -E 's/^\[ *([0-9.]+)\].*/\1/')
+    # a quit the driver asks for with the console command (quit_level, quit_combat, ...) leaves no "script asked" line: the
+    # shutdown after the engine's last frame is what the shell log can time then
+    [ -n "$quit_a" ] || quit_a=$(grep -a "the engine asked to quit" "$shell_log" 2>/dev/null | tail -1 | sed -E 's/^\[ *([0-9.]+)\].*/\1/')
     quit_b=$(grep -a "anomaly: quit (" "$shell_log" 2>/dev/null | tail -1 | sed -E 's/^\[ *([0-9.]+)\].*/\1/')
     if grep -a -q "timeout after\|the app was still up" "$dir.console.txt"; then
         result=hang
@@ -57,7 +62,8 @@ for ((i = 1; i <= runs; i++)); do
     fi
     qt="-"
     [ -n "$quit_a" ] && [ -n "$quit_b" ] && qt=$(awk -v a="$quit_a" -v b="$quit_b" 'BEGIN{printf "%.2f", b - a}')
-    echo "$i $plan $result ${wall}s $qt" | tee -a "$out/results.txt"
+    tsan=$(grep -a -c "WARNING: ThreadSanitizer" "$dir/stderr.txt" 2>/dev/null)
+    echo "$i $plan $result ${wall}s $qt${tsan:+ tsan=$tsan}" | tee -a "$out/results.txt"
     total=$((total + 1))
     [ "$result" = ok ] || bad=$((bad + 1))
 done
