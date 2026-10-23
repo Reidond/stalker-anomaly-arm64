@@ -145,7 +145,7 @@ if [ "$tsan" = 1 ]; then
     # history_size=5 keeps more of the first access's history (the second stack of a race is often long gone otherwise)
     env_args+=(
         --env "MallocNanoZone=0"
-        --env "TSAN_OPTIONS=suppressions=$here/tsan.supp:halt_on_error=0:report_thread_leaks=0:report_signal_unsafe=0:history_size=5:second_deadlock_stack=1:print_summary=1${SWEEP_TSAN_EXTRA:+:$SWEEP_TSAN_EXTRA}"
+        --env "TSAN_OPTIONS=suppressions=$here/tsan.supp:halt_on_error=0:abort_on_error=0:report_thread_leaks=0:report_signal_unsafe=0:history_size=5:second_deadlock_stack=1:print_summary=1${SWEEP_TSAN_EXTRA:+:$SWEEP_TSAN_EXTRA}"
     )
 elif [ "$plain" = 0 ]; then
     # container-overflow: the engine's own vectors are annotated, the system libc++'s are not (false positives);

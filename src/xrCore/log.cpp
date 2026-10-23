@@ -34,9 +34,19 @@ static LogCallback LogCB = 0;
 static xr_string last_line; // the last line as it was logged, before the " [n]" counter: a repeat only bumps the counter
 static int items_count = 0;
 static bool log_closed = false; // CloseLog() ran: the file system is going away, nothing is written to the log file any more
+// Set when the statics above are being destroyed (this object is defined after them, so it goes first). Logging that happens after
+// that - a fatal signal or a terminate handler during exit() - must not touch a mutex and a vector that are gone: the mutex throws,
+// which is a std::terminate() whose handler logs again.
+static std::atomic<bool> g_log_gone{false};
+static struct LogLifetime
+{
+	~LogLifetime() { g_log_gone.store(true); }
+} g_log_lifetime;
 
 void FlushLog()
 {
+	if (g_log_gone.load())
+		return;
 	PROF_EVENT();
 
 	// The freeze watchdog thread calls this too, also while the main thread tears the file system down: the lock is taken before
@@ -109,6 +119,11 @@ __attribute__((weak)) bool is_console_mark(Console_mark) { return false; }
 
 void AddOne(const char* split)
 {
+	if (g_log_gone.load())
+	{
+		fprintf(stderr, "%s\n", split);
+		return;
+	}
 
 	logCS.Enter();
 
