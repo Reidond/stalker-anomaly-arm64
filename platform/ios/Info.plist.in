@@ -14,6 +14,17 @@
 	<string>${MACOSX_BUNDLE_BUNDLE_NAME}</string>
 	<key>CFBundleDisplayName</key>
 	<string>${MACOSX_BUNDLE_BUNDLE_NAME}</string>
+	<!-- The AppIcon asset catalog (ASSETCATALOG_COMPILER_APPICON_NAME in anomaly_set_app_icon(), cmake/AnomalyAppIcon.cmake). -->
+	<key>CFBundleIcons</key>
+	<dict>
+		<key>CFBundlePrimaryIcon</key>
+		<dict>
+			<key>CFBundleIconName</key>
+			<string>AppIcon</string>
+		</dict>
+	</dict>
+	<key>CFBundleIconName</key>
+	<string>AppIcon</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
