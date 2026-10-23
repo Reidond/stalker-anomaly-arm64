@@ -80,3 +80,16 @@ extension View {
         #endif
     }
 }
+
+/// ImageRenderer (used by tools/mod_downloads_snapshot) cannot draw text fields, scroll views or paste buttons; with this set
+/// the views draw static stand-ins instead. Never set in the app.
+private struct SnapshotModeKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
+extension EnvironmentValues {
+    var snapshotMode: Bool {
+        get { self[SnapshotModeKey.self] }
+        set { self[SnapshotModeKey.self] = newValue }
+    }
+}

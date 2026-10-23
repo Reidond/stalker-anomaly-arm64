@@ -53,6 +53,11 @@ final class DownloadsModel: NSObject, ObservableObject {
         }
     }
 
+    /// Adds a row without starting anything (the offscreen snapshot tool).
+    func addPreviewItem(_ item: DownloadItem) {
+        items.append(item)
+    }
+
     func shutdown() {
         for item in items where item.state == .downloading {
             item.task?.cancel()
@@ -92,9 +97,8 @@ final class DownloadsModel: NSObject, ObservableObject {
             show(notice: "Paste an http or https link to a file.")
             return false
         }
-        if let running = items.first(where: { $0.sourceURL == url && $0.origin == .link && $0.state == .downloading }) {
-            running.objectWillChange.send()
-            return true
+        if items.contains(where: { $0.sourceURL == url && $0.origin == .link && $0.state == .downloading }) {
+            return true // already on its way
         }
         let item = DownloadItem(origin: .link, sourceURL: url, state: .downloading)
         items.insert(item, at: 0)

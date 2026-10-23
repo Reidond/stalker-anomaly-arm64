@@ -105,6 +105,7 @@ private struct BrowserBar: View {
     @ObservedObject var browser: BrowserModel
     @ObservedObject private var bookmarks: BookmarkStore
     var addressFocused: FocusState<Bool>.Binding
+    @Environment(\.snapshotMode) private var snapshotMode
 
     init(model: DownloadsModel, browser: BrowserModel, addressFocused: FocusState<Bool>.Binding) {
         self.model = model
@@ -130,17 +131,21 @@ private struct BrowserBar: View {
                 .accessibilityLabel(browser.isLoading ? "Stop" : "Reload")
 
             HStack(spacing: 4) {
-                TextField("Search or paste a link", text: $browser.addressText)
-                    .textFieldStyle(.plain)
-                    .focused(addressFocused)
-                    .onSubmit { browser.submitAddress() }
-                    .submitLabel(.go)
-                    #if os(iOS)
-                    .textInputAutocapitalization(.never)
-                    .keyboardType(.URL)
-                    #endif
-                    .autocorrectionDisabled()
-                    .padding(.leading, 10)
+                if snapshotMode {
+                    Text(browser.addressText).lineLimit(1).frame(maxWidth: .infinity, alignment: .leading).padding(.leading, 10)
+                } else {
+                    TextField("Search or paste a link", text: $browser.addressText)
+                        .textFieldStyle(.plain)
+                        .focused(addressFocused)
+                        .onSubmit { browser.submitAddress() }
+                        .submitLabel(.go)
+                        #if os(iOS)
+                        .textInputAutocapitalization(.never)
+                        .keyboardType(.URL)
+                        #endif
+                        .autocorrectionDisabled()
+                        .padding(.leading, 10)
+                }
                 if !browser.addressText.isEmpty {
                     Button { browser.addressText = "" } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary) }
                         .buttonStyle(.plain)
@@ -197,21 +202,28 @@ private struct BookmarksBar: View {
     @ObservedObject var model: DownloadsModel
     @ObservedObject var bookmarks: BookmarkStore
     @Binding var showEditor: Bool
+    @Environment(\.snapshotMode) private var snapshotMode
+
+    private var chips: some View {
+        HStack(spacing: 6) {
+            ForEach(bookmarks.all) { bookmark in
+                Button { model.browser.load(bookmark.url) } label: {
+                    Text(bookmark.title).lineLimit(1).font(.callout)
+                }
+                .buttonStyle(BarButtonStyle(minWidth: 0))
+                .focusableControl()
+                .help(bookmark.url.absoluteString)
+            }
+        }
+        .padding(.horizontal, 10)
+    }
 
     var body: some View {
         HStack(spacing: 6) {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 6) {
-                    ForEach(bookmarks.all) { bookmark in
-                        Button { model.browser.load(bookmark.url) } label: {
-                            Text(bookmark.title).lineLimit(1).font(.callout)
-                        }
-                        .buttonStyle(BarButtonStyle(minWidth: 0))
-                        .focusableControl()
-                        .help(bookmark.url.absoluteString)
-                    }
-                }
-                .padding(.horizontal, 10)
+            if snapshotMode {
+                chips.frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                ScrollView(.horizontal, showsIndicators: false) { chips }
             }
             Button { showEditor = true } label: { Text("Edit").font(.callout) }
                 .buttonStyle(BarButtonStyle(minWidth: 0))
@@ -328,6 +340,7 @@ private struct NoticeBanner: View {
 private struct DownloadsPanel: View {
     @ObservedObject var model: DownloadsModel
     @Binding var pasteText: String
+    @Environment(\.snapshotMode) private var snapshotMode
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -363,39 +376,55 @@ private struct DownloadsPanel: View {
                 }
                 .padding(12)
                 Spacer(minLength: 0)
+            } else if snapshotMode {
+                rows
+                Spacer(minLength: 0)
             } else {
-                ScrollView {
-                    VStack(spacing: 0) {
-                        ForEach(model.items) { item in
-                            DownloadRow(model: model, item: item)
-                            Divider()
-                        }
-                    }
-                }
+                ScrollView { rows }
             }
         }
         .frame(maxHeight: .infinity, alignment: .top)
         .background(Color.pageBackground)
     }
 
+    private var rows: some View {
+        VStack(spacing: 0) {
+            ForEach(model.items) { item in
+                DownloadRow(model: model, item: item)
+                Divider()
+            }
+        }
+    }
+
     private var pasteField: some View {
         HStack(spacing: 6) {
-            TextField("Paste a link to a file", text: $pasteText)
-                .textFieldStyle(.plain)
-                .padding(.horizontal, 10)
+            if snapshotMode {
+                Text(pasteText.isEmpty ? "Paste a link to a file" : pasteText)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 10)
+                    .frame(minHeight: 44)
+                    .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Color.fieldBackground))
+                Image(systemName: "doc.on.clipboard").frame(width: 44, height: 44)
+            } else {
+                TextField("Paste a link to a file", text: $pasteText)
+                    .textFieldStyle(.plain)
+                    .padding(.horizontal, 10)
+                    .frame(minHeight: 44)
+                    .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Color.fieldBackground))
+                    .onSubmit { submit() }
+                    #if os(iOS)
+                    .textInputAutocapitalization(.never)
+                    .keyboardType(.URL)
+                    #endif
+                    .autocorrectionDisabled()
+                PasteButton(payloadType: String.self) { strings in
+                    if let text = strings.first { pasteText = text }
+                }
+                .labelStyle(.iconOnly)
                 .frame(minHeight: 44)
-                .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Color.fieldBackground))
-                .onSubmit { submit() }
-                #if os(iOS)
-                .textInputAutocapitalization(.never)
-                .keyboardType(.URL)
-                #endif
-                .autocorrectionDisabled()
-            PasteButton(payloadType: String.self) { strings in
-                if let text = strings.first { pasteText = text }
             }
-            .labelStyle(.iconOnly)
-            .frame(minHeight: 44)
             Button { submit() } label: { Text("Download").fontWeight(.semibold) }
                 .buttonStyle(BarButtonStyle(prominent: true, minWidth: 0))
                 .focusableControl()
@@ -411,32 +440,17 @@ private struct DownloadsPanel: View {
 private struct DownloadRow: View {
     let model: DownloadsModel
     @ObservedObject var item: DownloadItem
+    @Environment(\.snapshotMode) private var snapshotMode
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .top, spacing: 8) {
+            HStack(alignment: .center, spacing: 8) {
                 Image(systemName: icon).foregroundStyle(iconColor).frame(width: 22)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(item.fileName).font(.callout.weight(.semibold)).lineLimit(2).truncationMode(.middle)
-                    Text(subtitle).font(.caption).foregroundStyle(subtitleIsError ? Color.red : Color.secondary)
+                    Text(subtitle).font(.caption).foregroundStyle(subtitleIsError ? Color.red : Color.secondary).lineLimit(3)
                 }
                 Spacer(minLength: 0)
-                if item.canRemove {
-                    Button { model.remove(item) } label: { Image(systemName: "xmark") }
-                        .buttonStyle(BarButtonStyle())
-                        .focusableControl()
-                        .help("Remove from the list")
-                        .accessibilityLabel("Remove \(item.fileName) from the list")
-                }
-            }
-            if item.state == .downloading || item.state == .verifying {
-                if let fraction = item.fraction, item.state == .downloading {
-                    ProgressView(value: fraction).progressViewStyle(.linear)
-                } else {
-                    ProgressView().progressViewStyle(.linear)
-                }
-            }
-            HStack(spacing: 8) {
                 if item.canCancel {
                     Button { model.cancel(item) } label: { Label("Cancel", systemImage: "stop.circle") }
                         .buttonStyle(BarButtonStyle(minWidth: 0))
@@ -452,8 +466,24 @@ private struct DownloadRow: View {
                         .buttonStyle(BarButtonStyle(prominent: true, minWidth: 0))
                         .focusableControl()
                 }
+                if item.canRemove {
+                    Button { model.remove(item) } label: { Image(systemName: "xmark") }
+                        .buttonStyle(BarButtonStyle())
+                        .focusableControl()
+                        .help(item.state == .awaitingApproval ? "Dismiss" : "Remove from the list")
+                        .accessibilityLabel("Remove \(item.fileName) from the list")
+                }
             }
             .font(.callout)
+            if item.state == .downloading || item.state == .verifying {
+                if snapshotMode {
+                    StaticBar(fraction: item.fraction ?? 0.35)
+                } else if let fraction = item.fraction, item.state == .downloading {
+                    ProgressView(value: fraction).progressViewStyle(.linear)
+                } else {
+                    ProgressView().progressViewStyle(.linear)
+                }
+            }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
@@ -503,9 +533,24 @@ private struct DownloadRow: View {
         case .failed(let message):
             return message
         case .cancelled:
-            return item.receivedBytes > 0 ? "Cancelled · \(fmt.string(fromByteCount: item.receivedBytes)) kept for resuming" : "Cancelled"
+            let resumable = item.origin == .link ? LinkDownloader.hasPartial(for: item.sourceURL, in: model.dir) : item.resumeData != nil
+            return resumable && item.receivedBytes > 0 ? "Cancelled · \(fmt.string(fromByteCount: item.receivedBytes)) kept for resuming" : "Cancelled"
         case .openedInBrowser:
             return "That link is a web page, so it was opened in the browser"
         }
+    }
+}
+
+/// A progress bar drawn by hand, for the snapshot tool (ImageRenderer cannot draw ProgressView).
+private struct StaticBar: View {
+    let fraction: Double
+    var body: some View {
+        GeometryReader { geo in
+            ZStack(alignment: .leading) {
+                Capsule().fill(Color.primary.opacity(0.12))
+                Capsule().fill(Color.accentColor).frame(width: geo.size.width * fraction)
+            }
+        }
+        .frame(height: 4)
     }
 }
