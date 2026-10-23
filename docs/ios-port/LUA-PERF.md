@@ -76,7 +76,7 @@ Console and command-line summary:
 |---|---|
 | `-lua_perf`, `lua_perf on\|off\|mark <label>\|report\|reset\|interval <s>\|watch <path> [arg]\|unwatch` | the timers |
 | `-lua_profile [-lua_profile_ms <n>]`, `lua_profile on [ms]\|off\|report [top]\|reset [label]` | the profiler (2 ms samples) |
-| `-no_lua_cache`, `lua_cache info\|on\|off\|clear\|warm` | the bytecode cache |
+| `-no_lua_cache`, `-lua_prefetch`, `lua_cache info\|on\|off\|clear\|warm` | the bytecode cache, and its opt-in read-ahead |
 
 ## Bytecode cache
 
@@ -95,10 +95,13 @@ Console and command-line summary:
   **corrupt**; the VM's own bytecode loader has the last word (`luaL_loadbuffer` of the bytecode fails: corrupt).
 - **Any miss compiles from the text** and stores the entry again (a temporary file, then `rename`: two launches never see half an entry). Any
   failure to read, write or create the directory gives the same result as no cache. The result of `load` is always that of `luaL_loadbuffer(text)`.
-- **Read-ahead.** Opening and reading ~475 small files was most of the time of a hit (53 of 60 ms on the iPad, 59 to 91 ms on the Mac), more than decoding the bytecode
-  (6 ms on the iPad) and as much as parsing the text (65 ms). `set_directory` starts a thread that reads the directory's entries into memory; a load takes its entry from
-  there (once) and reads the file only when the thread has not got to it. The engine calls `set_directory` again at every new Lua state, which refills the read-ahead.
-  An entry read ahead is checked like any other, so one that was replaced or damaged afterwards is a stale or corrupt entry, never a wrong script.
+- **Read-ahead (opt-in, `-lua_prefetch`).** Opening and reading ~475 small files is most of the time of a hit (53 of 60 ms on the iPad, 59 to 91 ms on the Mac), more than decoding
+  the bytecode (6 ms on the iPad) and as much as parsing the text (65 ms). With the switch, `set_directory` starts a thread that reads the directory's entries into memory; a load takes
+  its entry from there (once) and reads the file only when the thread has not got to it. The engine calls `set_directory` again at every new Lua state, which refills the read-ahead.
+  An entry read ahead is checked like any other, so one that was replaced or damaged afterwards is a stale or corrupt entry, never a wrong script. **It is off by default**: of four
+  ASan smoke sweeps with it on, two stalled after the Cordon to Garbage level change (the game kept running at 5 to 15 fps and the sweep driver never advanced; nothing in the log; no stall
+  in the five runs without it, three with the cache and the read-ahead off, one with the cache off), two completed. The cause was not found (a race with the engine's own threads is the
+  suspect: the second thread runs the Lua collector while scripts load), so it stays a switch until someone has looked.
 - `lua_cache warm` runs every `*.script` of `$game_scripts$` (the stock archives, the Monolith overlay, loose addon files) through the same
   `do_file` path without running it, so the first level load is already warm. `-no_lua_cache` turns it off.
 
@@ -175,11 +178,11 @@ per cache state, the quietest sets (load 12 to 15, two other games); the load ti
 | off (`-no_lua_cache`) | 5.8 to 8.3 | 462 to 568 | 10 to 18 | 91 to 107 | 353 to 449 |
 | cold (empty: compile and store 407 entries) | 5.8 to 7.4 | 588 to 698 | 9 to 19 | 235 to 301 | 344 to 405 |
 | warm, one file per script read on demand | 5.2 to 7.9 | 419 to 559 | 9 to 18 | 74 to 111 | 336 to 440 |
-| warm, with the read-ahead | 5.9 to 8.7 | 407 to 432 | 9 to 17 | 16 to 21 | 379 to 395 |
+| warm, with the read-ahead (`-lua_prefetch`) | 5.9 to 8.7 | 407 to 432 | 9 to 17 | 16 to 21 | 379 to 395 |
 
 - **Without the read-ahead the cache did not shorten the load**: loading the bytecode is 10 to 15 ms, but 474 `open`+`read` pairs cost 59 to 91 ms (an endpoint-security agent on this
   Mac makes every `open` slow, 130 to 190 µs a file), so a warm load was 74 to 111 ms against 91 to 107 from the text. **With it a warm load is 16 to 21 ms**: 70 to 90 ms saved
-  of a 5 to 8 s level load (473 of 474 hits came from memory). Standalone (`lua_cache_test --bench`, the same scripts, files in the page cache): 37 to 50 ms against 103 to 136.
+  of a 5 to 8 s level load (473 of 474 hits came from memory), but see the stall above. Standalone (`lua_cache_test --bench`, the same scripts, files in the page cache): 37 to 50 ms against 103 to 136.
 - The level load is 5 to 8 s and the scripts are 0.4 to 0.57 s of it. **Running the main chunks (340 to 450 ms) is the Lua cost of a load, not compiling.**
 - A cold start costs 0.15 to 0.2 s more once (the entries are written); `lua_cache warm` does that in one go.
 - The seconds to level ready vary by more than the cache can move them (load and thermal state of the Mac).
@@ -229,8 +232,9 @@ The `ipad_test` save, three launches per cache state (warm = the entries of an e
 | warm, one file per script read on demand (the build measured) | 5.7 to 6.1 | 327 to 348 | 14 | 63 to 67 (file I/O 53 to 57, decode 6, hash 1) | 250 to 268 |
 
 - A level load is about 6 s and the scripts are 0.33 to 0.35 s of it: **there is nothing to win in compiling** (65 ms of parsing, the iPad parses 100 MB/s). The bytecode loads in 6 ms, but opening
-  and reading 474 small files takes 53 to 57 ms (115 µs a file in the app's sandbox), so a warm load cost what the parse costs. The read-ahead (added after these runs; Mac result above)
-  moves that off the load; **it has not been measured on the iPad**: the one run for it was cut off by another session's launches. Expected from the split: 63 ms becomes about 8.
+  and reading 474 small files takes 53 to 57 ms (115 µs a file in the app's sandbox), so a warm load costs what the parse costs: **the cache as shipped (read-ahead off) gains nothing on the iPad**
+  and costs a cold start of 0.12 s once. The read-ahead (Mac result above) would move the file I/O off the load; **it has not been measured on the iPad**: the one run for it was cut off by
+  another session's launches. Expected from the split: 63 ms becomes about 8.
 - New game from the menu (3 launches per state): the Lua part is 342 to 344 ms off, 460 cold, 349 to 352 warm; a steady 60 fps window ends 27 to 29 s after the click on Start in every state.
   (IPAD.md's first measurement of a new game was about 45 s.)
 
