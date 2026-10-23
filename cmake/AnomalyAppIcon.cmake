@@ -18,10 +18,16 @@ function(anomaly_generate_app_icon)
         "${PROJECT_SOURCE_DIR}/tools/app_icon/compose_icon.swift"
         "${PROJECT_SOURCE_DIR}/tools/app_icon/extract_launcher_icon.py"
         "${PROJECT_SOURCE_DIR}/platform/icon/fallback.png")
+    set(watched ${inputs})
     if(EXISTS "${launcher}")
         list(APPEND inputs "${launcher}")
+        list(APPEND watched "${launcher}")
+    elseif(IS_DIRECTORY "${ANOMALY_GAME_DIR}")
+        # A launcher that shows up later changes the directory's timestamp, which re-runs configure and swaps the fallback
+        # icon for the logo without a manual cmake run. (A file that does not exist cannot be a configure dependency.)
+        list(APPEND watched "${ANOMALY_GAME_DIR}")
     endif()
-    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${inputs})
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${watched})
 
     # The Swift step takes about ten seconds, so a configure that changes none of the inputs keeps the previous output.
     set(stamp "${ANOMALY_GAME_DIR}")
