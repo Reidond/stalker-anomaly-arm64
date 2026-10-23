@@ -1088,6 +1088,8 @@ local function soak_plan()
 			if not ok then
 				errors = errors + 1
 				H.say("SOAK cycle %d failed: %s", cycles, tostring(err))
+				-- a failed check of its own: the count above restarts at every level change, the report has to see each one
+				C.check("soak", string.format("cycle-%d", cycles), false, "a gameplay step of the cycle raised: " .. tostring(err))
 			end
 			tick("cycle")
 			-- a level change every twelfth cycle (about every 8 minutes)

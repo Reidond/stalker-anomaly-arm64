@@ -40,7 +40,7 @@ def norm(line):
 
 def parse_run(d):
     run = {"dir": d, "plan": os.path.basename(d.rstrip("/")), "checks": [], "lua_errors": [], "printe": {}, "asan": 0, "ubsan": 0, "crash": 0,
-           "exit": None, "seconds": None, "snd": None, "footprint": [], "driver_fail": []}
+           "exit": None, "seconds": None, "snd": None, "footprint": [], "driver_fail": [], "done": False, "summary": bool(read(os.path.join(d, "summary.txt")))}
     summary = read(os.path.join(d, "summary.txt"))
     if summary:
         m = re.match(r"plan (\S+), exit status (\d+), (\d+)s", summary[0])
@@ -64,8 +64,12 @@ def parse_run(d):
             system, _, item = m.group(4).partition("/")
             run["checks"].append({"result": m.group(3), "system": system, "item": item, "detail": m.group(5), "t": int(m.group(1))})
             continue
-        if "[sweep]" in line and re.search(r"\] FAIL (phase|plan)", line):
+        # every failure form of the driver: "FAIL phase ...", "FAIL plan ...", "FAIL check <name> -- ...", "FAIL <name>: <error>" (try());
+        # a "CHECK FAIL" line of a systems-check plan has "CHECK " between the "]" and the "FAIL" and is counted as a check above
+        if "[sweep]" in line and re.search(r"\] FAIL ", line):
             run["driver_fail"].append(line.split("[sweep] ", 1)[-1])
+        if "[sweep]" in line and re.search(r"\] DONE plan ", line):
+            run["done"] = True
         if LUA_FATAL_RE.search(line):
             run["lua_errors"].append(line[:240])
         elif PRINTE_RE.match(line):
@@ -154,6 +158,12 @@ def main():
             bad.append("driver failed")
         if r["exit"] not in (0, None):
             bad.append(f"exit {r['exit']}")
+        # a plan that never started or stalled is ended by the script's quit (exit 0) with few or no results: it has to have said it is done
+        # (the quit_* plans of the crash sweep end in a quit by design and have no such line)
+        if not r["summary"]:
+            bad.append("no summary.txt")
+        if not r["done"] and not r["plan"].startswith("quit_"):
+            bad.append("the plan did not finish (no DONE line)")
         if bad:
             verdict_fail = True
         plan_rows.append((r, p, f, bad))
