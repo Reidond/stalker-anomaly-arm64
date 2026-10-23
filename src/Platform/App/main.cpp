@@ -680,8 +680,9 @@ void SaveForBackground(App& app)
 // SIGTERM (what `devicectl ... terminate`, the system and a `kill` send). SDL turns it into SDL_EVENT_QUIT, but only when its event pump runs,
 // and an app in the background is not iterated at its display link's pace. While the app is paused in the background the engine cannot
 // answer a quit either (it does not run its event queue, and frames are not allowed): the disconnect it would quit through never
-// happens, and the app lived until the system's SIGKILL, 31 s later. The game was saved when the app left the screen, so the main
-// queue ends it at once through the same exit as a normal quit. Otherwise SDL's own behaviour: a quit event.
+// happens. (Once the system has suspended the app nothing runs at all and the system's SIGKILL, 31 s later, is what ends it.) The game
+// was saved when the app left the screen, so the main queue ends it at once through the same exit as a normal quit, also when the
+// signal arrives while the app is waking up. Otherwise SDL's own behaviour: a quit event.
 void OnTerminateSignal(void*)
 {
     App* const app = g_app;
