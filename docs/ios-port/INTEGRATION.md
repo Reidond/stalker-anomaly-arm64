@@ -212,7 +212,7 @@ compressed memory):
 | main menu | 513 to 600 MB |
 | loading `fake_start` | peak about 2.7 GB |
 | Cordon, 1 minute in | 4.3 GB |
-| Cordon, 3.5 minutes in (a save, quit, relaunch and load cycle gives the same) | 4.6 GB, creeping up by about 30 MB per minute |
+| Cordon, 3.5 minutes in (a save, quit, relaunch and load cycle gives the same) | 4.6 GB (it crept up by about 30 MB per minute until the main loop got an autorelease pool, see [SYSTEMS-CHECK.md](SYSTEMS-CHECK.md)) |
 
 Breakdown in the Cordon (4.5 GB): `IOAccelerator` (Metal buffers and textures) 2.5 GB, malloc 1.2 GB (heap 1.0 GB in the engine's
 own count, Lua 37 MB), graphics-unmapped 0.47 GB, IOSurface 0.14 GB. The engine reports 1.13 GB of D3D textures. These are
@@ -270,8 +270,8 @@ Re-run `tools/sweep/run.sh smoke` after a change in the gameplay or engine code.
 - **ShaderXlat.** A cold cache costs about 2 s at the menu (138 shaders, 1.3 s of translation); a level asks for about 165
   more. Translation is not threaded.
 - **xrGame.** Every crash on the list above is a C++ behaviour MSVC tolerated. Expect more in code paths a two-minute walk
-  does not reach: monster and stalker AI states, combat, inventory, the PDA, surges. Memory creeps up by about 30 MB per
-  minute (not investigated).
+  does not reach: monster and stalker AI states, combat, inventory, the PDA, surges (the systems check drives them: SYSTEMS-CHECK.md).
+  The memory creep of about 30 MB per minute was the main loop's missing autorelease pool (fixed).
 - **xrEngine.** `-load` on the command line does nothing; `commandline.txt` is read, not exercised. A level
   load blocks the main loop for seconds; the engine pumps SDL events during loads, so the window stays responsive.
 - **Shell / app.** The launcher only shows when the data is invalid. The overlay is packed from the bundle; on iOS the
