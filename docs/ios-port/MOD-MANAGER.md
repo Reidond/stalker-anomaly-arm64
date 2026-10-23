@@ -125,24 +125,64 @@ Source paths may use `\` and any case.
 
 ### FomodWizardView
 
-One page per step: the groups with their rule, the options, and a panel with the image and description of the option that is
+One page per step: the groups with their rule, the options, and a card with the image and description of the option that is
 hovered, highlighted or, failing that, selected. The footer has Cancel, Back and Next, which is Install on the last step.
-Wide layouts put the panel beside the options, narrow ones below.
+Wide layouts (640 pt and more) put the card beside the options, narrow ones below.
 
+**Look.** Liquid Glass over a dark backdrop, in the launcher's colours: amber for selection, the cursor and the primary button,
+rust for hairlines and cautions, radiation yellow-green only for the "Recommended" mark.
+
+| Where | Material |
+|---|---|
+| iOS 26 / macOS 26 and later | `glassEffect`: header, option rows (tinted amber when selected, interactive), detail card, footer buttons (the primary one tinted amber); rows and buttons sit in a `GlassEffectContainer`, with `glassEffectID`s so shapes morph (rows by position, Next into Install) |
+| iOS 17 to 25, macOS 14 and 15 | ultra-thin material, a tint layer and a 1 px hairline |
+| Reduce Transparency | solid panels (`FomodTheme.solid` / `solidRaised`) with the hairline |
+
+No glass sits on glass (the group headings and the cursor ring are plain), and radii are concentric: header 24, card 28 with a
+10 pt picture radius inside 18 pt of padding, rows 20. Pictures get the 1 px white 10% outline.
+
+**Theme.** Colours and the backdrop come from the environment, so the launcher can supply its own:
+
+```swift
+FomodWizardView(installer: installer, onFinish: finish, onCancel: cancel)
+    .fomodTheme(FomodTheme(accent: ..., rust: ..., signal: ..., text: ..., dimText: ..., danger: ...,
+                           solid: ..., solidRaised: ..., line: ..., backdrop: nil))   // nil: what is behind shows through
+```
+
+`FomodTheme.anomaly` is the default (amber `#E8A838`, rust, signal green, a near-black backdrop with a warm and a rust glow;
+`FomodBackdrop` is public). The wizard always runs in the dark colour scheme. The backdrop matters on glass: it is what the glass
+samples, so a launcher that has its own backdrop behind the wizard passes `backdrop: nil`.
+
+**Motion.** Fast and purposeful: a step change is a spring (0.3 s, no bounce) with the new page sliding in 28 pt from the side
+the player is heading to, the old one fading out, and its groups rising 10 pt one after another, 60 ms apart; the first page is
+not animated. The radio dot and the checkmark pop in with scale 0.25 to 1, opacity and a 4 pt blur; the primary button morphs from
+Next to Install; presses scale to 0.96 (real glass brings its own press response); the detail card cross-fades in 0.12 s.
+Moving the cursor is **not** animated: a D-pad is used constantly and the ring must be where the finger is. With Reduce Motion
+every one of these becomes a short fade, with no offsets, scaling, blur or stagger.
+
+**Cursor.** The highlight is an accent ring with a white line inside it and a glow, so it reads on glass, on the amber tint of a
+selected row and on the solid fallback alike. It is on one element at a time.
+
+**Input.**
 - Touch and mouse: tap an option or a footer button.
-- Keyboard: the arrow keys move a highlight (the cursor) over the options of the page and then the footer buttons; Return or
-  Space presses it; Escape is Back, and Cancel on the first step. The first option is highlighted when a page opens, and the page
-  scrolls to the highlight.
+- Keyboard: the arrow keys move the cursor over the options of the page and then the footer buttons; Return or Space presses it;
+  Escape is Back, and Cancel on the first step. The first option is highlighted when a page opens, and the page scrolls to it.
 - Controller: the view reads no controller. `FomodSession` (public, `ObservableObject`) holds the steps, selections, flags,
   validity and the cursor, and takes the same commands the keyboard produces: `session.send(.up / .down / .left / .right /
   .confirm / .back / .next)`. Whoever reads the pad (the launcher) creates the session, shows
   `FomodWizardView(session:onFinish:onCancel:)` and forwards D-pad to the four directions, Cross to `.confirm`, Circle to `.back`
   and R1 or Options to `.next` (press the primary button if the rules allow). `FomodWizardView(installer:onFinish:onCancel:)`
-  creates its own session and is what the touch and keyboard path needs. The highlight and the actions are the same either way,
-  so the result does not depend on which device pressed what. Rendered offscreen and covered by the session tests; not yet tried
-  with a controller on the iPad.
+  creates its own session and is what the touch and keyboard path needs.
 - Locked options (required, not usable, SelectAll) can be highlighted, so the reason for the lock can be read, but not changed.
-- VoiceOver: every option and button has a label, a selected value and, for locked ones, a hint.
+- VoiceOver: every option and button has a label, a selected value and, for locked ones, a hint. Selection is shown by shape
+  (filled dot, checkmark) as well as colour.
+
+**What was checked.** The layout, the fallback materials, the cursor ring, a custom theme and the solid and reduced-motion
+variants are rendered offscreen with `ImageRenderer` (no window) and written as PNGs when `MODMANAGER_TEST_ARTIFACTS` is set. Two
+limits: `ImageRenderer` cannot draw Liquid Glass at all (it draws the glass layers and their content as empty; a hosted view
+captured without a window does the same), so the pictures show the iOS 17 to 25 material path, with the glass path switched off
+by an internal test override; and nothing animated can be seen in a still. The glass path is compiled for iOS and macOS and the
+session logic under it is tested, but how it looks and moves on an iPad 27 has not been watched yet.
 
 ### Metadata and ids
 
@@ -192,8 +232,13 @@ ctest --test-dir build/macos-arm64 -R modmanager_core --output-on-failure
 - Cancel in the middle of an extraction, free-space check, download cleanup, id collisions.
 - RAR 4 and RAR 5 come from libarchive's own test files (`external/libarchive/libarchive/test/*.rar.uu`, decoded at run time), since
   RAR cannot be made without non-free tools: listed and extracted with sizes checked, and an encrypted one is refused.
-- The wizard renders offscreen with `ImageRenderer` (no window); `FomodSession` rules are tested without the view.
+- The wizard renders offscreen with `ImageRenderer` (no window), in the material fallback, solid, reduced-motion and custom-theme
+  variants and on a second page with the pad cursor; `FomodSession` rules and pad commands are tested without the view.
 - The library: order, unknown ids, appended folders, toggle, move, rename, remove, corrupt list, stale staging, conflicts.
+
+If the test executable's link step fails on a rebuild with `cannotResolveTempPath(modmanager_core_test-1.swiftmodule)` (a CMake plus
+swiftc quirk after the library was rebuilt twice in a row), delete `build/<dir>/CMakeFiles/modmanager_core_test.dir/Debug` and run
+cmake again; a fresh build is not affected.
 
 The iOS build of the library is checked with `ios-arm64-local` and `-DANOMALY_BUILD_MODMANAGERCORE=ON`
 (`cmake --build build/ios-arm64 --target ModManagerCore`).

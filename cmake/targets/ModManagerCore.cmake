@@ -40,9 +40,12 @@ target_link_libraries(ModManagerCore PUBLIC anomaly_libarchive "-framework Found
 # test files, uuencoded in external/libarchive/libarchive/test.
 if(NOT ANOMALY_IOS)
     file(GLOB modmanager_test_sources CONFIGURE_DEPENDS "${PROJECT_SOURCE_DIR}/tools/modmanager_test/*.swift")
+    # Known CMake + swiftc quirk: after the library under the executable was rebuilt twice in a row, the link step can fail with
+    # "cannotResolveTempPath(modmanager_core_test-1.swiftmodule)". Delete build/<dir>/CMakeFiles/modmanager_core_test.dir/Debug
+    # and run cmake again; a fresh build is not affected.
     add_executable(modmanager_core_test ${modmanager_test_sources})
-    target_link_libraries(modmanager_core_test PRIVATE ModManagerCore)
     set_target_properties(modmanager_core_test PROPERTIES Swift_LANGUAGE_VERSION 5)
+    target_link_libraries(modmanager_core_test PRIVATE ModManagerCore)
     target_compile_options(modmanager_core_test PRIVATE ${modmanager_swift_target_option})
     add_test(NAME modmanager_core COMMAND modmanager_core_test)
     set_tests_properties(modmanager_core PROPERTIES

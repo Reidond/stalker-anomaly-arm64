@@ -5,7 +5,31 @@ import SwiftUI
 
 // FOMOD: parsing (encodings, case), every group type, dependency types, flags, conditional installs, priority, the wizard.
 
-private let onePixelPNG = Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==")!
+/// A small picture with a sky, a horizon and a few shapes: enough to see how images sit in the wizard.
+private let onePixelPNG: Data = {
+    let w = 640, h = 360
+    let space = CGColorSpaceCreateDeviceRGB()
+    guard let ctx = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: 0, space: space,
+                              bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return Data() }
+    let sky = [CGColor(red: 0.10, green: 0.12, blue: 0.10, alpha: 1), CGColor(red: 0.62, green: 0.38, blue: 0.16, alpha: 1)] as CFArray
+    if let gradient = CGGradient(colorsSpace: space, colors: sky, locations: [0, 1]) {
+        ctx.drawLinearGradient(gradient, start: CGPoint(x: 0, y: CGFloat(h)), end: CGPoint(x: 0, y: CGFloat(h) * 0.35), options: [])
+    }
+    ctx.setFillColor(CGColor(red: 0.05, green: 0.06, blue: 0.05, alpha: 1))
+    ctx.fill(CGRect(x: 0, y: 0, width: w, height: Int(Double(h) * 0.38)))
+    ctx.setFillColor(CGColor(red: 0.74, green: 0.92, blue: 0.22, alpha: 0.9))
+    ctx.fillEllipse(in: CGRect(x: 470, y: 150, width: 44, height: 44))
+    ctx.setFillColor(CGColor(red: 0.03, green: 0.04, blue: 0.03, alpha: 1))
+    for (x, height) in [(60, 150), (130, 110), (190, 180), (300, 90), (380, 130)] {
+        ctx.fill(CGRect(x: x, y: 0, width: 34, height: height))
+    }
+    guard let image = ctx.makeImage() else { return Data() }
+    let data = NSMutableData()
+    guard let dest = CGImageDestinationCreateWithData(data, "public.png" as CFString, 1, nil) else { return Data() }
+    CGImageDestinationAddImage(dest, image, nil)
+    CGImageDestinationFinalize(dest)
+    return data as Data
+}()
 
 /// A config that uses every kind of group, a dependent type, a hidden step, flags, a conditional install and priorities.
 /// Source paths are written in different case and with backslashes on purpose.
@@ -513,7 +537,7 @@ func registerFomodTests() {
         }
     }
 
-    test("wizard: renders every step offscreen and reports choices") {
+    test("wizard: renders offscreen in glass, without transparency, with a custom theme, on step 2 with the pad cursor") {
         let installer = try installerFrom(Data(overhaulConfig.utf8))
         try await withTempDir { dir in
             let archive = dir.appendingPathComponent("Test Overhaul.zip")
@@ -521,17 +545,13 @@ func registerFomodTests() {
             let importer = ModImporter(library: try ModLibrary(root: dir.appendingPathComponent("Mods")))
             let withImages = try await importer.inspect(archive).fomod ?? installer
             let artifacts = ProcessInfo.processInfo.environment["MODMANAGER_TEST_ARTIFACTS"].map { URL(fileURLWithPath: $0) }
+
             try await MainActor.run {
-                for (name, size) in [("wide", CGSize(width: 960, height: 640)), ("narrow", CGSize(width: 480, height: 760))] {
-                    let view = FomodWizardView(installer: withImages, onFinish: { _ in }, onCancel: {})
-                        .frame(width: size.width, height: size.height)
-                        .environment(\.colorScheme, .dark)
-                        .environment(\.fomodFlatLayout, true)
-                    let renderer = ImageRenderer(content: view)
+                @MainActor func render<V: View>(_ name: String, _ size: CGSize, _ view: V) throws -> CGImage {
+                    let renderer = ImageRenderer(content: view.frame(width: size.width, height: size.height).environment(\.fomodFlatLayout, true))
                     renderer.scale = 1
                     guard let image = renderer.cgImage else { throw TestFailure(message: "wizard did not render (\(name))") }
-                    try expectEqual(image.width, Int(size.width))
-                    // not a blank page: the render has many distinct pixels
+                    try expectEqual(image.width, Int(size.width), name)
                     guard let data = image.dataProvider?.data, let bytes = CFDataGetBytePtr(data) else { throw TestFailure(message: "no pixels") }
                     var colors = Set<UInt32>()
                     var i = 0
@@ -548,7 +568,54 @@ func registerFomodTests() {
                             CGImageDestinationFinalize(dest)
                         }
                     }
+                    return image
                 }
+                func fingerprint(_ image: CGImage) -> Int {
+                    var hasher = Hasher()
+                    if let data = image.dataProvider?.data { hasher.combine(Data(bytes: CFDataGetBytePtr(data), count: min(CFDataGetLength(data), 400_000))) }
+                    return hasher.finalize()
+                }
+
+                let wide = CGSize(width: 960, height: 640)
+                let narrow = CGSize(width: 480, height: 760)
+                // Offscreen renders cannot draw Liquid Glass (it is composited by the system), so the pictures show the material
+                // fallback that iOS 17 to 25 get; the glass path is forced off for them.
+                let first = try render("wide", wide, FomodWizardView(installer: withImages, onFinish: { _ in }, onCancel: {})
+                    .environment(\.fomodGlassDisabled, true))
+                _ = try render("narrow", narrow, FomodWizardView(installer: withImages, onFinish: { _ in }, onCancel: {})
+                    .environment(\.fomodGlassDisabled, true))
+
+                // second page, driven the way a pad drives it: Next, then down to the locked option
+                let session = FomodSession(installer: withImages)
+                session.send(.next)
+                session.cursor = .option(ref(1, 0, 2))      // "Locked on": required
+                let padPage = try render("step2-pad-cursor", wide, FomodWizardView(session: session, onFinish: { _ in }, onCancel: {})
+                    .environment(\.fomodGlassDisabled, true))
+                try expect(fingerprint(padPage) != fingerprint(first), "another page renders differently")
+
+                // the footer button under the cursor
+                let footerSession = FomodSession(installer: withImages)
+                footerSession.cursor = .primary
+                _ = try render("footer-cursor", wide, FomodWizardView(session: footerSession, onFinish: { _ in }, onCancel: {})
+                    .environment(\.fomodGlassDisabled, true))
+
+                // Reduce Transparency: solid panels
+                let solid = try render("reduced-transparency", wide, FomodWizardView(installer: withImages, onFinish: { _ in }, onCancel: {})
+                    .environment(\.fomodReduceTransparencyOverride, true))
+                try expect(fingerprint(solid) != fingerprint(first), "Reduce Transparency changes the surfaces")
+
+                // Reduce Motion: the same page (its motion paths are fades; the resting picture must still be complete)
+                _ = try render("reduced-motion", wide, FomodWizardView(installer: withImages, onFinish: { _ in }, onCancel: {})
+                    .environment(\.fomodReduceMotionOverride, true)
+                    .environment(\.fomodGlassDisabled, true))
+
+                // an injected theme: other colours, no backdrop of its own (the launcher's shows through)
+                var blue = FomodTheme.anomaly
+                blue.accent = Color(red: 0.25, green: 0.55, blue: 1.0)
+                blue.backdrop = AnyView(Color(red: 0.05, green: 0.08, blue: 0.16).ignoresSafeArea())
+                let themed = try render("custom-theme", wide, FomodWizardView(installer: withImages, onFinish: { _ in }, onCancel: {}).fomodTheme(blue)
+                    .environment(\.fomodGlassDisabled, true))
+                try expect(fingerprint(themed) != fingerprint(first), "the theme changes the render")
             }
         }
     }

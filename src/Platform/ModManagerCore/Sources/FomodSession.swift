@@ -2,14 +2,14 @@ import Combine
 import Foundation
 
 /// Position of a plugin inside the installer: indices into `steps`, `groups`, `plugins`.
-public struct FomodPluginRef: Hashable {
+public struct FomodPluginRef: Hashable, Sendable {
     public let step: Int
     public let group: Int
     public let plugin: Int
     var groupRef: FomodGroupRef { FomodGroupRef(step: step, group: group) }
 }
 
-public struct FomodGroupRef: Hashable {
+public struct FomodGroupRef: Hashable, Sendable {
     public let step: Int
     public let group: Int
 }
@@ -42,6 +42,8 @@ public final class FomodSession: ObservableObject {
     /// Index into `installer.steps` of the step on screen; nil when no step is visible (nothing to ask).
     @Published public private(set) var currentStep: Int?
     @Published public private(set) var selected: Set<FomodPluginRef> = []
+    /// True while moving on, false after Back: the direction the page slides in from.
+    @Published public private(set) var forward = true
     /// The highlighted element; moved by `send`, and set by a tap or a click.
     @Published public var cursor: FomodCursor?
     /// What Install and Cancel do; the wizard view sets them.
@@ -96,6 +98,7 @@ public final class FomodSession: ObservableObject {
 
     private func advance(from current: Int, to n: Int) {
         history.append(current)
+        forward = true
         currentStep = n
         enter(n)
         cursor = firstCursor()
@@ -103,6 +106,7 @@ public final class FomodSession: ObservableObject {
 
     public func back() {
         guard let previous = history.popLast() else { return }
+        forward = false
         currentStep = previous
         cursor = firstCursor()
     }
