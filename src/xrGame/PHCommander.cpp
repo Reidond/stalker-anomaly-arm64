@@ -12,6 +12,7 @@ CPHCall::CPHCall(CPHCondition* condition, CPHAction* action)
 {
 	m_action = action;
 	m_condition = condition;
+	m_dead = false;
 }
 
 CPHCall::~CPHCall()
@@ -22,21 +23,23 @@ CPHCall::~CPHCall()
 
 bool CPHCall::obsolete()
 {
-	return !m_action || m_action->obsolete() || !m_condition || m_condition->obsolete();
+	return m_dead || !m_action || m_action->obsolete() || !m_condition || m_condition->obsolete();
 }
 
 void CPHCall::check()
 {
-	if (m_condition && m_condition->is_true() && m_action) m_action->run();
+	if (!m_dead && m_condition && m_condition->is_true() && !m_dead && m_action) m_action->run();
 }
 
 bool CPHCall::equal(CPHReqComparerV* cmp_condition, CPHReqComparerV* cmp_action)
 {
+	if (m_dead) return false;
 	return m_action->compare(cmp_action) && m_condition->compare(cmp_condition);
 }
 
 bool CPHCall::is_any(CPHReqComparerV* v)
 {
+	if (m_dead) return false;
 	return m_action->compare(v) || m_condition->compare(v);
 }
 
@@ -76,6 +79,12 @@ void CPHCommander::clear()
 
 void CPHCommander::update()
 {
+	struct SUpdating
+	{
+		u32& depth;
+		explicit SUpdating(u32& d) : depth(d) { ++depth; }
+		~SUpdating() { --depth; }
+	} updating(m_updating);
 	for (u32 i = 0; i < m_calls.size(); i++)
 	{
 		try
@@ -200,6 +209,14 @@ bool CPHCommander::has_call(CPHReqComparerV* cmp_condition, CPHReqComparerV* cmp
 
 void CPHCommander::remove_call(CPHReqComparerV* cmp_condition, CPHReqComparerV* cmp_action, PHCALL_STORAGE& cs)
 {
+	if (m_updating && &cs == &m_calls)
+	{
+		// from inside a call that update() is running (a script's own fastcall replacing itself): the running call and its
+		// condition are still executing, so they are marked and update() deletes them after they return
+		for (CPHCall* call : cs)
+			if (call->equal(cmp_condition, cmp_action)) call->mark_dead();
+		return;
+	}
 	cs.erase(
 		std::remove_if(
 			cs.begin(),
@@ -258,6 +275,13 @@ struct SRemoveRped
 
 void CPHCommander::remove_calls(CPHReqComparerV* cmp_object, PHCALL_STORAGE& cs)
 {
+	if (m_updating && &cs == &m_calls)
+	{
+		// see remove_call: the call that is running right now may be the one a script removes
+		for (CPHCall* call : cs)
+			if (call->is_any(cmp_object)) call->mark_dead();
+		return;
+	}
 	cs.erase(
 		std::remove_if(
 			cs.begin(),

@@ -59,9 +59,11 @@ class CPHCall
 {
 	CPHAction* m_action;
 	CPHCondition* m_condition;
+	bool m_dead; // removed while update() was running (a script removed it from inside its own condition or action): update() deletes it
 public:
 	CPHCall(CPHCondition* condition, CPHAction* action);
 	~CPHCall();
+	void mark_dead() { m_dead = true; }
 	void check();
 	bool obsolete();
 	bool equal(CPHReqComparerV* cmp_condition, CPHReqComparerV* cmp_action);
@@ -78,6 +80,7 @@ class CPHCommander :
 	public IPHWorldUpdateCallbck
 {
 	xrCriticalSection lock;
+	u32 m_updating = 0; // depth of update(): a call that is running cannot be deleted by the script it runs
 	PHCALL_STORAGE m_calls;
 	PHCALL_STORAGE m_calls_as_add_buffer;
 	PHCALL_STORAGE m_calls_as_remove_buffer;
