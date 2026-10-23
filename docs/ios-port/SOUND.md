@@ -48,8 +48,8 @@ OpenAL Soft's CoreAudio backend opens a RemoteIO unit and never touches the audi
   not be reactivated in the background: `setActive:YES`, then `alcDeviceResumeSOFT`.
 - **Media services reset:** the session is configured again and the device is reopened through the default-device path.
 
-The interruption path is written to Apple's documented sequence and is **not tested on a device** (it needs a real call, a
-Siri invocation or an alarm during play).
+The interruption path is written to Apple's documented sequence. The script command `audiointerrupt began|ended` posts the same notification a call, Siri or an alarm
+would (the OS does not take the session away), which runs this code on the device without one; a real interruption is on the hands-on list in IPAD.md.
 
 ## OpenAL Soft settings, HRTF and EFX
 
@@ -58,6 +58,13 @@ Anomaly ships its OpenAL Soft settings in `bin\alsoft.ini` (`stereo-mode = headp
 to the working directory, which is the game root on Windows. `xr_sound_apple::prepare()` writes a copy of the ini to
 `$app_data_root$\alsoft.ini` with `hrtf-paths` set to `$fs_root$` and sets `ALSOFT_CONF` to it (an `ALSOFT_CONF` already in
 the environment wins). The sample run below shows HRTF enabled with Anomaly's two data sets.
+
+The iPad has no `bin\` (`tools/ios/push_gamedata.sh` leaves the Windows binaries behind), so there was no ini and OpenAL Soft ran on its defaults. The engine asks for
+`snd_targets 1024` sources and the default allows 256: every start logged `! SOUND: OpenAL: Max targets - 256` and `! sound: OpenAL: Can't create source. Error: Out of
+Memory.` and the engine lowered the figure itself. Reproduced on the Mac with `ALSOFT_CONF` pointing at nothing. Without a `bin\alsoft.ini`, `prepare()` now writes
+`$app_data_root$\alsoft.ini` with `periods = 4`, `sources = 1024`, `hrtf-mode = full` and `hrtf-paths` at the game root, and logs `SOUND: no alsoft.ini in the game
+data, OpenAL Soft settings written to ...` (checked on the Mac with a data root without `bin\`: no error, `snd_targets 1024`). `stereo-mode = headphones` is left out on
+purpose: forced, it would run the HRTF on the iPad's own speaker, and `auto` leaves it to the output.
 
 EFX is untouched: `ALC_EXT_EFX` 1.0 with two auxiliary sends, one EAX-reverb effect in one auxiliary slot, created by
 `CSoundRender_CoreA::LoadEffect` exactly as on Windows.

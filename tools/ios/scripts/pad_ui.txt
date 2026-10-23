@@ -1,0 +1,79 @@
+# The controller in every UI screen, with the virtual pad and screenshots (appdata/screenshots/ui_*.png): main menu, load list with the save preview, options and
+# a combo box, inventory (drag with Cross held, right click with Square), PDA tabs (L2 / R2), the in-game menu and its Yes / No message box, the trader's
+# dialog choices and the trade window. `pad_cursor x y` puts the cursor at a point of the 1024x768 UI space (a jump, with hover), the buttons then do what the
+# pad does in a menu: Cross click, Square right click, Circle back, L2 / R2 tabs. Needs -dbg and a Cordon save, `ipad_test` here; the Load list click expects at
+# least one save in the list (the first row is at UI y 395). Taps are 400 ms so that a slow frame cannot miss them.
+#   iPad: tools/ios/ipad.sh script tools/ios/scripts/pad_ui.txt
+3 console r_screenshot_mode png
+4 console pad_feedback_log 1
+8 padon
+10 console pad_cursor 512 461
+11 pad cross 400
+14 console screenshot ui_load_list
+15 console pad_cursor 368 395
+16 pad cross 400
+19 console screenshot ui_load_preview
+20 pad circle 500
+23 console pad_cursor 512 516
+24 pad cross 400
+27 console screenshot ui_options
+28 console pad_cursor 822 261
+29 pad cross 400
+32 console screenshot ui_options_combo
+33 pad circle 500
+35 pad circle 500
+38 console start server(ipad_test/single/alife/load) client(localhost)
+39 waitlevel 300 l01_escape
+40 key Space
+43 key Space
+45 pad cross 400
+49 pad cross 400
+51 console g_god on
+52 console run_string ipad_debug.tp(54.9, 3.5, 157.1)
+53 console run_string ipad_debug.give("wpn_ak74")
+53.2 console run_string ipad_debug.give_ammo("ammo_5.45x39_fmj", 60)
+56.2 console run_string ipad_debug.equip()
+62.2 pad create 500
+64.2 console screenshot ui_inventory
+65.2 console pad_cursor 595 144
+66.2 paddown cross
+66.6 padaxis lx -1
+67.2 padaxis lx 0
+67.5 padup cross
+69.5 console screenshot ui_inventory_dragged
+70.5 console pad_cursor 560 190
+71.5 pad square 400
+73.5 console screenshot ui_inventory_context
+74.5 pad circle 500
+75.5 pad circle 500
+78.5 pad touchpad 500
+83.5 console screenshot ui_pda
+84.5 padaxis r2 1
+84.9 padaxis r2 0
+86.9 console screenshot ui_pda_next
+87.9 padaxis r2 1
+88.3 padaxis r2 0
+90.3 console screenshot ui_pda_next2
+91.3 padaxis l2 1
+91.7 padaxis l2 0
+93.7 console screenshot ui_pda_prev
+94.7 pad circle 500
+97.7 pad options 500
+99.7 console screenshot ui_game_menu
+100.7 console pad_cursor 512 576
+101.7 pad cross 400
+103.7 console screenshot ui_message_box
+104.7 pad circle 500
+105.7 pad circle 500
+107.7 console run_string ipad_debug.to_trader()
+119.7 console run_string ipad_debug.talk_trader()
+124.7 console screenshot ui_dialog
+125.7 console pad_cursor 400 552
+126.7 pad cross 400
+132.7 console screenshot ui_trade
+133.7 console pad_cursor 760 230
+134.7 pad square 400
+136.7 console screenshot ui_trade_context
+137.7 pad circle 500
+138.7 pad circle 500
+142.7 quit

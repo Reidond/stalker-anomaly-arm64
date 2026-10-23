@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="windows-1251"?>
+
+<string_table>
+	<string id="st_pad_reconnect">
+		<text>Подключите контроллер, чтобы продолжить</text>
+	</string>
+	<string id="ui_mm_exit_game">
+		<text>Выйти из игры</text>
+	</string>
+</string_table>

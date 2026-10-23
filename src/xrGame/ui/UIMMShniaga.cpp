@@ -1,6 +1,9 @@
 #include "StdAfx.h"
 
 #include "UIMMShniaga.h"
+#ifdef XR_PLATFORM_APPLE
+#include "../string_table.h"
+#endif
 #include "UICursor.h"
 #include "UIStatic.h"
 #include "UIScrollView.h"
@@ -135,7 +138,14 @@ void CUIMMShniaga::CreateList(xr_vector<CUITextWnd*>& lst, CUIXml& xml_doc, LPCS
 		st->SetWndSize(Fvector2().set(m_view->GetDesiredChildWidth(), button_height));
 		st->SetFont(pF);
 		st->SetTextComplexMode(false);
-		st->SetTextST(xml_doc.ReadAttrib("btn", i, "caption"));
+		LPCSTR caption = xml_doc.ReadAttrib("btn", i, "caption");
+#ifdef XR_PLATFORM_APPLE
+		// the quit button says "Exit to Windows": there is no Windows here. The string table keeps the first definition of an id, so the overlay
+		// cannot reword that one; a new id of the overlay (English and Russian) does, and other languages keep the stock text.
+		if (!xr_strcmp(caption, "ui_mm_quit2windows") && xr_strcmp(CStringTable().translate("ui_mm_exit_game").c_str(), "ui_mm_exit_game"))
+			caption = "ui_mm_exit_game";
+#endif
+		st->SetTextST(caption);
 
 		//		float font_height			= st->GetFont()->GetHeight();
 		//		UI().ClientToScreenScaledHeight(font_height);
@@ -346,7 +356,29 @@ bool CUIMMShniaga::OnMouseAction(float x, float y, EUIMessages mouse_action)
 	Fvector2 pos = UI().GetUICursor().GetCursorPosition();
 	Frect r;
 	m_magnifier->GetAbsoluteRect(r);
-	if (WINDOW_LBUTTON_DOWN == mouse_action && r.in(pos.x, pos.y))
+	bool on_target = r.in(pos.x, pos.y);
+#ifdef XR_PLATFORM_APPLE
+	// The lens follows the hovered button with a slide of 100 to 300 ms, and the hover that selects a button is only seen a frame after the
+	// pointer moved. A tap (the finger lands and lifts), or a controller click right after the cursor jumped, arrives before either and was
+	// dropped: the button under the cursor is selected here and takes the click.
+	if (!on_target && WINDOW_LBUTTON_DOWN == mouse_action)
+	{
+		xr_vector<CUITextWnd*>& page = epi_main == m_page ? m_buttons : epi_new_game == m_page ? m_buttons_new : m_buttons_new_network;
+		for (CUITextWnd* button : page)
+		{
+			Frect button_rect;
+			button->GetAbsoluteRect(button_rect);
+			if (button_rect.in(pos.x, pos.y))
+			{
+				if (button != m_selected)
+					SelectBtn(button);
+				on_target = true;
+				break;
+			}
+		}
+	}
+#endif
+	if (WINDOW_LBUTTON_DOWN == mouse_action && on_target)
 	{
 		OnBtnClick();
 	}

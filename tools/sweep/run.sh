@@ -7,8 +7,9 @@
 #   plans   newgame      new game from the menu, wait in the Cordon, save sweep_base (the start of every other plan)
 #           smoke        ~5 min: combat, inventory, mid-combat save, death + reload, PDA, trade, Cordon -> Garbage, save
 #                        (starts a new game from the menu unless sweep_base exists: then it loads that)
-#           combat inventory pda trade surge anomalies sleep transition saveload
-#                        one scenario each, from the save sweep_base
+#           combat inventory pda trade surge anomalies sleep transition saveload reprocess
+#                        one scenario each, from the save sweep_base (trade: the actor menu's trade, loot and upgrade modes,
+#                        with assertions: a driver FAIL line is a failed check; reprocess: alife():register on unregistered items)
 #           die_reload   die in the Cordon, then load a save from the dead state (what "Load" on the game-over screen does)
 #           quit_inventory quit_pda quit_dialog quit_combat quit_dead quit_surge
 #                        reach the state on sweep_base and quit from it; quit_menu (script quit in the main menu) and
@@ -212,6 +213,9 @@ sum="$out/summary.txt"
     echo
     echo "driver:"
     grep -a "\[sweep\]" "$out/engine.log" 2>/dev/null | sed 's/^.*\[sweep\] /  /' | tail -80
+    echo
+    echo "driver FAILs: $(grep -a '\[sweep\].* FAIL ' "$out/engine.log" 2>/dev/null | wc -l | tr -d ' ')"
+    grep -a '\[sweep\].* FAIL ' "$out/engine.log" 2>/dev/null | sed 's/^.*\[sweep\] /  /' | head -20
     echo
     python3 -I "$here/triage.py" "$out/stderr.txt" --ubsan-top 40
     echo

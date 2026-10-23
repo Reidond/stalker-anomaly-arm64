@@ -46,6 +46,7 @@ function equip()
 	slot("device_pda_1", 8)    -- a start made by script leaves the PDA and the outfit in the backpack
 	slot("novice_outfit", 7)
 	slot("helm_resp", 12)
+	slot("device_torch", 10)
 	for n = 1, 3 do
 		local o = a:item_in_slot(n)
 		printf("%s", "SLOT " .. n .. " holds " .. (o and o:section() or "nothing"))
@@ -54,7 +55,7 @@ function equip()
 	printf("%s", "SLOT activate_slot " .. tostring(ok) .. " " .. tostring(err))
 end
 
--- One line of state for the log: position, the item in hand and its magazine, which dialogs are open.
+-- Two lines of state for the log: position, the item in hand and its magazine (STATE), the view and what the pad actions change (VIEW).
 function state(tag)
 	local a = db.actor
 	local p = a:position()
@@ -63,6 +64,19 @@ function state(tag)
 	local s = string.format("STATE %s pos %.1f %.1f %.1f item %s ammo %s slot %s", tag or "", p.x, p.y, p.z,
 		item and item:section() or "none", item and tostring(item:get_ammo_in_magazine()) or "-", tostring(slot))
 	printf("%s", s)
+	-- what the pad actions change besides that: the view, the eye height (crouch, jump), the field of view (aiming), the torch,
+	-- night vision, health; the dialog that has the input
+	local ok, extra = pcall(function()
+		local d = device()
+		local dir = d.cam_dir
+		local cp = d.cam_pos
+		local top = d.cam_top
+		local dialogs = "paused" .. (device():is_paused() and "1" or "0") -- which dialog is up: the `pad ui: dialog up / closed` lines of pad_feedback_log
+		return string.format("VIEW %s yaw %.1f pitch %.1f eye %.2f fov %.1f roll %.3f torch %s nv %s health %.2f %s",
+			tag or "", math.deg(math.atan2(dir.x, dir.z)), math.deg(math.asin(math.max(-1, math.min(1, dir.y)))), cp.y - p.y,
+			d.fov, top.x, tostring(a:torch_enabled()), tostring(a:night_vision_enabled()), a.health, dialogs)
+	end)
+	printf("%s", ok and extra or ("VIEW error " .. tostring(extra)))
 end
 
 -- Logs what the actor carries (INV lines)
@@ -97,4 +111,65 @@ function slots(fix)
 			printf("%s", "SLOTS moved pda " .. tostring(ok) .. " " .. tostring(err))
 		end
 	end
+end
+
+-- Logs how a string table id translates (`run_string ipad_debug.tr("ui_mm_quit")`): an unknown id comes back as itself.
+function tr(id)
+	printf("%s", "TR " .. id .. " = " .. game.translate_string(id))
+end
+
+-- Sets the actor's health (0..1), to see a medkit work.
+function hurt(h)
+	db.actor.health = h
+end
+
+-- Moves the actor next to the Cordon trader (TRADER lines), so a script can open the talk and trade windows.
+function to_trader()
+	local id = get_story_object_id("esc_m_trader")
+	local se = id and alife():object(id)
+	if not se then
+		printf("%s", "TRADER not found")
+		return
+	end
+	local p = se.position
+	printf("%s", string.format("TRADER %s at %.1f %.1f %.1f", se:name(), p.x, p.y, p.z))
+	db.actor:set_actor_position(vector():set(p.x, p.y, p.z + 1.5))
+end
+
+-- Starts the conversation with the trader once he is online (the dialog window opens).
+function talk_trader()
+	local npc = get_story_object("esc_m_trader")
+	printf("%s", "TALK " .. (npc and npc:name() or "trader offline"))
+	if npc then
+		db.actor:run_talk_dialog(npc, false)
+	end
+end
+
+-- Hits the actor (power 0..1 of the health bar, wound by default): `run_string ipad_debug.hit(0.4)`; with god mode off the health drops.
+function hit_actor(power)
+	local h = hit()
+	h.power = power
+	h.impulse = 0
+	h.direction = vector():set(0, 0, 1)
+	h.draftsman = db.actor
+	h.type = hit.wound
+	db.actor:hit(h)
+end
+
+-- Puts an item on the ground a step in front of the actor (to pick up with the Use button): `run_string ipad_debug.drop_ahead("bandage")`.
+function drop_ahead(section)
+	local a = db.actor
+	local d = device().cam_dir
+	local p = a:position()
+	local at = vector():set(p.x + d.x * 1.2, p.y, p.z + d.z * 1.2)
+	alife():create(section, at, a:level_vertex_id(), a:game_vertex_id())
+end
+
+-- How many items of a section the actor carries (COUNT line).
+function count(section)
+	local n = 0
+	db.actor:iterate_inventory(function(owner, item)
+		if item:section() == section then n = n + 1 end
+	end, db.actor)
+	printf("%s", "COUNT " .. section .. " " .. n)
 end

@@ -1,0 +1,9 @@
+# After the app was killed in the background (lifecycle_check.sh): loads `ipad_autosave`, the save the app made on the way out, and `ipad_test`, and
+# logs the state, to see that the saves are intact.
+3 console start server(ipad_autosave/single/alife/load) client(localhost)
+5 waitlevel 300 l01_escape
+7 key Space
+10 key Space
+14 console run_string ipad_debug.state("autosave loaded")
+16 console run_string ipad_debug.list_inventory()
+20 quit

@@ -3,6 +3,8 @@
 #import <Foundation/Foundation.h>
 #if TARGET_OS_OSX
 #import <AppKit/AppKit.h>
+#else
+#import <AVFoundation/AVFoundation.h>
 #endif
 
 #include "Unattended.h"
@@ -26,6 +28,21 @@ void SetBackgroundActivationPolicy()
 #if TARGET_OS_OSX
     [NSApplication sharedApplication];
     [NSApp setActivationPolicy:NSApplicationActivationPolicyAccessory];
+#endif
+}
+
+void PostAudioInterruption(bool began)
+{
+#if !TARGET_OS_OSX
+    NSDictionary* info = @{
+        AVAudioSessionInterruptionTypeKey : @(began ? AVAudioSessionInterruptionTypeBegan : AVAudioSessionInterruptionTypeEnded),
+        AVAudioSessionInterruptionOptionKey : @(began ? 0 : AVAudioSessionInterruptionOptionShouldResume),
+    };
+    [[NSNotificationCenter defaultCenter] postNotificationName:AVAudioSessionInterruptionNotification
+                                                        object:[AVAudioSession sharedInstance]
+                                                      userInfo:info];
+#else
+    (void)began;
 #endif
 }
 } // namespace anomaly_app

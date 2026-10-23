@@ -1,0 +1,165 @@
+# Every default DualSense binding of CONTROLS.md, one at a time with the virtual pad (`padon`, `pad`, `paddown`/`padup`, `padaxis`), with a STATE and a VIEW
+# line before and after each (engine log: `grep -a "STATE\|VIEW\|pad key" engine.log`; `pad key N -> action X` says which game action the key reached).
+# Needs -dbg and a save in the Cordon; it is `ipad_test` here (on the Mac copy a Cordon save under that name, or edit the `start` line).
+#   iPad: tools/ios/ipad.sh script tools/ios/scripts/pad_bindings.txt         Mac: build/.../anomaly --script tools/ios/scripts/pad_bindings.txt
+# Reading it: pos (move, strafe, walk against run against sprint), VIEW yaw / pitch (look), eye (crouch), pos y (jump), roll (lean), fov (aim), ammo (fire,
+# reload), slot / item (weapon switch, wheels), health (quick use), torch / nv, paused (the game held); `pad ui: dialog up / closed` marks the dialogs. Taps are 400 ms so that a slow frame cannot
+# miss them, except L1 and R1, which must stay under the 0.22 s wheel threshold. Where the start of a new game plays a sequence, the first pad key ends it.
+3 console r_screenshot_mode png
+4 console pad_feedback_log 1
+6 console start server(ipad_test/single/alife/load) client(localhost)
+7 padon
+8 waitlevel 300 l01_escape
+9 key Space
+12 key Space
+14 pad cross 400
+18 pad cross 400
+20 console g_god on
+21 console run_string ipad_debug.tp(54.9, 3.5, 157.1)
+22 console run_string ipad_debug.give("wpn_ak74")
+22.2 console run_string ipad_debug.give_ammo("ammo_5.45x39_fmj", 120)
+22.4 console run_string ipad_debug.give("medkit", 3)
+22.6 console run_string ipad_debug.give("wpn_pm")
+22.8 console run_string ipad_debug.give("ammo_9x18_fmj", 40)
+23 console run_string ipad_debug.give("device_torch")
+26 console run_string ipad_debug.equip()
+27 console slot_0 medkit
+27.1 console slot_1 bandage
+27.2 console slot_2 bread
+27.3 console slot_3 flask
+29.3 console run_string ipad_debug.state("setup")
+31.3 console run_string ipad_debug.state("move forward 2 s before")
+31.4 padaxis ly -1
+33.4 console run_string ipad_debug.state("move forward 2 s")
+33.5 padaxis ly 0
+35.5 console run_string ipad_debug.state("move back 1.5 s before")
+35.6 padaxis ly 1
+37.1 console run_string ipad_debug.state("move back 1.5 s")
+37.2 padaxis ly 0
+39.2 console run_string ipad_debug.state("strafe right 1.5 s before")
+39.3 padaxis lx 1
+40.8 console run_string ipad_debug.state("strafe right 1.5 s")
+40.9 padaxis lx 0
+42.9 console run_string ipad_debug.state("strafe left 1.5 s before")
+43 padaxis lx -1
+44.5 console run_string ipad_debug.state("strafe left 1.5 s")
+44.6 padaxis lx 0
+46.6 console run_string ipad_debug.state("walk 2 s (gentle push) before")
+46.7 padaxis ly -0.6
+48.7 console run_string ipad_debug.state("walk 2 s (gentle push)")
+48.8 padaxis ly 0
+50.8 console run_string ipad_debug.state("sprint before")
+50.9 padaxis ly -1
+51.4 pad l3 400
+53.4 console run_string ipad_debug.state("sprint 2.5 s (L3 tap)")
+53.5 pad l3 400
+53.6 padaxis ly 0
+55.6 console run_string ipad_debug.state("look right 1 s before")
+55.7 padaxis rx 1
+56.7 console run_string ipad_debug.state("look right 1 s")
+56.8 padaxis rx 0
+58.8 console run_string ipad_debug.state("look left 1 s before")
+58.9 padaxis rx -1
+59.9 console run_string ipad_debug.state("look left 1 s")
+60 padaxis rx 0
+62 console run_string ipad_debug.state("look down 0.6 s before")
+62.1 padaxis ry 1
+62.7 console run_string ipad_debug.state("look down 0.6 s")
+62.8 padaxis ry 0
+64.8 console run_string ipad_debug.state("look up 0.6 s before")
+64.9 padaxis ry -1
+65.5 console run_string ipad_debug.state("look up 0.6 s")
+65.6 padaxis ry 0
+66.6 padaxis ry -1
+67.1 padaxis ry 0
+69.1 console run_string ipad_debug.state("level view")
+71.1 paddown circle
+72.1 console run_string ipad_debug.state("crouch (Circle held)")
+72.2 padup circle
+74.2 console run_string ipad_debug.state("stand again")
+75.2 pad cross 150
+75.45 console run_string ipad_debug.state("jump 0.25 s in")
+77.45 console run_string ipad_debug.state("landed")
+79.45 paddown left
+80.45 console run_string ipad_debug.state("lean left (D-pad left held)")
+80.55 padup left
+82.55 paddown right
+83.55 console run_string ipad_debug.state("lean right (D-pad right held)")
+83.65 padup right
+85.65 console run_string ipad_debug.state("torch before")
+86.65 pad up 400
+88.65 console run_string ipad_debug.state("torch after D-pad up")
+89.65 pad up 400
+91.65 console run_string ipad_debug.state("night vision before")
+92.65 pad down 400
+94.65 console run_string ipad_debug.state("night vision after D-pad down")
+95.65 pad down 400
+97.65 padaxis l2 1
+99.15 console run_string ipad_debug.state("aim (L2 held)")
+99.25 padaxis l2 0
+101.25 padaxis r2 1
+101.55 padaxis r2 0
+103.55 console run_string ipad_debug.state("one R2 pull (fire)")
+104.55 padaxis r2 1
+105.55 padaxis r2 0
+107.55 console run_string ipad_debug.state("one second of R2")
+108.55 pad square 400
+115.55 console run_string ipad_debug.state("after reload (Square)")
+116.55 pad l1 150
+118.55 console run_string ipad_debug.state("L1 tap (previous weapon)")
+119.55 pad r1 150
+121.55 console run_string ipad_debug.state("R1 tap (next weapon)")
+122.55 console run_string ipad_debug.hurt(0.4)
+123.05 console run_string ipad_debug.count("medkit")
+124.55 console run_string ipad_debug.state("hurt")
+125.55 paddown l1
+126.15 padaxis ry -1
+126.45 console screenshot wheel_items
+126.85 padup l1
+126.95 padaxis ry 0
+132.95 console run_string ipad_debug.state("items wheel, up, release: quick 1 (medkit)")
+133.15 console run_string ipad_debug.count("medkit")
+133.95 paddown r1
+134.55 padaxis rx 1
+134.85 console screenshot wheel_combat
+135.25 padup r1
+135.35 padaxis rx 0
+138.35 console run_string ipad_debug.state("combat wheel, right, release: slot 3")
+139.35 paddown l1
+139.95 padaxis rx -1
+140.45 padup l1
+140.55 padaxis rx 0
+143.55 console run_string ipad_debug.state("items wheel, left, release: quick save")
+144.55 console run_string ipad_debug.drop_ahead("bandage")
+146.55 padaxis ry 1
+146.8 padaxis ry 0
+147.8 console run_string ipad_debug.count("bandage")
+148.8 pad triangle 400
+150.8 console run_string ipad_debug.count("bandage")
+151.8 padaxis ry -1
+152.05 padaxis ry 0
+153.05 pad create 500
+155.05 console run_string ipad_debug.state("Create: inventory")
+155.05 console screenshot inventory
+156.05 pad circle 500
+158.05 console run_string ipad_debug.state("Circle: closed")
+159.05 pad touchpad 500
+163.05 console run_string ipad_debug.state("touchpad: PDA")
+163.05 console screenshot pda_a
+164.05 padaxis r2 1
+164.45 padaxis r2 0
+166.45 console screenshot pda_b
+167.45 padaxis r2 1
+167.85 padaxis r2 0
+169.85 console screenshot pda_c
+170.85 padaxis l2 1
+171.25 padaxis l2 0
+173.25 console screenshot pda_d
+174.25 pad circle 500
+176.25 console run_string ipad_debug.state("PDA closed")
+177.25 pad options 500
+179.25 console run_string ipad_debug.state("Options: menu")
+179.25 console screenshot pause_menu
+180.25 pad circle 500
+182.25 console run_string ipad_debug.state("Circle: back in the game")
+185.25 quit

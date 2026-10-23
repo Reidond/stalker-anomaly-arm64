@@ -36,6 +36,7 @@
 #endif
 
 #include <algorithm>
+#include <typeinfo>
 #include <cmath>
 
 #include "GameInput/Adapter.h"
@@ -274,7 +275,12 @@ struct XrInputSdl : public gameinput::IEngineInputSink
     // ---- IEngineInputSink: controller layer -> receiver stack ----
     void KeyPress(gameinput::KeyCode key) override
     {
-        if (IInputReceiver* r = input.CurrentIR())
+        IInputReceiver* r = input.CurrentIR();
+        if (pad_source.FeedbackLog())
+            SDL_Log("GameInput: key down %u (%s) -> receiver %p %s", unsigned(key),
+                gameinput::IsPadKey(key) ? std::string(gameinput::PadKeyName(key)).c_str() : "engine key", static_cast<void*>(r),
+                r ? typeid(*r).name() : "(none)");
+        if (r)
             r->IR_OnKeyboardPress(key);
     }
     void KeyRelease(gameinput::KeyCode key) override
@@ -448,6 +454,24 @@ void CInput::SetLookRadiansPerCount(float radians) { sdl->look_radians_per_count
 gameinput::GameInput* CInput::Pad() { return sdl && sdl->pad_ready ? &sdl->pad : nullptr; }
 gameinput::SdlPadSource* CInput::PadSource() { return sdl && sdl->pad_ready ? &sdl->pad_source : nullptr; }
 
+void CInput::SetPadFeedbackLog(bool on)
+{
+    if (sdl && sdl->pad_ready)
+        sdl->pad_source.SetFeedbackLog(on);
+}
+
+bool CInput::PadFeedbackLog() { return sdl && sdl->pad_ready && sdl->pad_source.FeedbackLog(); }
+
+void CInput::LogPadInfo()
+{
+    if (!sdl || !sdl->pad_ready)
+        return;
+    const std::vector<std::string> lines = sdl->pad_source.DescribeCapabilities();
+    Msg("* controllers: %d connected", int(sdl->pad.devices().Devices().size()));
+    for (const std::string& line : lines)
+        Msg("*   %s", line.c_str());
+}
+
 // ---- keyboard ---------------------------------------------------------------------------------------------
 
 void CInput::KeyUpdate()
@@ -516,7 +540,11 @@ void CInput::KeyUpdate()
             if (edge.dik < 0)
                 ir->IR_OnTextInput(edge.text);
             else if (edge.down)
+            {
+                if (pad_hooks.other_input)
+                    pad_hooks.other_input();
                 ir->IR_OnKeyboardPress(edge.dik);
+            }
             else
                 ir->IR_OnKeyboardRelease(edge.dik);
         }
@@ -682,10 +710,17 @@ void CInput::MouseUpdate()
             float dy = e.motion.yrel;
             if (touch)
             {
-                // A touch is an absolute position. In a dialog the cursor goes to the finger; in the world a tap
-                // must not turn the view.
-                dx = sdl->ui_context ? e.motion.x - sdl->px : 0.f;
-                dy = sdl->ui_context ? e.motion.y - sdl->py : 0.f;
+                // A touch is an absolute position. In a dialog the cursor goes to the finger (a jump: the UI cursor and the last pointer
+                // are two different places on a screen that has no mouse, so deltas would land the cursor away from the finger); in the
+                // world a tap must not turn the view.
+                dx = dy = 0.f;
+                if (sdl->ui_context && pad_hooks.cursor_jump && ww > 0.f && wh > 0.f)
+                    pad_hooks.cursor_jump(e.motion.x / ww * kUiBaseWidth, e.motion.y / wh * kUiBaseHeight);
+                else if (sdl->ui_context)
+                {
+                    dx = e.motion.x - sdl->px;
+                    dy = e.motion.y - sdl->py;
+                }
                 sdl->px = e.motion.x;
                 sdl->py = e.motion.y;
             }
@@ -715,6 +750,8 @@ void CInput::MouseUpdate()
         case SDL_EVENT_MOUSE_BUTTON_DOWN:
         case SDL_EVENT_MOUSE_BUTTON_UP:
         {
+            if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && pad_hooks.other_input)
+                pad_hooks.other_input();
             if (IsTouchLike(e.button.which) && !sdl->ui_context)
                 break; // a tap in the world doesn't fire
             const int idx = MouseIndex(e.button.button);

@@ -38,6 +38,10 @@ public:
     const DeviceIdentity* ActiveDevice() const { return input_.devices().Active(); }
     // Describes native capabilities for logs: SDL view plus GameController view.
     std::vector<std::string> DescribeCapabilities() const;
+    // Logs every change of what the pad reports (buttons, sticks, triggers) and every rumble and light bar change with its parameters
+    // (trigger effects are always logged: they change rarely).
+    void SetFeedbackLog(bool on) { log_feedback_ = on; }
+    bool FeedbackLog() const { return log_feedback_; }
     // Last time-stamped input, for "controller idle" decisions.
     float SecondsSinceInput() const;
 
@@ -66,5 +70,9 @@ private:
     std::vector<Pad> pads_;
     Uint64 last_input_ns_ = 0;
     int active_player_index_ = -1;
+    bool log_feedback_ = false;
+    MotorState last_logged_motors_;
+    Rgb last_logged_led_;
+    int last_logged_input_[8] = {};
 };
 } // namespace gameinput
