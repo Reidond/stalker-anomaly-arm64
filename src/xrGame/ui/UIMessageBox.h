@@ -48,6 +48,10 @@ public:
 	virtual void SendMessage(CUIWindow* pWnd, s16 msg, void* pData);
 
 	void OnYesOk();
+#ifdef XR_PLATFORM_APPLE
+	// Escape (Circle on the pad): "No" of a yes / no box, "Cancel" of one that has it. False for boxes that only say OK.
+	bool OnEscape();
+#endif
 protected:
 	xr_string m_ret_val;
 	CUI3tButton* m_UIButtonYesOk;

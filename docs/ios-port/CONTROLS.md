@@ -423,7 +423,7 @@ The input and media files also pass `-fsyntax-only` inside the real `xrEngine` t
 (`arm64-apple-ios17.0`). Not checked: the soft keyboard, touch, pointer capture and trackpad on the iPad, and the whole `xrEngine` target (engine-core's files).
 
 Tests, run on both platforms: `gameinput_tests` (macOS, also built under ASan and UBSan) and
-`input_lab --selftest` (the same 624 checks on the iPad; the trigger sweep that follows only finds a
+`input_lab --selftest` (the same 631 checks on the iPad; the trigger sweep that follows only finds a
 pad when the app is in front, so launched headless through `devicectl` it reports "no controllers").
 They cover key names, filters, gyro,
 bindings, radial, cursor, feedback, devices, profiles, gameplay and menu input, key capture and the

@@ -33,10 +33,15 @@
 130 console run_string ipad_debug.state("tick 130")
 135 console run_string ipad_debug.state("tick 135")
 140 console run_string ipad_debug.state("tick 140")
+142 log LIFE simulated UIKit memory warning
+142.1 lifecycle lowmemory
 145 console run_string ipad_debug.state("tick 145")
 150 console run_string ipad_debug.state("tick 150")
+150 log LIFE real memory pressure: 3.2 GB of ballast for 10 s
+150.1 ballast 3200
 155 console run_string ipad_debug.state("tick 155")
 160 console run_string ipad_debug.state("tick 160")
+161 unballast
 165 console run_string ipad_debug.state("tick 165")
 170 console run_string ipad_debug.state("tick 170")
 175 console run_string ipad_debug.state("tick 175")
