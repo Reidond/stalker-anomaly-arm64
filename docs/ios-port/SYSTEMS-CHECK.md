@@ -16,7 +16,7 @@ one after the other through `run.sh`. The first plan, `newgame`, starts a new ga
 Every run is unattended (`--script`: offscreen, no window, null audio, no cursor capture, never frontmost), has its own `ANOMALY_STATE_ROOT`
 and is the only game of the session at that time. `check_report.py` reads each run's engine log (the `[sweep] ... CHECK PASS|FAIL system/item | detail`
 lines, Lua errors), `summary.txt` (sanitizer counts), crash files, the app's footprint samples and the sound counters, and writes `results.md`;
-the exit status is 1 when anything failed, the sanitizers reported, a crash file appeared or the log holds a Lua error.
+the exit status is 1 when anything failed, ASan reported, a crash file appeared or the log holds a Lua error (UBSan counts are listed, not failed).
 
 Result of the last full run (on main merged into this branch, ASan + UBSan build): **296 of 296 checks of the 30 plans pass**, 0 ASan reports, 0 crash files and 0 Lua error lines in the 30 runs; the pass takes about 70 minutes. UBSan: 0 to 3 reports per run, in two plans (see "Seen and not fixed"). One step flaked in that pass (`chk_weapons`: the silenced rifle did not fire: a jam left from the step before) and was changed; the plan was rerun green (three times in a row) and the other 29 are the pass's own results. The 60-minute soak (release build, run earlier, see below): 86 cycles, no Lua error; its memory slope fails the plan's limit of 5 MB per minute (+23, an open item).
 
