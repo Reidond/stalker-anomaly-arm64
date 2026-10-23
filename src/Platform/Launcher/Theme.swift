@@ -34,14 +34,18 @@ extension ISO8601DateFormatter {
     }()
 }
 
-/// The prominent button of a screen (Play, Add anyway): Liquid Glass where the system has it, the bordered style before.
+/// The prominent button of a screen (Play, Add anyway): Liquid Glass on iPadOS 26 and later, the bordered style elsewhere (the Mac's own).
 struct ProminentButtonStyle: ViewModifier {
     func body(content: Content) -> some View {
-        if #available(iOS 26.0, macOS 26.0, *) {
+        #if os(iOS)
+        if #available(iOS 26.0, *) {
             content.buttonStyle(.glassProminent)
         } else {
             content.buttonStyle(.borderedProminent)
         }
+        #else
+        content.buttonStyle(.borderedProminent)
+        #endif
     }
 }
 

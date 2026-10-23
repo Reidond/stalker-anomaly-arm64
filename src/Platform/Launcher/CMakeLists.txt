@@ -34,6 +34,11 @@ if(ANOMALY_LAUNCHER_SWIFT_TARGET_OPTION)
     target_compile_options(anomaly_launcher PRIVATE "${ANOMALY_LAUNCHER_SWIFT_TARGET_OPTION}")
 endif()
 target_link_libraries(anomaly_launcher PUBLIC ModManagerCore)
+if(ANOMALY_IOS)
+    # The Xcode generator does not hand a static Swift library's .swiftmodule (in the library's products folder) to the targets that
+    # link it, whose products folders are their own subdirectories
+    target_compile_options(anomaly_launcher PRIVATE "SHELL:-I $<TARGET_FILE_DIR:ModManagerCore>")
+endif()
 if(TARGET ModDownloads)
     target_link_libraries(anomaly_launcher PUBLIC ModDownloads)
 endif()

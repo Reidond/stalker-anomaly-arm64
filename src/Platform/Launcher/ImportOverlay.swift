@@ -125,10 +125,12 @@ private struct ConditionalProminent: ViewModifier {
     func body(content: Content) -> some View {
         if prominent {
             content.prominentButton()
-        } else if #available(iOS 26.0, macOS 26.0, *) {
-            content.buttonStyle(.glass)
         } else {
+            #if os(iOS)
+            if #available(iOS 26.0, *) { content.buttonStyle(.glass) } else { content.buttonStyle(.bordered) }
+            #else
             content.buttonStyle(.bordered)
+            #endif
         }
     }
 }
