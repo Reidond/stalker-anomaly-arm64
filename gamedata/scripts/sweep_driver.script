@@ -593,9 +593,19 @@ local function phcalls()
 			if i % 4 == 0 and i > 4 then level.remove_call(conds[i - 3], acts[i - 3]) end        -- one a few places back
 		end
 	end
+	-- The calls are added from a callback, not from this coroutine: a luabind functor keeps the lua_State it was made on, and this
+	-- coroutine is suspended (in pause()) while the commander runs them.
+	local request = false
+	local function on_update()
+		if request then
+			request = false
+			for i = 1, N do level.add_call(conds[i], acts[i]) end
+		end
+	end
+	RegisterScriptCallback("actor_on_update", on_update)
 	for round = 1, 20 do
 		for i = 1, N do ran[i] = 0 end
-		for i = 1, N do level.add_call(conds[i], acts[i]) end
+		request = true
 		pause(300) -- a few frames: every call is run at least once
 		local bad = {}
 		for i = 1, N do
@@ -605,6 +615,7 @@ local function phcalls()
 		end
 		check("ph calls round " .. round .. ": each action ran once", #bad == 0, table.concat(bad, " "))
 	end
+	UnregisterScriptCallback("actor_on_update", on_update)
 end
 
 local function reprocess()

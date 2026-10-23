@@ -190,7 +190,7 @@ if [ -n "${SWEEP_LLDB:-}" ]; then
             sleep 0.2
         done
         [ -n "$pid" ] && lldb -b -p "$pid" -o 'process handle SIGBUS SIGSEGV SIGABRT SIGILL -n true -p true -s true' \
-            -o 'breakpoint set -n _exit' -o 'breakpoint set -n exit' -o 'breakpoint set -n abort' \
+            -o 'breakpoint set -n _exit -s libsystem_kernel.dylib' -o 'breakpoint set -n exit -s libsystem_c.dylib' -o 'breakpoint set -n abort -s libsystem_c.dylib' \
             -o 'target stop-hook add -o "thread backtrace all"' \
             -o continue -o continue -o continue -o continue -o continue -o continue -o continue -o continue -o continue -o continue \
             -o 'process status' -o 'process kill' > "$out/lldb.txt" 2>&1
