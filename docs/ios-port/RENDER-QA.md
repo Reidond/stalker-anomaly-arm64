@@ -37,6 +37,7 @@ Environment: `HARNESS_COLD_SHADERS=1` (empty shader cache), `HARNESS_ENV="VAR=va
 | `10_resize` | `vid_mode` / `rs_screenmode` changes at run time (device reset) |
 | `11_emission`, `12_emission_night` | the blowout's sky and light by day (red sky, and the white flash) and at night |
 | `13_fire_smoke` | the camp fire's flame and smoke, sample fire / smoke-with-distortion / radial-distortion effects of `particles.xr` |
+| `14_water` | water on other levels: Zaton's bay (clear, rain, wading), Agroprom's swamp, the Dark Valley's pond (jumps between levels, flaky: see the script) |
 | `15_scope` | a Dragunov with its 1P29: the weapon and hands at the hip, then aimed through the scope |
 | `16_nightvision` | night vision on, at night in the Rookie village |
 
@@ -94,10 +95,14 @@ There is no PC reference at hand; the pictures were judged against what Anomaly 
 
 What is not right or not checked:
 
-* **Water.** The Cordon's only water sheet (`effects\water`, 16 m wide at y -9.9) lies under the ground, so nothing shows; the
-  `water_regular` and `waterd` draws are in every outdoor trace and build without errors. The Garbage's and Yantar's lakes could not be
-  framed from a script in the time available (a forest in the way; the lake's AI map is not where the visual is), so no picture of open
-  water was checked. Soft water, the shore blend and `waterd`'s distortion stay unverified by eye.
+* **Water** is checked outside the Cordon (its one sheet lies under the ground; `14_water`, found from the levels' water meshes and AI maps):
+  Zaton's bay (`effects\\water`) in clear weather, in heavy rain and with the player wading in it, in all four configurations; Agroprom's swamp
+  (`effects\\waterryaska`, dark blue under the reeds). The surface draws with moving ripples (`waterd`'s distortion pass runs every frame, two
+  draws into `$user$generic1`), the shore blends into the bank (`r2_soft_water on` in every profile), leaves and plants lying under the surface
+  show through it, and the rain darkens it with the sky. The green wash while wading is the game's radioactive-water script
+  (`gameplay_radioactive_water.script` hits the player with radiation while a footstep is on water), not the renderer. The straight diagonal
+  edge of the sheet on Zaton's left bank is the mesh's own boundary. Not seen: reflections of nearby objects (not looked for: none of the
+  shots has one to compare), the Dark Valley's pond and Yantar's lake (the shots did not frame them), the view from under the surface.
 * **Blood splashes** on the camera and the walls in some Cordon shots (the start of the harness save has a skirmish; the hit effect plays
   although the harness zeroes the damage). Not a renderer fault.
 * A crash in `CPHCommander::update` (`CLevel::OnFrame`) after a teleport, 2 of 80 runs: the known heap-corruption class (stability session).
