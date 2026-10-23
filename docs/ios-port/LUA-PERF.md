@@ -263,3 +263,13 @@ Limits of these numbers: the places are quiet ones (nobody fights; the player is
 | `tools/lua_measure.py` | script generator (`script`), log summaries (`summarize`, `loadrow`) |
 | `tools/render_harness/lua_measure.sh`, `lua_load.sh` | the Mac runs: places per mode, level load and new game per cache state |
 | `tools/ios/lua_measure.sh` | the iPad runs. Engine flags go through `Documents/commandline.txt`; the app is launched without `--console` (a console launch failed with error 10002 after the first one) and polled until it exits; it leaves `user.ltx` at Quality / Auto |
+
+## Checks
+
+- `ctest -R lua_cache_test`: 153 checks (stale source, addon override and its removal, corrupt and foreign entries, error messages, unusable directory, warm and purge, hash, two threads, the read-ahead).
+- Lua behaviour unchanged: `tools/sweep/run.sh smoke` on the ASan+UBSan build, four completed runs of the shipped configuration or its predecessors (cache on, read-ahead off; 263 to 286 s), each
+  `DONE plan smoke` with 0 ASan reports and the UBSan reports of the renderer that [SANITIZERS.md](SANITIZERS.md) lists (null `ShaderElement` and `Fmatrix` references, NaN into `iFloor`), no crash
+  files. One run in eight hit the `reprocess_spawn` use-after-free of SANITIZERS.md open item 1. Three of the nine runs stalled after the level change to Garbage (see above); the sweep does
+  that on other branches too.
+- The scripts that were in the archives and the overlay run from the cache as from the text: a level load with the cache warm loads 473 of 476 files from it, and the sweep plays through.
+- Windows: nothing of this is compiled there; the hooks in shared files are no-ops (`script_perf.h` stubs) or generic (`luabind::set_call_hooks`).
