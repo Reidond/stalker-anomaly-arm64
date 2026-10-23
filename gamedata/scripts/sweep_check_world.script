@@ -860,6 +860,58 @@ local function companions_phase_2()
 	return C.done("chk_companions")
 end
 
+-- fast travel from the PDA map (game_fast_travel) -----------------------------------------------------------------------------------------
+-- The map's context menu calls the "map_spot_menu_property_clicked" callback with the text of the entry that was chosen; this sends it.
+local function fast_travel_phase_1()
+	start_quiet()
+	H.god(true)
+	ui_options.set("gameplay/fast_travel/state", 2)
+	ui_options.set("gameplay/fast_travel/on_combat", true)
+	ui_options.set("gameplay/fast_travel/on_overweight", true)
+	ui_options.set("gameplay/fast_travel/on_damage", true)
+	ui_options.set("gameplay/fast_travel/on_emission", true)
+	game_fast_travel.update_settings()
+	H.pause(2500)
+	local my_level = game_graph():vertex(db.actor:game_vertex_id()):level_id()
+	local near, far = nil, nil
+	for id = 1, 65534 do
+		local se = alife():object(id)
+		if se and se:clsid() == clsid.smart_terrain and level.map_has_object_spot(id, "fast_travel") ~= 0 then
+			local lvl = game_graph():vertex(se.m_game_vertex_id):level_id()
+			if lvl == my_level then
+				if not near or se.position:distance_to(db.actor:position()) > near.position:distance_to(db.actor:position()) then near = se end
+			else
+				far = far or se
+			end
+		end
+	end
+	C.check("fast-travel", "spots", near ~= nil, string.format("fast-travel spots on the map: this level %s, another level %s", tostring(near and near:name()), tostring(far and far:name())))
+	if near then
+		local t0 = game.get_game_time()
+		local d0 = db.actor:position():distance_to(near.position)
+		local prop = game.translate_string("st_pda_fast_travel_to") .. " " .. game.translate_string(near:name())
+		SendScriptCallback("map_spot_menu_property_clicked", nil, near.id, "l01_escape", prop)
+		H.pause(3500)
+		local d1 = db.actor:position():distance_to(near.position)
+		C.check("fast-travel", "same-level", d1 < 30 and d0 > 30, string.format("%s: %.0f m away before, %.0f m after", near:name(), d0, d1))
+		C.check("fast-travel", "clock", game.get_game_time():diffSec(t0) > 60, string.format("%.0f game seconds passed on the trip", game.get_game_time():diffSec(t0)))
+	end
+	if far then
+		local prop = game.translate_string("st_pda_fast_travel_to") .. " " .. game.translate_string(far:name())
+		SendScriptCallback("map_spot_menu_property_clicked", nil, far.id, alife():level_name(game_graph():vertex(far.m_game_vertex_id):level_id()), prop)
+		return { next = true }
+	end
+	return C.done("chk_fasttravel")
+end
+
+local function fast_travel_phase_2()
+	H.wait_for("actor", 420000, H.actor_ready)
+	H.enable_ui()
+	H.pause(9000)
+	C.check("fast-travel", "other-level", not H.level_is("l01_escape"), "arrived on " .. tostring(level.name()) .. " by a map spot of another level")
+	return C.done("chk_fasttravel")
+end
+
 function plans(c, h)
 	C, H = c, h
 	local out = {}
@@ -870,6 +922,7 @@ function plans(c, h)
 	out.chk_emission_open = { function() return run_event("emission", false) end, after_death("chk_emission_open") }
 	out.chk_travel = { travel_phase_1, travel_phase_chain(1), travel_phase_chain(2), travel_phase_chain(3), travel_phase_chain(4), travel_phase_chain(5), travel_phase_chain(6) }
 	out.chk_companions = { companions_phase_1, companions_phase_2 }
+	out.chk_fasttravel = { fast_travel_phase_1, fast_travel_phase_2 }
 	out.chk_anomalies = { anomalies_plan }
 	out.chk_weather = { weather_plan }
 	out.chk_sleep = { sleep_plan }

@@ -264,6 +264,89 @@ local function hud_plan()
 	return C.done("chk_hud")
 end
 
+-- main menu and options ----------------------------------------------------------------------------------------------------------------------
+-- The main menu stops the level, and the driver with it: tools/sweep/run.sh opens and closes it from the --script timeline and calls
+-- menu_verify() through the console's run_string while it is up.
+local menu_off_seen = false
+local menu_on_time = nil
+function menu_verify(state)
+	local ok, err = pcall(function()
+		-- the main menu stops the game behind it: the game clock must not move between "on" and "off" (it moves 6 s per second otherwise)
+		if state == "on" then
+			menu_on_time = game.get_game_time()
+			C.check("menu", "main-menu-on", level.present() and db.actor ~= nil, "main_menu on with a level loaded; see chk_menu_main.png")
+		else
+			menu_off_seen = true
+			local moved = menu_on_time and game.get_game_time():diffSec(menu_on_time) or -1
+			C.check("menu", "main-menu-pauses", moved >= 0 and moved < 20, string.format("the game clock moved %.0f game seconds in the 6 s the menu was up", moved))
+			C.check("menu", "main-menu-off", level.present() and db.actor ~= nil and db.actor:alive(), "back in the game")
+		end
+	end)
+	if not ok then C.check("menu", "main-menu-" .. state, false, "Lua error: " .. tostring(err)) end
+end
+
+local function menu_plan()
+	start_quiet()
+	-- the options window: open from the main state, look at it, close it
+	local opt
+	C.on_main(function()
+		opt = ui_options.UIOptions()
+		opt.owner = nil
+		opt:ShowDialog(true)
+		opt:Reset_last_opt()
+	end)
+	H.pause(3500)
+	C.check("menu", "options-open", opt ~= nil and opt:IsShown(), "the options window is up")
+	C.run("menu", "options-screenshot", function() return C.shot("chk_menu_options"), "screenshot chk_menu_options" end)
+	C.on_main(function() opt:HideDialog() end)
+	H.pause(1500)
+	C.check("menu", "options-close", not opt:IsShown(), "closed")
+
+	-- options keep what they are given: the game's options file and the console variables behind them
+	for _, spec in ipairs({
+		{ id = "gameplay/fast_travel/state", values = { 0, 2 } },
+		{ id = "alife/event/emission_frequency", values = { 3, 6 } },
+		{ id = "other/quicksave_cnt", values = { 5, 10 } },
+	}) do
+		C.run("menu", "option/" .. spec.id, function()
+			local old = ui_options.get(spec.id)
+			ui_options.set(spec.id, spec.values[1])
+			local a = ui_options.get(spec.id)
+			ui_options.set(spec.id, spec.values[2])
+			local b = ui_options.get(spec.id)
+			ui_options.set(spec.id, old)
+			return tonumber(a) == spec.values[1] and tonumber(b) == spec.values[2], string.format("%s: set %s read %s, set %s read %s, restored %s", spec.id, tostring(spec.values[1]), tostring(a), tostring(spec.values[2]), tostring(b), tostring(ui_options.get(spec.id)))
+		end)
+	end
+	C.run("menu", "console-variable", function()
+		local c = get_console()
+		local before = c:get_float("snd_volume_music")
+		c:execute("snd_volume_music 0.31")
+		local after = c:get_float("snd_volume_music")
+		c:execute("snd_volume_music " .. tostring(before))
+		return math.abs(after - 0.31) < 0.01, string.format("snd_volume_music %.2f -> %.2f -> %.2f", before, after, c:get_float("snd_volume_music"))
+	end)
+
+	-- the load and save dialogs list the saves
+	C.run("menu", "load-dialog", function()
+		local dlg
+		C.on_main(function()
+			dlg = ui_load_dialog.UILoadDialog()
+			dlg:ShowDialog(true)
+		end)
+		H.pause(3000)
+		local shown = dlg ~= nil and dlg:IsShown()
+		C.shot("chk_menu_load")
+		C.on_main(function() dlg:HideDialog() end)
+		H.pause(1500)
+		return shown, "the load window listed the saves and was closed: shown " .. tostring(shown)
+	end)
+	-- stay up for the timeline's menu steps (they come at +10 s after the level is ready); the level stands still while the menu is up
+	H.wait_for("the menu to have been opened and closed", 240000, function() return menu_off_seen end)
+	H.pause(2000)
+	return C.done("chk_menu")
+end
+
 function plans(c, h)
 	C, H = c, h
 	local out = {}
@@ -272,5 +355,6 @@ function plans(c, h)
 	out.chk_stash = { stash_plan }
 	out.chk_mechanics = { mechanics_plan, mechanics_after_load }
 	out.chk_hud = { hud_plan }
+	out.chk_menu = { menu_plan }
 	return out
 end

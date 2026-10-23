@@ -131,6 +131,17 @@ hard_stop=$(( timeout_s - 60 ))
         echo "4 console run_string sweep_check_play.seed(\"$seed_faction\")"
         echo "5 console start server(all/single/alife/new) client(localhost)"
         awk -v s="$scale" -v end="$hard_stop" 'BEGIN{ for (t = 20; t < end / s; t += 15) printf "%.1f key Left Shift\n", t*s }'
+    elif [ "$plan" = chk_menu ]; then
+        # the main menu stops the level (and the driver with it), so this plan is driven from the timeline: load the base save, wait for
+        # the level, then open the menu, look at it from Lua (run_string), close it
+        echo "4 console start server(sweep_base/single/alife/load) client(localhost)"
+        awk -v s="$scale" 'BEGIN{ for (t = 20; t < 80; t += 15) printf "%.1f key Left Shift\n", t*s }'
+        echo "90 waitlevel 300 l01_escape"
+        echo "100 console main_menu on"
+        echo "102 console run_string sweep_check_ui.menu_verify(\"on\")"
+        echo "104 console screenshot chk_menu_main"
+        echo "108 console main_menu off"
+        echo "111 console run_string sweep_check_ui.menu_verify(\"off\")"
     elif [ "$menu_only" = 0 ]; then
         echo "4 console start server(sweep_base/single/alife/load) client(localhost)"
         # every loading screen (also the one of a reload) waits for "press any key" and the game does not run until then; a tap of Left Shift (sprint) is the least harmful key
