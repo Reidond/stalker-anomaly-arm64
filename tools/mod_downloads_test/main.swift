@@ -218,6 +218,24 @@ let server = try TestServer { req, conn in
         // has an ETag but ignores Range: the download restarts from zero
         let n = state.bump("/noranges.zip")
         serve(FileRoute(body: fileBody, ranges: false, chunk: 10_000, delay: 0.004, dropAfter: n == 1 ? 100_000 : nil), req, conn)
+    case "/badrange.zip":
+        // second attempt: a 206 that starts somewhere else than asked -> the client starts over without a Range
+        let n = state.bump("/badrange.zip")
+        if n == 2 {
+            conn.respond(206, [("Content-Type", "application/zip"), ("ETag", "\"v1\""), ("Content-Range", "bytes 0-\(fileBody.count - 1)/\(fileBody.count)")], body: fileBody)
+        } else {
+            serve(FileRoute(body: fileBody, chunk: 10_000, delay: 0.004, dropAfter: n == 1 ? 100_000 : nil), req, conn)
+        }
+    case "/stale416.zip":
+        // second attempt: 416 with a size that is not the partial's -> start over
+        let n = state.bump("/stale416.zip")
+        if n == 2 {
+            conn.respond(416, [("Content-Range", "bytes */999")])
+        } else {
+            serve(FileRoute(body: fileBody, chunk: 10_000, delay: 0.004, dropAfter: n == 1 ? 100_000 : nil), req, conn)
+        }
+    case "/complete.zip":
+        serve(FileRoute(body: fileBody), req, conn)
     case "/slow.zip":
         serve(FileRoute(body: slowBody, chunk: 16_384, delay: 0.03), req, conn)
     case "/dl.zip":
@@ -524,6 +542,45 @@ await test("server-ignores-range") {
     let file = try await LinkDownloader().downloadFile(target, to: dir)
     checkEqual(file.sha256, sha256(fileBody), "restarted from zero when the answer was 200")
     check(server.requests(for: "/noranges.zip").last?.headers["range"] != nil, "it did try a range first")
+}
+
+await test("resume-edge-cases") {
+    // 206 that starts at the wrong place
+    var dir = freshDir()
+    var target = url("/badrange.zip")
+    server.clearRequests()
+    _ = try? await LinkDownloader().downloadFile(target, to: dir)
+    check(LinkDownloader.hasPartial(for: target, in: dir), "badrange: partial kept")
+    var file = try await LinkDownloader().downloadFile(target, to: dir)
+    checkEqual(file.sha256, sha256(fileBody), "badrange: restarted and complete")
+    var ranges = server.requests(for: "/badrange.zip").map { $0.headers["range"] ?? "full" }
+    checkEqual(ranges.count, 3, "badrange: three requests (\(ranges))")
+    checkEqual(ranges.last, "full", "badrange: the restart carries no Range")
+
+    // 416 that disagrees about the size
+    dir = freshDir()
+    target = url("/stale416.zip")
+    server.clearRequests()
+    _ = try? await LinkDownloader().downloadFile(target, to: dir)
+    file = try await LinkDownloader().downloadFile(target, to: dir)
+    checkEqual(file.sha256, sha256(fileBody), "416: restarted and complete")
+    ranges = server.requests(for: "/stale416.zip").map { $0.headers["range"] ?? "full" }
+    checkEqual(ranges.last, "full", "416: the restart carries no Range (\(ranges))")
+
+    // a partial that already holds the whole file: the server answers 416 with the same size, and that finishes it
+    dir = freshDir()
+    target = url("/complete.zip")
+    try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    let part = LinkDownloader.partURL(for: target, in: dir)
+    try fileBody.write(to: part)
+    let meta = PartialMeta(url: target.absoluteString, etag: "\"v1\"", lastModified: nil, finalURL: target.absoluteString, total: Int64(fileBody.count), fileName: "kept-name.zip")
+    try JSONEncoder().encode(meta).write(to: LinkDownloader.metaURL(for: part))
+    server.clearRequests()
+    file = try await LinkDownloader().downloadFile(target, to: dir)
+    checkEqual(file.sha256, sha256(fileBody), "complete partial: finished without downloading again")
+    checkEqual(file.fileName, "kept-name.zip", "complete partial: keeps the name the first response asked for")
+    checkEqual(server.requests(for: "/complete.zip").count, 1, "complete partial: one request")
+    checkEqual(hiddenFiles(in: dir), [], "complete partial: nothing left")
 }
 
 await test("cancel-keeps-partial-then-resume") {
