@@ -6,6 +6,7 @@ import ModManagerCore
 struct ModsView: View {
     @EnvironmentObject private var model: LauncherModel
     @EnvironmentObject private var focus: FocusStore
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     #if os(iOS)
     @State private var editMode: EditMode = .inactive
     #endif
@@ -65,7 +66,7 @@ struct ModsView: View {
             #if os(iOS)
             if !model.mods.isEmpty {
                 Button(editMode.isEditing ? "Done" : "Edit") {
-                    withAnimation(LauncherMotion(reduced: false).content) { editMode = editMode.isEditing ? .inactive : .active }
+                    withAnimation(LauncherMotion(reduced: reduceMotion).content) { editMode = editMode.isEditing ? .inactive : .active }
                 }
                 .glassButton()
                 .controlSize(.large)

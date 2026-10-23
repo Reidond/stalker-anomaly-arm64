@@ -74,10 +74,11 @@ struct LauncherMotion {
 /// the snapshot tool: an offscreen window has no compositor to draw glass, so it shows the fallback).
 struct ProminentButtonStyle: ViewModifier {
     @Environment(\.launcherSnapshot) private var snapshot
+    var radius: CGFloat?
 
     func body(content: Content) -> some View {
         if snapshot {
-            content.buttonStyle(SnapshotProminentStyle())
+            content.buttonStyle(SnapshotProminentStyle(radius: radius))
         } else if #available(iOS 26.0, macOS 26.0, *) {
             content.buttonStyle(.glassProminent)
         } else {
@@ -86,14 +87,18 @@ struct ProminentButtonStyle: ViewModifier {
     }
 }
 
-/// What the prominent button looks like in the snapshot tool: an amber capsule with dark type, as the tinted glass button reads.
+/// What the prominent button looks like in the snapshot tool: the tint (amber, or rust for a destructive one) as a capsule, or a rounded
+/// rectangle where the button has a border shape, with dark type, as the tinted glass button reads.
 struct SnapshotProminentStyle: ButtonStyle {
     @Environment(\.isEnabled) private var isEnabled
+    var radius: CGFloat?
 
     func makeBody(configuration: Configuration) -> some View {
+        let shape = RoundedRectangle(cornerRadius: radius ?? 1000, style: .continuous)
         configuration.label
             .foregroundStyle(Color.black.opacity(0.85))
-            .background(Capsule().fill(Theme.amber.opacity(isEnabled ? 1 : 0.35)))
+            .padding(.vertical, 7)   // what the bordered style puts around its label
+            .background(shape.fill(.tint).opacity(isEnabled ? 1 : 0.35))
     }
 }
 
@@ -111,6 +116,8 @@ struct GlassButtonStyleModifier: ViewModifier {
 }
 
 extension View {
-    func prominentButton() -> some View { modifier(ProminentButtonStyle()) }
+    /// `radius`: the corner radius of the button where it is not a capsule (only the snapshot tool needs it; the system draws the real one
+    /// from `buttonBorderShape`).
+    func prominentButton(radius: CGFloat? = nil) -> some View { modifier(ProminentButtonStyle(radius: radius)) }
     func glassButton() -> some View { modifier(GlassButtonStyleModifier()) }
 }

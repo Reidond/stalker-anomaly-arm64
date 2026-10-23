@@ -54,9 +54,9 @@ private struct SheetButtonStyle: ViewModifier {
 
     func body(content: Content) -> some View {
         switch style {
-        case .prominent: content.prominentButton().tint(Theme.amber)
+        case .prominent: content.prominentButton(radius: SheetButtonRadius.value).tint(Theme.amber)
         case .glass: content.glassButton()
-        case .destructive: content.prominentButton().tint(Theme.rust)
+        case .destructive: content.prominentButton(radius: SheetButtonRadius.value).tint(Theme.rust)
         }
     }
 }

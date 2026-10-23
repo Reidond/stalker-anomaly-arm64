@@ -55,7 +55,7 @@ struct AddModView: View {
                                 Button { linkFocused = false; model.startLinkDownload() } label: {
                                     Label("Download", systemImage: "arrow.down.circle.fill").frame(maxWidth: .infinity, minHeight: 44)
                                 }
-                                .prominentButton()
+                                .prominentButton(radius: Theme.cardInnerRadius)
                                 .buttonBorderShape(.roundedRectangle(radius: Theme.cardInnerRadius))
                                 .tint(Theme.amber)
                                 .disabled(model.linkURL == nil)
