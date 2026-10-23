@@ -3,7 +3,7 @@
 # Needs -dbg and a save in the Cordon; it is `ipad_test` here (on the Mac copy a Cordon save under that name, or edit the `start` line).
 #   iPad: tools/ios/ipad.sh script tools/ios/scripts/pad_bindings.txt         Mac: build/.../anomaly --script tools/ios/scripts/pad_bindings.txt
 # Reading it: pos (move, strafe, walk against run against sprint), VIEW yaw / pitch (look), eye (crouch), pos y (jump), roll (lean), fov (aim), ammo (fire,
-# reload), slot / item (weapon switch, wheels), health (quick use), torch / nv, inv / pda / paused (dialogs). Taps are 400 ms so that a slow frame cannot
+# reload), slot / item (weapon switch, wheels), health (quick use), torch / nv, paused (the game held); `pad ui: dialog up / closed` marks the dialogs. Taps are 400 ms so that a slow frame cannot
 # miss them, except L1 and R1, which must stay under the 0.22 s wheel threshold. Where the start of a new game plays a sequence, the first pad key ends it.
 3 console r_screenshot_mode png
 4 console pad_feedback_log 1

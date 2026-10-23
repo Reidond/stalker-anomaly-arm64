@@ -287,7 +287,7 @@ with `-dbg`) as on the Mac; the Mac ran at a load average of 400, so only effect
 | Wheels: L1 hold (items), R1 hold (combat) | stick pick and release, action log, screenshots | Both open and pick (`wpn_3`, `quick_save` reach the game, the quicksave and its preview are written). **Quick use 1 reaches `quick_use_1` but does not use the medkit**; F1 on the keyboard does not either, so it is not the pad (see follow-ups) |
 | Flashlight, night vision (D-pad up, down) | action log | Reach `torch` and `night_vision`; no visible effect: the test start has no flashlight or night-vision item |
 | Use (Triangle) | action log | Reaches `use`; picking an item up was not exercised |
-| Inventory (Create), PDA (touchpad), pause menu (Options) | dialog state, screenshots | OK. Map: the stock game has no map binding, it is a PDA tab, reached with R2 / L2 |
+| Inventory (Create), PDA (touchpad), pause menu (Options) | `pad ui: dialog up / closed` log lines, screenshots | OK. Map: the stock game has no map binding, it is a PDA tab, reached with R2 / L2 |
 | **Controller, UI screens** (`pad_ui.txt`) | | |
 | Main menu | stick to a button, Cross; D-pad; R3 | OK: the stick hovers and clicks (the lens follows), D-pad nudges, R3 recentres. A tap or a click right after a cursor jump now takes the button under the cursor (it was dropped until the lens arrived) |
 | Load game list | click a row, Cross | OK: the row is selected and the preview shows the frame of the save. Saves made before M5 have a black preview and `(no save)` shows the stock noise texture |

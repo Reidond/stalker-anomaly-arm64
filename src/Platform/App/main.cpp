@@ -91,6 +91,7 @@ struct ScriptStep
     std::string args;
     double release_at = -1; // key presses: when the matching key-up is due
     bool pad = false;       // the release is for a pad button
+    int pad_index = 0;      // ... of this virtual pad (the one `padsel` had picked when the press was made)
 };
 
 struct App
@@ -409,15 +410,18 @@ int PadButtonFromName(const std::string& name)
     return -1;
 }
 
-void SetPadButton(App& app, const std::string& name, bool down)
+// `index` is the virtual pad (0 or 1); -1 is the one being driven. A release for a pad that was detached in the meantime has nothing left to do.
+void SetPadButton(App& app, const std::string& name, bool down, int index = -1)
 {
     const int button = PadButtonFromName(name);
-    if (!SelectedPad(app).joystick || button < 0)
+    SDL_Joystick* joystick = app.virtual_pads[index < 0 ? app.pad_sel : index].joystick;
+    if (!joystick || button < 0)
     {
-        AppleShell::Log("anomaly: script: no pad or unknown button '%s'", name.c_str());
+        if (down || button < 0)
+            AppleShell::Log("anomaly: script: no pad or unknown button '%s'", name.c_str());
         return;
     }
-    SDL_SetJoystickVirtualButton(SelectedPad(app).joystick, button, down);
+    SDL_SetJoystickVirtualButton(joystick, button, down);
 }
 
 void SetPadAxis(App& app, const std::string& args)
@@ -465,7 +469,7 @@ bool RunScript(App& app)
         if (now >= app.pending_releases[i].release_at)
         {
             if (app.pending_releases[i].pad)
-                SetPadButton(app, app.pending_releases[i].args, false);
+                SetPadButton(app, app.pending_releases[i].args, false, app.pending_releases[i].pad_index);
             else
                 PushKey(app.pending_releases[i].args, false);
             app.pending_releases.erase(app.pending_releases.begin() + long(i));
@@ -527,6 +531,7 @@ bool RunScript(App& app)
             ScriptStep release;
             release.args = name;
             release.pad = true;
+            release.pad_index = app.pad_sel;
             release.release_at = now + ms * 1e-3;
             app.pending_releases.push_back(release);
         }
