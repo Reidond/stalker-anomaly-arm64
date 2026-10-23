@@ -16,6 +16,8 @@
 #include <luabind/detail/pcall.hpp>
 
 #include <pthread.h>
+#include <signal.h>
+#include <sys/time.h>
 #include <time.h>
 
 #include <algorithm>
@@ -53,6 +55,10 @@ inline u64 thread_cpu_ns()
 }
 
 thread_local u64 t_cpu_start = 0;
+
+// True while the main thread is inside a call into Lua. The profiler's timer counts the CPU time of every thread, so most of its ticks
+// land while the engine runs C++; LuaJIT would book those to the next Lua function that runs. The gate below drops them.
+std::atomic<bool> g_lua_active{false};
 
 inline bool on_main_thread()
 {
@@ -264,9 +270,33 @@ struct FuncStat
 	u64 self_i = 0, self_c = 0, self_g = 0, incl = 0;
 };
 
+void set_on(bool on);
+void prof_stop();
+
+// The sample clock. LuaJIT's own is an ITIMER_PROF: on macOS it ticks every 10 ms whatever interval is asked for, and counts the CPU time of
+// every thread, so most ticks land while the engine runs C++ (the VM state then is whatever Lua left it in, and the sample is booked to the next
+// Lua function that runs). Instead a thread sends SIGPROF to the main thread every interval, but only while it is inside a call into Lua; the
+// signal runs LuaJIT's handler as usual, which has the VM call the callback at its next instruction.
+std::atomic<bool> g_sampler_run{false};
+pthread_t g_sampler_thread;
+pthread_t g_sampler_target;
+
+void* sampler_main(void* arg)
+{
+	const long ns = long(reinterpret_cast<intptr_t>(arg)) * 1000000L;
+	while (g_sampler_run.load(std::memory_order_relaxed))
+	{
+		struct timespec ts = {0, ns};
+		nanosleep(&ts, nullptr);
+		if (g_lua_active.load(std::memory_order_relaxed))
+			pthread_kill(g_sampler_target, SIGPROF);
+	}
+	return nullptr;
+}
+
 bool g_prof_on = false;
 std::string g_prof_label = "run";
-int g_prof_ms = 2;
+int g_prof_ms = 1;
 lua_State* g_prof_state = nullptr;
 std::unordered_map<std::string, FuncStat> g_funcs;
 std::unordered_map<std::string, u64> g_files;
@@ -287,10 +317,9 @@ std::string base_name(const char* src)
 
 void prof_callback(void*, lua_State* L, int samples, int vmstate)
 {
+	// 'I' interpreter, 'C' a C function called from Lua, 'G' the collector, 'N' a compiled trace, 'J' the JIT compiler
 	g_state_samples[vmstate & 255] += u64(samples);
 	g_samples += u64(samples);
-	if (vmstate == 'N')
-		return;
 	lua_Debug ar;
 	std::string seen[32];
 	int nseen = 0;
@@ -395,10 +424,10 @@ void prof_report(size_t top)
 		return;
 	}
 	const double total = double(g_samples);
-	Msg("* [lua-prof] label=%s samples=%llu interval_ms=%d interp=%.1f%% cfunc=%.1f%% gc=%.1f%% jit=%.1f%% native=%.1f%%", g_prof_label.c_str(), g_samples, g_prof_ms,
+	Msg("* [lua-prof] label=%s samples=%llu interval_ms=%d interp=%.1f%% cfunc=%.1f%% gc=%.1f%% trace=%.1f%% jitc=%.1f%%", g_prof_label.c_str(), g_samples, g_prof_ms,
 	    100.0 * double(g_state_samples['I']) / total, 100.0 * double(g_state_samples['C']) / total, 100.0 * double(g_state_samples['G']) / total,
-	    100.0 * double(g_state_samples['J']) / total, 100.0 * double(g_state_samples['N']) / total);
-	const double lua_total = std::max(1.0, total - double(g_state_samples['N']));
+	    100.0 * double(g_state_samples['N']) / total, 100.0 * double(g_state_samples['J']) / total);
+	const double lua_total = std::max(1.0, total);
 	std::vector<std::pair<const std::string*, const FuncStat*>> v;
 	for (const auto& kv : g_funcs)
 		v.emplace_back(&kv.first, &kv.second);
@@ -437,14 +466,20 @@ void prof_start(int ms)
 	lua_State* L = ai().script_engine().lua();
 	if (!L)
 		return;
-	if (g_prof_on)
-		luaJIT_profile_stop(g_prof_state);
+	prof_stop();
 	g_prof_ms = std::max(1, std::min(100, ms));
 	char mode[16];
 	snprintf(mode, sizeof(mode), "i%d", g_prof_ms);
 	prof_reset();
 	g_prof_state = L;
 	luaJIT_profile_start(L, mode, prof_callback, nullptr);
+	// LuaJIT armed its ITIMER_PROF: disarm it, the sampler thread is the clock (see above)
+	struct itimerval off = {};
+	setitimer(ITIMER_PROF, &off, nullptr);
+	set_on(true);
+	g_sampler_target = pthread_self();
+	g_sampler_run = true;
+	pthread_create(&g_sampler_thread, nullptr, sampler_main, reinterpret_cast<void*>(intptr_t(g_prof_ms)));
 	g_prof_on = true;
 	Msg("* [lua-prof] started, %d ms samples", g_prof_ms);
 }
@@ -453,6 +488,8 @@ void prof_stop()
 {
 	if (!g_prof_on)
 		return;
+	if (g_sampler_run.exchange(false))
+		pthread_join(g_sampler_thread, nullptr);
 	luaJIT_profile_stop(g_prof_state);
 	g_prof_on = false;
 	g_prof_state = nullptr;
@@ -615,6 +652,8 @@ unsigned long long enter()
 		return 1;
 	}
 	t_cpu_start = thread_cpu_ns();
+	if (on_main_thread())
+		g_lua_active.store(true, std::memory_order_relaxed);
 	return now_ns();
 }
 
@@ -625,6 +664,8 @@ void leave(unsigned long long stamp)
 	--t_depth;
 	if (stamp == 1)
 		return;
+	if (on_main_thread())
+		g_lua_active.store(false, std::memory_order_relaxed);
 	const u64 ns = now_ns() - stamp;
 	if (on_main_thread())
 	{
@@ -748,7 +789,7 @@ void init(lua_State* L)
 		set_on(true);
 	if (strstr(params, "-lua_profile") && L)
 	{
-		int ms = 2;
+		int ms = 1;
 		if (const char* p = strstr(params, "-lua_profile_ms "))
 			ms = atoi(p + strlen("-lua_profile_ms "));
 		prof_start(ms);

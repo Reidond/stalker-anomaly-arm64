@@ -10,6 +10,7 @@
 #   -S seconds  length of a place's measured part (default 34)
 #   -P          a sampling-profiler run (lua_profile) instead of a timer run: the function table
 #   -n          without the bytecode cache (-no_lua_cache)
+#   -j          LuaJIT's JIT off (-nojit): the interpreter, which is what the iPad runs
 #   -a args     more app arguments (e.g. "--graphics-profile ipad-8gb")
 # The state root of a run is its own (a cold bytecode cache, a shared shader cache); HARNESS_STATE=<dir> keeps one (a warm cache).
 set -euo pipefail
@@ -20,10 +21,11 @@ places="field,village,bar"
 seconds=34
 profile=0
 nocache=0
+nojit=0
 extra=""
-while getopts "t:m:p:S:Pna:" opt; do
+while getopts "t:m:p:S:Pnja:" opt; do
     case $opt in
-        t) tag=$OPTARG;; m) modes=$OPTARG;; p) places=$OPTARG;; S) seconds=$OPTARG;; P) profile=1;; n) nocache=1;; a) extra=$OPTARG;;
+        t) tag=$OPTARG;; m) modes=$OPTARG;; p) places=$OPTARG;; S) seconds=$OPTARG;; P) profile=1;; n) nocache=1;; j) nojit=1;; a) extra=$OPTARG;;
         *) exit 2;;
     esac
 done
@@ -42,6 +44,7 @@ for mode in $modes; do
     args=(-lua_perf)
     [ $profile = 1 ] && args=(-lua_profile)
     [ $nocache = 1 ] && args+=(-no_lua_cache)
+    [ $nojit = 1 ] && args+=(-nojit)
     echo "== $mode (${args[*]} $extra)"
     HARNESS_ARGS="${args[*]} $extra" "$root/tools/render_harness/run_scene.sh" -t "$tag" -l 1500 "$script" | tail -3
     run=$out/$name

@@ -95,7 +95,7 @@ KV = re.compile(r"(\w+)=([^\s]+)")
 PERF = re.compile(r"^\* \[lua-perf\] label=(\S+) why=(\S+) (.*)$")
 WATCH = re.compile(r"^\* \[lua-perf\] label=(\S+) watch \(ms/frame / calls/frame\):(.*)$")
 LOAD = re.compile(r"^\* \[lua-load\] (\S+) (.*)$")
-PROF_HEAD = re.compile(r"^\* \[lua-prof\] label=(\S+) samples=(\d+) interval_ms=(\d+) interp=([\d.]+)% cfunc=([\d.]+)% gc=([\d.]+)% jit=([\d.]+)% native=([\d.]+)%")
+PROF_HEAD = re.compile(r"^\* \[lua-prof\] label=(\S+) samples=(\d+) interval_ms=(\d+) interp=([\d.]+)% cfunc=([\d.]+)% gc=([\d.]+)% trace=([\d.]+)% jitc=([\d.]+)%")
 PROF_ROW = re.compile(r"^\* \[lua-prof\] label=(\S+) (self|incl) #(\d+) (.*)$")
 PROF_FILE = re.compile(r"^\* \[lua-prof\] label=(\S+) file #(\d+) ([\d.]+)% (\S+)$")
 SHELL_STEP = re.compile(r"^\[\s*([\d.]+)\] anomaly: script t=[\d.]+ (console|click) (.*)$")
@@ -148,12 +148,21 @@ def summarize(args):
             best[r["label"]] = r
     wanted = [r for r in wanted if best[r["label"]] is r]
     if wanted:
-        print("| Place | frames | frame ms (p95) | Lua ms | Lua CPU ms | Lua p50 / p95 / max | Lua share % | scheduler | binders | A-Life | callbacks | other | GC | calls/frame | other threads ms | GC thread ms |")
-        print("|---|---:|---|---:|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|")
+        budgets = dict(kv.split("=") for kv in args.budget.split(",")) if args.budget else {}
+        head = ["Place", "frames", "frame ms (p95)", "Lua ms", "Lua CPU ms", "Lua p50 / p95 / max", "Lua share %"]
+        if budgets:
+            head.append("Lua % of the frame budget")
+        head += ["scheduler", "binders", "A-Life", "callbacks", "other", "GC", "calls/frame", "other threads ms", "GC thread ms"]
+        print("| " + " | ".join(head) + " |")
+        print("|---|---:|---|---:|---:|---|" + "---:|" * (len(head) - 6))
         for r in wanted:
-            print("| %s | %s | %s (%s) | %s | %s | %s / %s / %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s |" % (
-                r["label"], r["frames"], r["frame_ms"], r["frame_p95"], r["lua_ms"], r.get("lua_cpu", "-"), r["lua_p50"], r["lua_p95"], r["lua_max"], r["share"],
-                r["sched"], r["binder"], r["alife"], r["cb"], r["other"], r["gc"], r["calls"], r.get("off_main", "0"), r.get("off_gc", "0")))
+            mode = r["label"].split("_")[0]
+            cells = [r["label"], r["frames"], "%s (%s)" % (r["frame_ms"], r["frame_p95"]), r["lua_ms"], r.get("lua_cpu", "-"),
+                     "%s / %s / %s" % (r["lua_p50"], r["lua_p95"], r["lua_max"]), r["share"]]
+            if budgets:
+                cells.append("%.0f" % (100.0 * float(r["lua_ms"]) / float(budgets[mode])) if mode in budgets else "-")
+            cells += [r["sched"], r["binder"], r["alife"], r["cb"], r["other"], r["gc"], r["calls"], r.get("off_main", "0"), r.get("off_gc", "0")]
+            print("| " + " | ".join(str(c) for c in cells) + " |")
         print()
     if watches:
         shown = [w for w in watches if not w[0].startswith(("settle_", "after_", "run"))]
@@ -189,8 +198,8 @@ def summarize(args):
                     print("| %s | %s | %.1f |" % ("level ready", start[1][:50], t - start[0]))
             print()
     for label in prof_heads:
-        samples, interval, i, c, g, j, n = prof_heads[label]
-        print("Profile %s: %s samples of %s ms, interpreter %s%%, C functions %s%%, GC %s%% (native engine code between calls: %s%%)" % (label, samples, interval, i, c, g, n))
+        samples, interval, i, c, g, tr, jc = prof_heads[label]
+        print("Profile %s: %s samples of %s ms (only while Lua runs), interpreter %s%%, C functions %s%%, GC %s%%, compiled traces %s%%, JIT compiler %s%%" % (label, samples, interval, i, c, g, tr, jc))
         print()
         print("| self % | (interp / C / GC) | incl % | function |")
         print("|---:|---|---:|---|")
@@ -260,7 +269,7 @@ def main():
     s.add_argument("--fps", type=int, default=0)
     s.add_argument("--console", action="append", default=[], metavar="CMD", help="a console command before the level loads")
     s.add_argument("--profile", action="store_true", help="a sampling-profiler run (lua_profile) instead of a timer run")
-    s.add_argument("--interval", type=int, default=2, help="profiler sample interval in ms")
+    s.add_argument("--interval", type=int, default=1, help="profiler sample interval in ms")
     s.add_argument("--top", type=int, default=25)
     r = sub.add_parser("loadrow")
     r.add_argument("--kind", required=True)
@@ -271,6 +280,7 @@ def main():
     t = sub.add_parser("summarize")
     t.add_argument("--engine", help="engine log (xray_*.log)")
     t.add_argument("--shell", help="shell log (anomaly-shell.log)")
+    t.add_argument("--budget", help="frame budget in ms per graphics mode, e.g. quality=33.3,performance=16.7 (adds the Lua share of the budget)")
     args = ap.parse_args()
     if args.cmd == "script":
         make_script(args)

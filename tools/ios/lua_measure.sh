@@ -58,7 +58,7 @@ run() { # name script [args]: a launch, its console output, the shell log and th
     copy_from "$appdata/logs" "$out/$name.logs"
     copy_from "Documents/anomaly-shell.log" "$out/$name.shell.log"
 }
-engine_log() { ls -t "$out/$1.logs"/xray_*.log(N) 2>/dev/null | head -1; }
+engine_log() { find "$out/$1.logs" -name "xray_*.log" -not -name "*.bkp" 2>/dev/null | head -1; }
 report=$out/loads.md
 
 (( install )) && { $ipad build; $ipad install; }
