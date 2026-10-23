@@ -207,10 +207,13 @@ enum class Lookup { Hit, Miss, Stale, Incompatible, Corrupt };
 
 // Tries the entry at `path`. On Hit the chunk is on the stack.
 Lookup try_entry(lua_State* L, State& s, const std::string& path, const char* chunk_name, size_t src_size, uint64_t src_h1, uint64_t src_h2,
-                 size_t& bc_bytes)
+                 size_t& bc_bytes, double& io_ms, double& decode_ms)
 {
 	thread_local std::vector<char> buf;
-	if (!read_file(path, buf))
+	const double io0 = now_ms();
+	const bool read_ok = read_file(path, buf);
+	io_ms = now_ms() - io0;
+	if (!read_ok)
 		return Lookup::Miss;
 	if (buf.size() < sizeof(Header))
 		return Lookup::Corrupt;
@@ -235,7 +238,10 @@ Lookup try_entry(lua_State* L, State& s, const std::string& path, const char* ch
 		return Lookup::Corrupt;
 	if (h.bc_size < kVmHeaderSize || memcmp(bc, s.vm_header, kVmHeaderSize) != 0)
 		return Lookup::Incompatible;
-	if (luaL_loadbuffer(L, bc, size_t(h.bc_size), chunk_name) != 0)
+	const double dec0 = now_ms();
+	const int load_rc = luaL_loadbuffer(L, bc, size_t(h.bc_size), chunk_name);
+	decode_ms = now_ms() - dec0;
+	if (load_rc != 0)
 	{
 		lua_pop(L, 1); // the error message
 		return Lookup::Corrupt;
@@ -325,7 +331,8 @@ int load(lua_State* L, const char* text, size_t size, const char* chunk_name)
 	const std::string path = path_in(dir, chunk_name);
 	const double t1 = now_ms();
 	size_t bc_bytes = 0;
-	const Lookup found = try_entry(L, s, path, chunk_name, size, h1, h2, bc_bytes);
+	double io_ms = 0, decode_ms = 0;
+	const Lookup found = try_entry(L, s, path, chunk_name, size, h1, h2, bc_bytes, io_ms, decode_ms);
 	const double t2 = now_ms();
 
 	Stats d; // the deltas of this call
@@ -336,6 +343,8 @@ int load(lua_State* L, const char* text, size_t size, const char* chunk_name)
 	{
 		d.hits = 1;
 		d.read_ms = t2 - t1;
+		d.io_ms = io_ms;
+		d.decode_ms = decode_ms;
 		d.bytecode_bytes = bc_bytes;
 	}
 	else
@@ -374,6 +383,8 @@ int load(lua_State* L, const char* text, size_t size, const char* chunk_name)
 	t.bytecode_bytes += d.bytecode_bytes;
 	t.hash_ms += d.hash_ms;
 	t.read_ms += d.read_ms;
+	t.io_ms += d.io_ms;
+	t.decode_ms += d.decode_ms;
 	t.compile_ms += d.compile_ms;
 	t.store_ms += d.store_ms;
 	return rc;

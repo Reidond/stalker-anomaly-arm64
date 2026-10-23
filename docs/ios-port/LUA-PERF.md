@@ -106,23 +106,28 @@ unusable directories; warm and purge; the hash; two threads storing and loading 
 
 ## Measurements: the Mac (MacBook Pro 14", M2 Pro)
 
-Unattended runs of `tools/render_harness/lua_measure.sh` on the `h_cordon` save (Anomaly 1.5.3, the repo's overlay), `RelWithDebInfo`: 34 s per place
-after 10 s of settling. **The Mac was not quiet**: the six port sessions were building and running games on it, load average 400 to 500 and one to three
-other `anomaly` processes at the time of each run. So the frame times and the frame rates below belong to that load (Quality "village" ran at 15 fps in one
-run), not to the machine; the Lua time of a frame is less affected (the table has the thread's CPU time as well as the wall time) and is what the numbers are
-for. The iPad runs are on a quiet device.
+Unattended runs of `tools/render_harness/lua_measure.sh` on the `h_cordon` save (`RelWithDebInfo`): 34 s per place after 10 s of settling, three sets of runs
+(Quality and Performance, the JIT on) and two with the JIT off (`-nojit`: the interpreter, which is what the iPad runs). **The Mac was not quiet**: the port's
+other sessions were building and running games on it, load average 70 to 500 and one to four other `anomaly` processes during every run. So the frame times
+and rates in those runs belong to that load (a Quality "village" window ran at 15 fps once), not to the machine, and the "share of the frame" with them. The
+Lua time of a frame is less affected, and the table gives the thread's CPU time, not the wall time. The iPad is a quiet device: its numbers follow below.
 
-Lua per frame on the main thread, ms (wall; CPU time in brackets), Mac:
+Lua per frame on the main thread, CPU ms, range over the sets of runs (the wall time is 2 to 7 % higher):
 
 | | Quality field | Quality village | Quality Bar | Performance field | Performance village | Performance Bar |
 |---|---:|---:|---:|---:|---:|---:|
-| JIT on (the Mac's normal mode) | 2.96 (2.75) | 3.82 (3.66) | 1.76 (1.71) | 1.84 (1.79) | 1.88 (1.84) | 1.52 (1.46) |
-| JIT off (the interpreter, as on the iPad) | 3.27 (3.14) | 2.02 (1.97) | 2.08 (2.04) | 2.22 (2.17) | 1.61 (1.55) | 0.77 (0.76) |
-| calls into Lua per frame (outermost / nested) | 130 / ? | | | | | |
+| JIT on | 2.3 to 3.2 | 2.0 to 3.7 | 1.5 to 1.7 | 1.8 to 2.3 | 1.8 to 2.9 | 1.5 |
+| JIT off (interpreter) | 2.5 to 3.1 | 2.0 to 2.1 | 2.0 | 2.2 to 2.4 | 1.5 to 2.1 | 0.8 to 1.2 |
 
-Lua takes **0.8 to 3.8 ms of a frame** in every place and mode, with the JIT or without it: the interpreter is not slower in these runs because the time is not
-in interpreted bytecode (next section). Of that, the binders (`bind_stalker`, `bind_monster`, `generic_object_binder`, ... `update`) are about two thirds,
-the engine-side callbacks (`npc_on_update`, `squad_on_update`, `actor_on_update` ... through `SendScriptCallback`) are inside them. The script threads
-(`CScriptProcess`) are empty in Anomaly 1.5.3 (0.000 ms), the A-Life update's Lua runs on the worker thread (`mtALife`), the object callbacks of
-`set_callback` (hit, death, ...) cost 0.01 to 0.09 ms between events. The collector's explicit steps run on a second thread (`mtLUA_GC`, parallel to the
-renderer) and take 1.5 to 5.7 ms per frame there; that is CPU time off the main thread.
+- **Lua is 0.8 to 3.7 ms of a frame, the same with or without the JIT.** The interpreter is not slower here because the time is not in interpreted bytecode: the
+  profile below puts about half of it in engine functions that the scripts call, a quarter in the garbage collector's work inside allocations, and a fifth in
+  bytecode.
+- The binders (`bind_stalker`, `bind_monster`, `generic_object_binder`, ... `update`) are about two thirds of it: 0.6 to 2.3 ms. Every per-object and per-frame
+  callback (`actor_on_update`, `npc_on_update`, `squad_on_update`, `npc_on_hear_callback`, ... through `SendScriptCallback`) runs inside them; the heaviest is
+  `actor_on_update` at 0.4 to 0.6 ms, then `npc_on_hear_callback` (0.25 ms and 37 calls per frame in the Bar), `squad_on_update` (0.07 to 0.12) and `npc_on_update` (0.05).
+- The script threads (`CScriptProcess`) are empty in Anomaly 1.5.3 (0.000 ms). The `set_callback` object callbacks (hit, death, ...) cost 0.01 to 0.09 ms between
+  events. The A-Life update does not touch the main thread: its Lua runs on the worker thread (`mtALife`), 0.2 to 0.8 ms per frame there.
+- **The collector runs on a second thread**: `mtLUA_GC` does its steps there in parallel with the renderer (`Device.seqParallel`), 1.4 to 6.6 ms per frame, and
+  nothing waits for it. The collector's work inside allocations stays on the main thread and is part of the Lua time above.
+- Frames with a long Lua part exist: p95 is 3.6 to 7.4 ms, the maximum 15 to 108 ms (a frame that loads or spawns many objects). The p95 is under a third of a
+  Quality frame (33 ms) and under half of a Performance one (16.7 ms).

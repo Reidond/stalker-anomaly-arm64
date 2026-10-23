@@ -130,10 +130,10 @@ void print_load_report(const char* why)
 		return;
 	const script_cache::Stats c = script_cache::stats();
 	Msg("* [lua-load] %s files=%llu mb=%.2f total_ms=%.0f read_ms=%.0f compile_ms=%.0f run_ms=%.0f cache=%s hit=%u miss=%u stale=%u other=%u "
-	    "stored=%u hash_ms=%.0f cache_read_ms=%.0f cache_compile_ms=%.0f cache_store_ms=%.0f",
+	    "stored=%u hash_ms=%.0f cache_read_ms=%.0f cache_io_ms=%.0f cache_decode_ms=%.0f cache_compile_ms=%.0f cache_store_ms=%.0f",
 	    why, g_load.files, double(g_load.bytes) / 1048576.0, double(g_load.total_ns) * 1e-6, g_load.read_ms, g_load.compile_ms,
 	    std::max(0.0, double(g_load.total_ns) * 1e-6 - g_load.read_ms - g_load.compile_ms), script_cache::directory()[0] ? "on" : "off", c.hits,
-	    c.misses, c.stale, c.incompatible + c.corrupt, c.stored, c.hash_ms, c.read_ms, c.compile_ms, c.store_ms);
+	    c.misses, c.stale, c.incompatible + c.corrupt, c.stored, c.hash_ms, c.read_ms, c.io_ms, c.decode_ms, c.compile_ms, c.store_ms);
 	g_load = LoadCounters();
 	script_cache::reset_stats();
 }

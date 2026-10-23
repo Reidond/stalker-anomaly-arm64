@@ -40,7 +40,9 @@ struct Stats
 	uint64_t source_bytes = 0;   // text that went through `load`
 	uint64_t bytecode_bytes = 0; // bytecode read (hits)
 	double hash_ms = 0;          // hashing the text
-	double read_ms = 0;          // reading and checking an entry, and loading its bytecode (hits)
+	double read_ms = 0;          // reading and checking an entry, and loading its bytecode (hits): io_ms + decode_ms + the checks
+	double io_ms = 0;            //   of which reading the file
+	double decode_ms = 0;        //   of which the VM loading the bytecode
 	double compile_ms = 0;       // luaL_loadbuffer of the text (everything that was not a hit)
 	double store_ms = 0;         // dumping and writing entries
 };
