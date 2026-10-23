@@ -6,6 +6,10 @@ check that each one took effect, in the right layer. The player guide is [docs/i
 Nothing third-party is in this folder: the addons are written for the test, the textures are generated, and the shader is the stock
 `r3\distort.ps` read out of your own `shaders.db0` with one line changed.
 
+**Status.** The whole sequence passes on the Mac (case-sensitive volume, `--target mac`). The iPad target of `run.sh` (push with `ipad.sh put`, run with
+`ipad.sh script`, removal with the app's `delete` step) is written but was not run to the end: the iPad dropped off the network before the first scenario.
+What was checked on the iPad itself: the volume is case-sensitive, and how `devicectl copy to` creates files and folders.
+
 ## The addons
 
 | Addon (`addons/<name>`) | What it is | How it is checked |
