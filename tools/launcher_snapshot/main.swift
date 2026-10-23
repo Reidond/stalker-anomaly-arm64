@@ -9,9 +9,7 @@
 import AppKit
 import Foundation
 import SwiftUI
-#if canImport(ModManagerCore)
 import ModManagerCore
-#endif
 
 var arguments = Array(CommandLine.arguments.dropFirst())
 var logoPath: String?

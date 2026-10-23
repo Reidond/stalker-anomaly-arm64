@@ -7,9 +7,7 @@ import UIKit
 #elseif canImport(AppKit)
 import AppKit
 #endif
-#if canImport(ModManagerCore)
 import ModManagerCore
-#endif
 
 /// What the app passes in when it opens the launcher (JSON, see LauncherEntry.swift).
 struct LauncherConfig: Decodable {
@@ -200,7 +198,27 @@ final class LauncherModel: ObservableObject {
         }
         focusObserver = focus.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }
         focus.backHandler = { [weak self] in self?.back() }
+        focus.pressInterceptor = { [weak self] button in
+            // while a FOMOD is being answered the wizard has the pad: Cross picks, Circle goes back, R1 / Options go on
+            guard let self, let session = self.imports.fomodSession else { return false }
+            switch button {
+            case .confirm: session.send(.confirm)
+            case .back: session.send(.back)
+            case .options, .rightShoulder: session.send(.next)
+            default: return false
+            }
+            return true
+        }
         focus.directionInterceptor = { [weak self] direction, reorder in
+            if let session = self?.imports.fomodSession {
+                switch direction {
+                case .up: session.send(.up)
+                case .down: session.send(.down)
+                case .left: session.send(.left)
+                case .right: session.send(.right)
+                }
+                return true
+            }
             // Square held + up/down on a mod: move it in the load order instead of the focus
             guard let self, reorder, direction == .up || direction == .down, !self.modalActive, self.screen == .mods,
                   let id = self.focus.focusedID, id.hasPrefix("mod:") else { return false }

@@ -1,9 +1,7 @@
 // The sheets that sit on top of the launcher: the import flow (reading, warnings, FOMOD wizard, installing, result) and the
 // confirmation before a mod is removed. System sheets, so they get the system's presentation and glass on iPadOS and macOS.
 import SwiftUI
-#if canImport(ModManagerCore)
 import ModManagerCore
-#endif
 
 struct ImportSheet: View {
     @EnvironmentObject private var model: LauncherModel
@@ -79,8 +77,8 @@ struct ImportSheet: View {
                 }
             }
         case .fomod(let plan):
-            if let installer = plan.fomod {
-                FomodWizardView(installer: installer,
+            if let session = imports.fomodSession {
+                FomodWizardView(session: session,
                                 onFinish: { choices in imports.install(plan, choices: choices) },
                                 onCancel: { imports.cancel() })
             }

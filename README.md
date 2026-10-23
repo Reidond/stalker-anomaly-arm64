@@ -108,5 +108,6 @@ Saves from the PC version will probably not load, because of the LuaJIT 2.0 to 2
 - **[OpenXRay](https://github.com/OpenXRay/xray-16):** used as the reference for cross-platform and
   ARM64 work.
 - **Third-party libraries,** each under its own license: SDL3 (zlib), OpenAL Soft (LGPL), LuaJIT
-  (MIT), vkd3d (LGPL), SPIRV-Cross (Apache 2.0), Xiph Ogg/Vorbis/Theora (BSD). OpenAL Soft and
+  (MIT), vkd3d (LGPL), SPIRV-Cross (Apache 2.0), Xiph Ogg/Vorbis/Theora (BSD), and, for reading mod
+  archives, libarchive (BSD-2-Clause) and liblzma from xz (0BSD, public domain). OpenAL Soft and
   vkd3d are LGPL and statically linked, so keep their terms in mind before sharing any build.

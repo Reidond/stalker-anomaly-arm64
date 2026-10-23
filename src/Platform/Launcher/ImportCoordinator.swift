@@ -2,9 +2,7 @@
 // shown in between. Everything that adds a mod (Files, the browser, a pasted link) comes through here.
 import Foundation
 import SwiftUI
-#if canImport(ModManagerCore)
 import ModManagerCore
-#endif
 #if canImport(ModDownloads)
 import ModDownloads
 #endif
@@ -23,6 +21,8 @@ final class ImportCoordinator: ObservableObject {
     static let installingTitle = "Installing"
 
     @Published private(set) var stage: Stage = .idle
+    /// The wizard's state while a FOMOD is being answered: the launcher owns it so that the pad can drive it (`FomodSession.send`).
+    @Published private(set) var fomodSession: FomodSession?
     var isActive: Bool {
         if case .idle = stage { return false }
         return true
@@ -68,7 +68,11 @@ final class ImportCoordinator: ObservableObject {
             guard let self, let importer = self.importer else { return }
             let plan = try await importer.inspect(url)
             try Task.checkCancellation()
-            if plan.fomod != nil {
+            if let installer = plan.fomod {
+                let session = FomodSession(installer: installer, environment: importer.environment)
+                session.onFinish = { [weak self] choices in self?.fomodSession = nil; self?.install(plan, choices: choices) }
+                session.onCancel = { [weak self] in self?.cancel() }
+                self.fomodSession = session
                 self.stage = .fomod(plan)
             } else if !plan.warnings.isEmpty {
                 self.stage = .review(plan)
@@ -104,6 +108,7 @@ final class ImportCoordinator: ObservableObject {
     func cancel() {
         task?.cancel()
         task = nil
+        fomodSession = nil
         cleanup()
         stage = .idle
     }
@@ -118,6 +123,7 @@ final class ImportCoordinator: ObservableObject {
 
     func dismiss() {
         task = nil
+        fomodSession = nil
         cleanup()
         stage = .idle
     }

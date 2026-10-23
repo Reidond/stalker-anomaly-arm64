@@ -4,9 +4,7 @@
 import AppKit
 import Foundation
 import SwiftUI
-#if canImport(ModManagerCore)
 import ModManagerCore
-#endif
 
 @MainActor
 enum SelfTest {

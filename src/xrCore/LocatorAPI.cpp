@@ -40,8 +40,13 @@ CLocatorAPI* xr_FS = NULL;
 #endif
 
 #ifdef XR_PLATFORM_APPLE
+#include <dirent.h>
+#include <algorithm>
 // Virtual form ('\\' separators) of the directory that holds fsgame.ltx.
 static std::string fsRoot;
+// file::vfs of a file that is registered below a virtual folder but read from a real folder (mod files, CLocatorAPI::mount_mod)
+static const u32 VFS_MOUNTED = 0xfffffffe;
+static inline bool vfs_is_archive(u32 vfs) { return vfs != 0xffffffff && vfs != VFS_MOUNTED; }
 // Archive entries up to this size are pread() into a heap buffer; larger ones get a bounded mmap window.
 static const u32 PACK_MMAP_THRESHOLD = 256 * 1024;
 #else
@@ -631,7 +636,11 @@ void CLocatorAPI::get_stats(registry_stats& out) const
 			++out.folders;
 			continue;
 		}
+#ifdef XR_PLATFORM_APPLE
+		if (!vfs_is_archive(entry.vfs))
+#else
 		if (entry.vfs == 0xffffffff)
+#endif
 			++out.loose_files;
 		else
 		{
@@ -779,6 +788,122 @@ bool CLocatorAPI::Recurse(const char* path)
 		Register(path, 0xffffffff, 0, 0, 0, 0, 0);
 	return true;
 }
+
+#ifdef XR_PLATFORM_APPLE
+LPCSTR CLocatorAPI::mounted_path(const file& desc) const
+{
+	if (desc.vfs != VFS_MOUNTED || desc.ptr >= m_mounted.size())
+		return nullptr;
+	return *m_mounted[desc.ptr];
+}
+
+// Registers the files below `native_dir` as `virtual_dir` + their relative path ('\\' separators), depth first in name order.
+void CLocatorAPI::mount_walk(const std::string& native_dir, const std::string& virtual_dir, mount_stats& st)
+{
+	DIR* dir = opendir(native_dir.c_str());
+	if (!dir)
+		return;
+	struct Entry
+	{
+		std::string name;
+		bool is_dir;
+		u32 size;
+		u32 mtime;
+	};
+	std::vector<Entry> entries;
+	while (dirent* e = readdir(dir))
+	{
+		const char* n = e->d_name;
+		// ".", "..", .DS_Store, AppleDouble "._x", .svn: hidden files, as in the scan of the game folder
+		if (n[0] == '.' || 0 == strcmp(n, "Thumbs.db") || strchr(n, '\\'))
+			continue;
+		struct stat sb;
+		if (fstatat(dirfd(dir), n, &sb, 0) != 0)
+			continue; // dangling symlink, or gone
+		if (S_ISDIR(sb.st_mode))
+			entries.push_back({n, true, 0, 0});
+		else if (S_ISREG(sb.st_mode))
+		{
+			if (sb.st_size > 0xffffffffll)
+			{
+				Msg("! mount: %s/%s is larger than 4 GB, ignored", native_dir.c_str(), n);
+				continue;
+			}
+			entries.push_back({n, false, (u32)sb.st_size, (u32)sb.st_mtime});
+		}
+	}
+	closedir(dir);
+	std::sort(entries.begin(), entries.end(), [](const Entry& a, const Entry& b) { return a.name < b.name; });
+	for (const Entry& e : entries)
+	{
+		const std::string native = native_dir + "/" + e.name;
+		const std::string virt = virtual_dir + e.name;
+		if (e.is_dir)
+		{
+			++st.folders;
+			mount_walk(native, virt + "\\", st);
+			continue;
+		}
+		m_mounted.push_back(shared_str(native.c_str()));
+		Register(virt.c_str(), VFS_MOUNTED, 0, (u32)(m_mounted.size() - 1), e.size, e.size, e.mtime);
+		++st.files;
+	}
+}
+
+CLocatorAPI::mount_stats CLocatorAPI::mount_mod(LPCSTR mod_id, LPCSTR native_content_dir)
+{
+	mount_stats st = {};
+	CTimer timer;
+	timer.Start();
+
+	// content/ is laid out like the game folder; its top-level names are matched ignoring case (archives made on Windows)
+	std::string db_dir, gamedata_dir;
+	if (DIR* dir = opendir(native_content_dir))
+	{
+		while (dirent* e = readdir(dir))
+		{
+			if (e->d_name[0] == '.')
+				continue;
+			std::string lower(e->d_name);
+			for (char& c : lower)
+				c = (char)tolower((unsigned char)c);
+			struct stat sb;
+			const std::string full = std::string(native_content_dir) + "/" + e->d_name;
+			if (stat(full.c_str(), &sb) != 0 || !S_ISDIR(sb.st_mode))
+				++st.skipped;
+			else if (lower == "db")
+				db_dir = full;
+			else if (lower == "gamedata")
+				gamedata_dir = full;
+			else
+				++st.skipped;
+		}
+		closedir(dir);
+	}
+
+	if (!db_dir.empty())
+	{
+		// archives, like the ones of db\addons (its subfolders too)
+		string_path virt;
+		xr_virtual_path(db_dir.c_str(), virt, sizeof(virt));
+		xr_strcat(virt, sizeof(virt), "\\");
+		xr_strlwr(virt);
+		const size_t before = m_archives.size();
+		bNoRecurse = FALSE;
+		Recurse(virt);
+		st.archives = (u32)(m_archives.size() - before);
+	}
+	if (!gamedata_dir.empty())
+	{
+		PathPairIt root = pathes.find("$fs_root$");
+		R_ASSERT2(root != pathes.end(), "mount_mod: $fs_root$ is not defined yet");
+		mount_walk(gamedata_dir, std::string(root->second->m_Path) + "gamedata\\", st);
+	}
+	st.ms = timer.GetElapsed_sec() * 1000.0;
+	(void)mod_id;
+	return st;
+}
+#endif // XR_PLATFORM_APPLE
 
 bool file_handle_internal(LPCSTR file_name, u32& size, int& file_handle);
 void* FileDownload(LPCSTR file_name, const int& file_handle, u32& file_size);
@@ -977,6 +1102,21 @@ void CLocatorAPI::_initialize(u32 flags, LPCSTR target_folder, LPCSTR fs_name)
 			_GetItem(temp, 3, add, _delimiter);
 			_GetItem(temp, 4, def, _delimiter);
 			_GetItem(temp, 5, capt, _delimiter);
+#ifdef XR_PLATFORM_APPLE
+			// $mod_<id>$ = true | false | <native folder of the mod's content>: one mod, mounted here (mount_mod). The app shell writes
+			// these from modlist.json, lowest priority first, between db\addons and the game folder's own gamedata
+			if (0 == strncasecmp(id, "$mod_", 5))
+			{
+				string256 mod_id;
+				xr_strcpy(mod_id, sizeof(mod_id), id + 5);
+				if (size_t n = xr_strlen(mod_id); n && mod_id[n - 1] == '$')
+					mod_id[n - 1] = 0;
+				const mount_stats st = mount_mod(mod_id, root);
+				Msg("* mod %s: %u archives, %u files in %u folders mounted from gamedata (%.1f ms)%s", mod_id, st.archives, st.files,
+				    st.folders, st.ms, st.skipped ? ", other entries ignored" : "");
+				continue;
+			}
+#endif
 			xr_strlwr(id);
 #ifdef XR_PLATFORM_APPLE
 			// fsgame.ltx may give roots as POSIX paths (the port's tools do); the registry only knows '\\'
@@ -1238,7 +1378,11 @@ int CLocatorAPI::file_list(FS_FileSet& dest, LPCSTR path, u32 flags, LPCSTR mask
 				file.name = EFS.ChangeFileExt(entry_begin, "");
 			else
 				file.name = entry_begin;
+#ifdef XR_PLATFORM_APPLE
+			u32 fl = (vfs_is_archive(entry.vfs) ? FS_File::flVFS : 0);
+#else
 			u32 fl = (entry.vfs != 0xffffffff ? FS_File::flVFS : 0);
+#endif
 			file.size = entry.size_real;
 			file.time_write = entry.modif;
 			file.attrib = fl;
@@ -1651,6 +1795,17 @@ T* CLocatorAPI::r_open_impl(LPCSTR path, LPCSTR _fname)
 	// OK, analyse
 	if (0xffffffff == desc->vfs)
 		file_from_cache(R, fname, sizeof(fname), *desc, source_name);
+#ifdef XR_PLATFORM_APPLE
+	else if (VFS_MOUNTED == desc->vfs)
+	{
+		// a mod's file: registered in the game's folders, read from where it lies
+		LPCSTR real = mounted_path(*desc);
+		R_ASSERT3(real, "mounted file without a path", fname);
+		string_path real_name;
+		xr_strcpy(real_name, sizeof(real_name), real);
+		file_from_cache(R, real_name, sizeof(real_name), *desc, source_name);
+	}
+#endif
 	else
 		file_from_archive(R, fname, *desc);
 

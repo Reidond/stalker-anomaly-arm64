@@ -1,8 +1,6 @@
 // One mod: what it is, where it came from, how big, and which files it fights over with other mods.
 import SwiftUI
-#if canImport(ModManagerCore)
 import ModManagerCore
-#endif
 
 struct DetailsView: View {
     @EnvironmentObject private var model: LauncherModel

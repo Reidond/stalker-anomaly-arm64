@@ -50,6 +50,8 @@
 //   <t> ballast <MB>                allocate and touch that much memory (to provoke the memory warnings), in 64 MB chunks
 //   <t> unballast                   free it again
 //   <t> log <text...>               a line in the shell log
+//   <t> mods_delete <id>            remove <mods root>/<id> (only a plain folder name directly inside the mods root; symlinks are not followed)
+//   <t> mods_clear                  remove every entry of the mods root; put it last, the mounted mods are still in use by the engine
 //   <t> quit                        leave the app
 
 #define SDL_MAIN_USE_CALLBACKS 1
@@ -624,6 +626,18 @@ bool RunScript(App& app)
         }
         else if (step.command == "log")
             AppleShell::Log("anomaly: script: %s", step.args.c_str());
+        else if (step.command == "mods_delete" || step.command == "mods_clear")
+        {
+            // test runs that leave the mods folder as they found it (the iPad has no way to delete a file from outside): these act on the
+            // shell's own mods root only, and only when it is a folder named Mods with a modlist.json or nothing but mod folders in it
+            const AppleShell::ModsRemoval result =
+                step.command == "mods_clear" ? AppleShell::ClearModsRoot() : AppleShell::RemoveModFolder(step.args);
+            for (const std::string& path : result.removed)
+                AppleShell::Log("anomaly: script: removed %s", path.c_str());
+            for (const std::string& why : result.refused)
+                AppleShell::Log("anomaly: script: %s refused: %s", step.command.c_str(), why.c_str());
+            AppleShell::Log("anomaly: script: %s: %zu removed, %zu refused", step.command.c_str(), result.removed.size(), result.refused.size());
+        }
         else if (step.command == "quit")
             return false;
         else
@@ -1116,7 +1130,7 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char** argv)
     if (const char* env = getenv("ANOMALY_NO_LAUNCHER"); env && *env && *env != '0')
         no_launcher = true;
     const bool automated = script_path || app->exit_after_s > 0 || unattended_flag;
-    const bool show_launcher = want_launcher || launcher_script_path || (!no_launcher && !automated);
+    bool show_launcher = want_launcher || launcher_script_path || (!no_launcher && !automated);
 #if defined(SDL_PLATFORM_IOS)
     // Unattended mode is for the Mac (no focus, no window, silent sound). On the iPad a scripted run stays an ordinary foreground run:
     // the engine must pause when the app leaves the screen (GPU work in the background kills the app), so `g_always_active` is wrong there.
@@ -1170,13 +1184,17 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char** argv)
 
     InstallTerminateSource();
     const bool data_ok = AppleShell::ValidateGameData(paths.data_root).state == AppleShell::DataState::Ok;
+    // the shell reads the same flags (and commandline.txt): a run that asked to skip the launcher uses modlist.json as it is
+    if (AppleShell::SkipLauncher() && !want_launcher && !launcher_script_path)
+        show_launcher = false;
     if (data_ok && !show_launcher)
         return StartEngine(*app) ? SDL_APP_CONTINUE : SDL_APP_FAILURE;
-    if (app->unattended && !launcher_script_path)
+    if ((app->unattended || !show_launcher) && !launcher_script_path)
     {
         // nobody is there to read a launcher: fail instead of waiting for a click
-        AppleShell::Log("anomaly: unattended: the game data at %s is not usable, not showing the launcher", paths.data_root.c_str());
-        fprintf(stderr, "anomaly: unattended: the game data at %s is not usable\n", paths.data_root.c_str());
+        AppleShell::Log("anomaly: %s: the game data at %s is not usable, not showing the launcher", app->unattended ? "unattended" : "no launcher",
+                        paths.data_root.c_str());
+        fprintf(stderr, "anomaly: the game data at %s is not usable (no launcher was asked for)\n", paths.data_root.c_str());
         return SDL_APP_FAILURE;
     }
     return OpenLauncher(*app) ? SDL_APP_CONTINUE : SDL_APP_FAILURE;
@@ -1379,6 +1397,7 @@ SDL_AppResult SDL_AppEvent(void* appstate, SDL_Event* event)
     {
     case AppleShell::Launcher::Action::StartGame:
         CloseLauncher(*app);
+        AppleShell::WriteFsGameLtx(); // the data root or the mod list may have changed since the shell started: the engine mounts what this file says
         return StartEngine(*app) ? SDL_APP_CONTINUE : SDL_APP_FAILURE;
     case AppleShell::Launcher::Action::Quit:
         return SDL_APP_SUCCESS;

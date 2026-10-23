@@ -1,9 +1,7 @@
 // Mods: the load order with a switch per mod, reordering (drag in edit mode on the iPad, drag on the Mac), swipe to remove,
 // details. The last mod in the list wins a file conflict.
 import SwiftUI
-#if canImport(ModManagerCore)
 import ModManagerCore
-#endif
 
 struct ModsView: View {
     @EnvironmentObject private var model: LauncherModel

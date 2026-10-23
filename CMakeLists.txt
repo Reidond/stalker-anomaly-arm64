@@ -46,7 +46,7 @@ endif()
 
 # The SwiftUI launcher (the app's first screen) and the tool that renders its screens offscreen.
 add_subdirectory(src/Platform/Launcher)
-if(NOT ANOMALY_IOS)
+if(NOT ANOMALY_IOS AND TARGET anomaly_launcher)
     add_subdirectory(tools/launcher_snapshot)
 endif()
 
@@ -58,6 +58,7 @@ if(NOT ANOMALY_IOS)
     add_subdirectory(tools/ode_smoke)
     add_subdirectory(tools/luabind_smoke)
     add_subdirectory(tools/lua_cache_test)
+    add_subdirectory(tools/mods_mount_test)
 endif()
 add_subdirectory(tools/xrcore_smoke)
 

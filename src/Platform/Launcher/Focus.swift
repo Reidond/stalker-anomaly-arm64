@@ -43,6 +43,8 @@ final class FocusStore: ObservableObject {
 
     /// Asked first for every up/down press; true when it used the press (reordering).
     var directionInterceptor: ((Direction, _ reorder: Bool) -> Bool)?
+    /// Asked first for every button press; true when something else (the FOMOD wizard) took it.
+    var pressInterceptor: ((PadButton) -> Bool)?
     var backHandler: (() -> Void)?
     var optionsHandler: (() -> Void)?
 
@@ -79,6 +81,7 @@ final class FocusStore: ObservableObject {
     func press(_ button: PadButton, from source: InputDevice = .pad) {
         device = source
         held.insert(button)
+        if pressInterceptor?(button) == true { return }
         switch button {
         case .up: move(.up)
         case .down: move(.down)
