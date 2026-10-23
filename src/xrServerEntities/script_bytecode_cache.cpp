@@ -20,12 +20,16 @@ extern "C"
 #include <unistd.h>
 
 #include <atomic>
+#include <chrono>
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
 #include <mutex>
 #include <string>
+#include <thread>
+#include <unordered_map>
 #include <vector>
+#include <memory>
 
 namespace script_cache
 {
@@ -51,10 +55,20 @@ struct Header
 };
 static_assert(sizeof(Header) == 72, "cache entry header layout");
 
+// Entries of the directory read ahead by a background thread; an entry is handed to the first load that asks for it.
+struct Prefetch
+{
+	std::mutex lock;
+	std::unordered_map<std::string, std::vector<char>> files;
+	std::atomic<bool> cancel{false};
+	std::atomic<bool> done{false};
+};
+
 struct State
 {
 	std::mutex lock;
 	std::string dir;
+	std::shared_ptr<Prefetch> prefetch;
 	Stats stats;
 	bool vm_probed = false;
 	bool vm_ok = false;
@@ -206,12 +220,26 @@ bool read_file(const std::string& path, std::vector<char>& out)
 enum class Lookup { Hit, Miss, Stale, Incompatible, Corrupt };
 
 // Tries the entry at `path`. On Hit the chunk is on the stack.
-Lookup try_entry(lua_State* L, State& s, const std::string& path, const char* chunk_name, size_t src_size, uint64_t src_h1, uint64_t src_h2,
-                 size_t& bc_bytes, double& io_ms, double& decode_ms)
+Lookup try_entry(lua_State* L, State& s, const std::shared_ptr<Prefetch>& pre, const std::string& path, const char* chunk_name, size_t src_size,
+                 uint64_t src_h1, uint64_t src_h2, size_t& bc_bytes, double& io_ms, double& decode_ms, bool& from_prefetch)
 {
 	thread_local std::vector<char> buf;
 	const double io0 = now_ms();
-	const bool read_ok = read_file(path, buf);
+	bool read_ok = false;
+	from_prefetch = false;
+	if (pre)
+	{
+		std::lock_guard<std::mutex> g(pre->lock);
+		auto it = pre->files.find(path);
+		if (it != pre->files.end())
+		{
+			buf = std::move(it->second);
+			pre->files.erase(it);
+			read_ok = from_prefetch = true;
+		}
+	}
+	if (!read_ok)
+		read_ok = read_file(path, buf);
 	io_ms = now_ms() - io0;
 	if (!read_ok)
 		return Lookup::Miss;
@@ -291,13 +319,54 @@ void hash128(const void* data, size_t size, uint64_t& h1, uint64_t& h2)
 	hash128_impl(data, size, h1, h2);
 }
 
-void set_directory(const char* dir)
+void set_directory(const char* dir, bool prefetch)
 {
 	State& s = S();
 	std::lock_guard<std::mutex> g(s.lock);
+	if (s.prefetch)
+		s.prefetch->cancel = true; // the thread ends at its next file; the memory goes with the last reference
+	s.prefetch.reset();
 	s.dir = dir ? dir : "";
 	while (s.dir.size() > 1 && (s.dir.back() == '/' || s.dir.back() == '\\'))
 		s.dir.pop_back();
+	if (!prefetch || s.dir.empty())
+		return;
+	auto pre = std::make_shared<Prefetch>();
+	s.prefetch = pre;
+	const std::string d = s.dir;
+	std::thread([pre, d]() {
+		std::error_code ec;
+		size_t total = 0;
+		for (const auto& entry : std::filesystem::directory_iterator(d, ec))
+		{
+			if (pre->cancel.load())
+				break;
+			const std::string name = entry.path().filename().string();
+			if (name.size() < 6 || name.compare(name.size() - 5, 5, ".luac") != 0)
+				continue;
+			std::vector<char> data;
+			if (!read_file(entry.path().string(), data))
+				continue;
+			total += data.size();
+			std::lock_guard<std::mutex> g(pre->lock);
+			pre->files.emplace(entry.path().string(), std::move(data));
+			if (total > (64u << 20)) // a cache this large is not a cache of scripts: stop reading ahead
+				break;
+		}
+		pre->done = true;
+	}).detach();
+}
+
+void wait_prefetch()
+{
+	std::shared_ptr<Prefetch> pre;
+	{
+		State& s = S();
+		std::lock_guard<std::mutex> g(s.lock);
+		pre = s.prefetch;
+	}
+	while (pre && !pre->done.load())
+		std::this_thread::sleep_for(std::chrono::milliseconds(1));
 }
 
 const char* directory()
@@ -316,10 +385,12 @@ int load(lua_State* L, const char* text, size_t size, const char* chunk_name)
 {
 	State& s = S();
 	std::string dir;
+	std::shared_ptr<Prefetch> pre;
 	bool vm_ok;
 	{
 		std::lock_guard<std::mutex> g(s.lock);
 		dir = s.dir;
+		pre = s.prefetch;
 		vm_ok = dir.empty() ? false : probe_vm(L, s);
 	}
 	if (dir.empty() || !vm_ok)
@@ -332,7 +403,8 @@ int load(lua_State* L, const char* text, size_t size, const char* chunk_name)
 	const double t1 = now_ms();
 	size_t bc_bytes = 0;
 	double io_ms = 0, decode_ms = 0;
-	const Lookup found = try_entry(L, s, path, chunk_name, size, h1, h2, bc_bytes, io_ms, decode_ms);
+	bool from_prefetch = false;
+	const Lookup found = try_entry(L, s, pre, path, chunk_name, size, h1, h2, bc_bytes, io_ms, decode_ms, from_prefetch);
 	const double t2 = now_ms();
 
 	Stats d; // the deltas of this call
@@ -342,6 +414,7 @@ int load(lua_State* L, const char* text, size_t size, const char* chunk_name)
 	if (found == Lookup::Hit)
 	{
 		d.hits = 1;
+		d.prefetched = from_prefetch ? 1 : 0;
 		d.read_ms = t2 - t1;
 		d.io_ms = io_ms;
 		d.decode_ms = decode_ms;
@@ -363,7 +436,14 @@ int load(lua_State* L, const char* text, size_t size, const char* chunk_name)
 		if (rc == 0)
 		{
 			if (store_entry(L, s, dir, path, chunk_name, size, h1, h2))
+			{
 				d.stored = 1;
+				if (pre) // a copy read ahead before this store is the old entry
+				{
+					std::lock_guard<std::mutex> gp(pre->lock);
+					pre->files.erase(path);
+				}
+			}
 			else
 				d.store_failed = 1;
 			d.store_ms = now_ms() - c1;
@@ -373,6 +453,7 @@ int load(lua_State* L, const char* text, size_t size, const char* chunk_name)
 	std::lock_guard<std::mutex> g(s.lock);
 	Stats& t = s.stats;
 	t.hits += d.hits;
+	t.prefetched += d.prefetched;
 	t.misses += d.misses;
 	t.stale += d.stale;
 	t.incompatible += d.incompatible;
@@ -409,6 +490,15 @@ size_t purge()
 	size_t removed = 0;
 	if (dir.empty())
 		return 0;
+	{
+		State& s = S();
+		std::lock_guard<std::mutex> g(s.lock);
+		if (s.prefetch) // what it has read is not wanted any more, and what it still reads goes to a copy nobody looks at
+		{
+			s.prefetch->cancel = true;
+			s.prefetch.reset();
+		}
+	}
 	std::error_code ec;
 	for (const auto& entry : std::filesystem::directory_iterator(dir, ec))
 	{

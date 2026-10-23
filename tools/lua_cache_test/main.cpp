@@ -157,7 +157,7 @@ void test_cold_then_warm()
 {
 	printf("miss, store, hit\n");
 	TempDir dir("cold");
-	script_cache::set_directory(dir.path.c_str());
+	script_cache::set_directory(dir.path.c_str(), false);
 	script_cache::reset_stats();
 	bool cached = false;
 	const std::string first = run(kScriptV1, kName, &cached);
@@ -180,7 +180,7 @@ void test_stale_source()
 {
 	printf("stale source: an edited script loads from the text\n");
 	TempDir dir("stale");
-	script_cache::set_directory(dir.path.c_str());
+	script_cache::set_directory(dir.path.c_str(), false);
 	script_cache::reset_stats();
 	run(variant("one"), kName);
 	bool cached = false;
@@ -211,7 +211,7 @@ void test_addon_override()
 {
 	printf("addon override of a stock script\n");
 	TempDir dir("addon");
-	script_cache::set_directory(dir.path.c_str());
+	script_cache::set_directory(dir.path.c_str(), false);
 	script_cache::reset_stats();
 	const char* name = "@gamedata/scripts/bind_stalker.script";
 	bool cached = false;
@@ -238,7 +238,7 @@ void test_corrupt_entries()
 {
 	printf("corrupt entries fall back to the text and are rewritten\n");
 	TempDir dir("corrupt");
-	script_cache::set_directory(dir.path.c_str());
+	script_cache::set_directory(dir.path.c_str(), false);
 	const std::string path = [] { return script_cache::entry_path(kName); }();
 	auto fresh_entry = [&]() { fs::remove(path); run(kScriptV1, kName); return read_all(path); };
 	const std::string expect = run(kScriptV1, kName);
@@ -315,7 +315,7 @@ void test_other_vm()
 {
 	printf("an entry of another VM or format is not used\n");
 	TempDir dir("vm");
-	script_cache::set_directory(dir.path.c_str());
+	script_cache::set_directory(dir.path.c_str(), false);
 	run(kScriptV1, kName);
 	const std::string path = script_cache::entry_path(kName);
 	const std::string good = read_all(path);
@@ -367,7 +367,7 @@ void test_errors_and_tracebacks()
 		"local ok, err = xpcall(outer, debug.traceback)\n"
 		"return err, debug.getinfo(1, 'S').source\n";
 	TempDir dir("trace");
-	script_cache::set_directory(dir.path.c_str());
+	script_cache::set_directory(dir.path.c_str(), false);
 	bool cached = false;
 	const std::string cold = run(text, "@/g/scripts/trace.script", &cached);
 	CHECK(!cached);
@@ -400,10 +400,10 @@ void test_unwritable()
 	const std::string file = dir.path + "/a_file";
 	write_all(file, "x");
 	script_cache::reset_stats();
-	script_cache::set_directory((file + "/under_a_file").c_str());
+	script_cache::set_directory((file + "/under_a_file").c_str(), false);
 	CHECK_EQ(run(variant("a"), kName), "a");
 	CHECK(script_cache::stats().store_failed == 1);
-	script_cache::set_directory((dir.path + "/missing/a/b/c").c_str()); // created on demand
+	script_cache::set_directory((dir.path + "/missing/a/b/c").c_str(), false); // created on demand
 	script_cache::reset_stats();
 	bool cached = false;
 	CHECK_EQ(run(variant("b"), kName), "b");
@@ -413,7 +413,7 @@ void test_unwritable()
 	const std::string ro = dir.path + "/ro";
 	fs::create_directory(ro);
 	fs::permissions(ro, fs::perms::owner_read | fs::perms::owner_exec);
-	script_cache::set_directory(ro.c_str());
+	script_cache::set_directory(ro.c_str(), false);
 	script_cache::reset_stats();
 	CHECK_EQ(run(variant("c"), kName), "c");
 	if (geteuid() != 0)
@@ -425,7 +425,7 @@ void test_warm_and_purge()
 {
 	printf("warm and purge\n");
 	TempDir dir("warm");
-	script_cache::set_directory(dir.path.c_str());
+	script_cache::set_directory(dir.path.c_str(), false);
 	script_cache::reset_stats();
 	Lua lua;
 	CHECK(script_cache::warm(lua.L, kScriptV1.data(), kScriptV1.size(), kName));
@@ -442,6 +442,54 @@ void test_warm_and_purge()
 	CHECK(fs::exists(dir.path + "/other.txt"));
 	run(kScriptV1, kName, &cached);
 	CHECK(!cached);
+}
+
+void test_prefetch()
+{
+	printf("prefetch\n");
+	TempDir dir("prefetch");
+	// entries written by an earlier launch
+	script_cache::set_directory(dir.path.c_str(), false);
+	const std::string a_name = "@scripts/a.script", b_name = "@scripts/b.script";
+	run(variant("a"), a_name.c_str());
+	run(variant("b"), b_name.c_str());
+	// the next launch: the entries are read ahead, the loads take them from memory
+	script_cache::set_directory(dir.path.c_str(), true);
+	script_cache::wait_prefetch();
+	script_cache::reset_stats();
+	bool cached = false;
+	CHECK_EQ(run(variant("a"), a_name.c_str(), &cached), "a");
+	CHECK(cached);
+	CHECK(script_cache::stats().prefetched == 1);
+	// an entry is handed out once: the second load reads the file
+	CHECK_EQ(run(variant("a"), a_name.c_str(), &cached), "a");
+	CHECK(cached);
+	CHECK(script_cache::stats().prefetched == 1 && script_cache::stats().hits == 2);
+	// an entry that was edited on disk after the read-ahead: the copy in memory is the old one, which is stale for the new text, never wrong
+	CHECK_EQ(run(variant("b2"), b_name.c_str(), &cached), "b2");
+	CHECK(!cached);
+	CHECK(script_cache::stats().stale == 1);
+	CHECK_EQ(run(variant("b2"), b_name.c_str(), &cached), "b2");
+	CHECK(cached);
+	// a damaged file read ahead is a corrupt entry like any other
+	write_all(script_cache::entry_path(a_name.c_str()), std::string(300, 'x'));
+	script_cache::set_directory(dir.path.c_str(), true);
+	script_cache::wait_prefetch();
+	script_cache::reset_stats();
+	CHECK_EQ(run(variant("a"), a_name.c_str(), &cached), "a");
+	CHECK(!cached);
+	CHECK(script_cache::stats().corrupt == 1);
+	// purge empties the read-ahead as well; changing the directory while it runs is harmless
+	script_cache::set_directory(dir.path.c_str(), true);
+	script_cache::purge();
+	script_cache::wait_prefetch();
+	CHECK_EQ(run(variant("a"), a_name.c_str(), &cached), "a");
+	CHECK(!cached);
+	for (int i = 0; i < 20; ++i)
+		script_cache::set_directory(dir.path.c_str(), true);
+	script_cache::set_directory("", true);
+	CHECK_EQ(run(variant("a"), a_name.c_str(), &cached), "a");
+	script_cache::set_directory("");
 }
 
 void test_hash()
@@ -484,7 +532,7 @@ void test_concurrent()
 {
 	printf("two threads storing and loading the same chunk\n");
 	TempDir dir("threads");
-	script_cache::set_directory(dir.path.c_str());
+	script_cache::set_directory(dir.path.c_str(), false);
 	std::atomic<int> wrong{0};
 	auto worker = [&](int id) {
 		for (int i = 0; i < 150; ++i)
@@ -512,7 +560,7 @@ void test_large_script()
 {
 	printf("a large generated script\n");
 	TempDir dir("large");
-	script_cache::set_directory(dir.path.c_str());
+	script_cache::set_directory(dir.path.c_str(), false);
 	std::string text;
 	for (int i = 0; i < 4000; ++i)
 		text += "function f" + std::to_string(i) + "(a, b) local t = {a, b, 'x" + std::to_string(i) + "'} if a > b then return t[1] * " + std::to_string(i) +
@@ -565,7 +613,7 @@ int bench(const char* dir, int rounds)
 			lua_settop(lua.L, 0);
 		}
 		text_ms = std::min(text_ms, now_ms() - t);
-		script_cache::set_directory(cache.path.c_str());
+		script_cache::set_directory(cache.path.c_str(), false);
 		script_cache::purge();
 		t = now_ms();
 		for (const auto& f : files)
@@ -609,6 +657,7 @@ int main(int argc, char** argv)
 	test_errors_and_tracebacks();
 	test_unwritable();
 	test_warm_and_purge();
+	test_prefetch();
 	test_hash();
 	test_concurrent();
 	test_large_script();

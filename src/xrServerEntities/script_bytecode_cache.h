@@ -31,6 +31,7 @@ namespace script_cache
 struct Stats
 {
 	uint32_t hits = 0;           // loaded from bytecode
+	uint32_t prefetched = 0;     //   of which the entry came from the prefetch
 	uint32_t misses = 0;         // no entry for the chunk
 	uint32_t stale = 0;          // entry of other text (edited script, override): compiled again
 	uint32_t incompatible = 0;   // entry of another VM / format version
@@ -48,7 +49,12 @@ struct Stats
 };
 
 // The cache directory, native path. Empty (the default) turns the cache off: `load` is luaL_loadbuffer then.
-void set_directory(const char* dir);
+// `prefetch`: a thread reads the entries of the directory into memory in the background, so that the loads find them there (opening and reading
+// hundreds of small files is most of the time of a hit: 53 of 60 ms for 474 entries on the iPad). Calling it again with the same directory
+// refills the prefetch (the engine does this at every new Lua state).
+void set_directory(const char* dir, bool prefetch = true);
+// Waits until the prefetch thread has read the directory (tests).
+void wait_prefetch();
 const char* directory();
 
 // luaL_loadbuffer(L, text, size, chunk_name) through the cache: 0 and the chunk on the stack, or an error code and message.

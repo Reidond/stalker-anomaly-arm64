@@ -15,6 +15,9 @@
 #     -w seconds   warm-up in the village before the places (default 120; 0 measures cool)
 #     -g           also the new-game test (about 90 s a launch)
 #     -q           the load test only (no timer or profiler runs)
+#     -P           the profiler run only
+#     -T           the timer runs only
+#     -m modes     graphics modes of the timer runs (default "quality performance")
 #
 # Needs the iPad connected and unlocked. Never uses the Simulator. Leaves the iPad's user.ltx as it found it (the runs do not change it).
 set -euo pipefail
@@ -29,8 +32,11 @@ loads=3
 soak=120
 newgame=0
 quick=0
-while getopts "is:o:k:n:w:gq" opt; do
-    case $opt in i) install=1;; s) save=$OPTARG;; o) out=$OPTARG;; k) lock=$OPTARG;; n) loads=$OPTARG;; w) soak=$OPTARG;; g) newgame=1;; q) quick=1;; *) exit 2;; esac
+profonly=0
+timersonly=0
+modes="quality performance"
+while getopts "is:o:k:n:w:gqPTm:" opt; do
+    case $opt in i) install=1;; s) save=$OPTARG;; o) out=$OPTARG;; k) lock=$OPTARG;; n) loads=$OPTARG;; w) soak=$OPTARG;; g) newgame=1;; m) modes=$OPTARG;; T) timersonly=1;; q) quick=1;; P) profonly=1; quick=1;; *) exit 2;; esac
 done
 if [[ -n $lock && -e $lock ]]; then echo "the iPad is in use ($lock exists)" >&2; exit 3; fi
 mkdir -p "$out"
@@ -53,7 +59,24 @@ run() { # name script [args]: a launch, its console output, the shell log and th
         sleep 10; waited=$((waited + 10))
     done
     echo "== $name"
-    $ipad script "$script" "$@" > "$out/$name.out" 2>&1 || true
+    # engine flags go through Documents/commandline.txt: devicectl would read `-lua_perf` as its own `-l`
+    printf '%s\n' "$@" > "$out/commandline.txt"
+    $ipad put "$out/commandline.txt" commandline.txt > "$out/$name.out" 2>&1 || true
+    # No `--console`: a launch with the console attached failed with error 10002 (EINVAL) most of the time after the first one. The script is copied to
+    # Documents, the app is started on its own and polled until it is gone; a launch that fails ("pid could not be determined") is tried up to three times.
+    $ipad put "$script" "${script:t}" >> "$out/$name.out" 2>&1 || true
+    local attempt tries
+    for attempt in 1 2 3; do
+        $ipad start --script "${script:t}" >> "$out/$name.out" 2>&1 || true
+        for tries in {1..15}; do (( $(running) > 0 )) && break; sleep 2; done
+        (( $(running) > 0 )) && break
+        echo "   launch failed (attempt $attempt)"; sleep 10
+    done
+    local limit=0
+    while (( $(running) > 0 )); do
+        (( limit >= 2400 )) && { echo "   the run did not end in 40 minutes: terminating it" >&2; $ipad kill; break; }
+        sleep 5; limit=$((limit + 5))
+    done
     mkdir -p "$out/$name.logs"
     copy_from "$appdata/logs" "$out/$name.logs"
     copy_from "Documents/anomaly-shell.log" "$out/$name.shell.log"
@@ -62,14 +85,25 @@ engine_log() { find "$out/$1.logs" -name "xray_*.log" -not -name "*.bkp" 2>/dev/
 report=$out/loads.md
 
 (( install )) && { $ipad build; $ipad install; }
+# the flags file is emptied at the end (it did not exist before)
+trap 'printf "# empty\n" > "$out/commandline.txt"; $ipad put "$out/commandline.txt" commandline.txt > /dev/null 2>&1 || true' EXIT
+# runs set gfx_mode and gfx_fps and the game saves them in user.ltx at exit: the last run leaves the defaults back (see the end of this script)
 
+if (( profonly )); then
+    python3 -I "$repo/tools/lua_measure.py" script --save $save --mode quality --fps 30 --soak $soak --profile > "$out/lua_prof.script"
+    run lua_prof "$out/lua_prof.script" -dbg -lua_profile
+    exit 0
+fi
 if (( ! quick )); then
-    for mode in quality performance; do
-        python3 -I "$repo/tools/lua_measure.py" script --save $save --mode $mode --soak $soak > "$out/lua_$mode.script"
+    for mode in ${=modes}; do
+        # the cap is set by hand: the choice a previous run saved in user.ltx (gfx_fps 30) would stay on in Performance mode
+        fps=30; [[ $mode == performance ]] && fps=60
+        python3 -I "$repo/tools/lua_measure.py" script --save $save --mode $mode --fps $fps --soak $soak > "$out/lua_$mode.script"
         run lua_$mode "$out/lua_$mode.script" -dbg -lua_perf
-        python3 -I "$repo/tools/lua_measure.py" summarize --engine "$(engine_log lua_$mode)" --shell "$out/lua_$mode.shell.log" > "$out/lua_$mode.md" 2>/dev/null || true
+        python3 -I "$repo/tools/lua_measure.py" summarize --engine "$(engine_log lua_$mode)" --shell "$out/lua_$mode.shell.log" --budget quality=33.3,performance=16.7 > "$out/lua_$mode.md" 2>/dev/null || true
     done
-    python3 -I "$repo/tools/lua_measure.py" script --save $save --mode quality --soak $soak --profile > "$out/lua_prof.script"
+    (( timersonly )) && exit 0
+    python3 -I "$repo/tools/lua_measure.py" script --save $save --mode quality --fps 30 --soak $soak --profile > "$out/lua_prof.script"
     run lua_prof "$out/lua_prof.script" -dbg -lua_profile
 fi
 
@@ -136,4 +170,7 @@ for kind in $kinds; do
     done
 done
 cat "$report"
+# the runs set gfx_mode and gfx_fps and the game saves them in user.ltx at exit: put the defaults back (Quality, Auto)
+printf '1 console gfx_mode quality\n1.2 console gfx_fps 0\n6 quit\n' > "$out/reset.script"
+run reset "$out/reset.script" -dbg
 echo "results in $out"
