@@ -606,7 +606,14 @@ local function phcalls()
 	for round = 1, 20 do
 		for i = 1, N do ran[i] = 0 end
 		request = true
-		pause(300) -- a few frames: every call is run at least once
+		-- until every call that is not removed before it runs has run (a slow build, TSan, needs seconds), then a little longer for a second run
+		wait_for("the ph calls to run", 20000, function()
+			for i = 1, N do
+				if i % 4 ~= 3 and ran[i] < 1 then return false end
+			end
+			return true
+		end)
+		pause(500)
 		local bad = {}
 		for i = 1, N do
 			-- 2 is removed by 1? no: odd i % 4 == 1 removes itself, i % 4 == 2 removes i+1 (i+1 % 4 == 3) before it runs
