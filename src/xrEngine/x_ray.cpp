@@ -24,6 +24,7 @@
 #include "resource.h"
 #include "LightAnimLibrary.h"
 #include "../xrcdb/ispatial.h"
+#include "render.h"
 #ifndef XR_PLATFORM_APPLE
 # include "Text_Console.h"
 #endif
@@ -709,6 +710,9 @@ static void Startup_Create()
 	Memory.mem_usage();
 }
 
+// device.cpp: the light of the precache frames is a global, released when they have counted down
+extern ref_light precache_light;
+
 static void Startup_Destroy()
 {
 	// Discord
@@ -719,6 +723,10 @@ static void Startup_Destroy()
 	//Reshade
 	if (use_reshade)
 		unregister_reshade();
+
+	// A quit before the precache frames have counted down (a load that has just finished) would leave that light to the static
+	// destructors, which run after the spatial DB below is gone: ~light unregisters from it (a use after free at exit).
+	precache_light.destroy();
 
 	// Destroy APP
 	xr_delete(g_SpatialSpacePhysic);
