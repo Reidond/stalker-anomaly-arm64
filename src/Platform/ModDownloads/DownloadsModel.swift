@@ -40,6 +40,68 @@ final class DownloadsModel: NSObject, ObservableObject {
     private var noticeGeneration = 0
     static let reserveBytes: Int64 = 128 << 20
 
+    /// Tests only: delays installing the delegate on a download started with `startDownload`/`resumeDownload`, as a loaded
+    /// main thread would.
+    var testingAttachDelay: TimeInterval = 0
+    /// A browser download that reports nothing for this long is taken to be stuck and is started again (twice at most).
+    /// WebKit gives a download started with `startDownload` or `resumeDownload` no events until it has a delegate, and
+    /// a loaded main thread can lose that race: the download then waits for a delegate that came too late and never moves.
+    var stallSeconds: TimeInterval = 10
+
+    private func attachSoon(_ download: WKDownload, to item: DownloadItem) {
+        if testingAttachDelay > 0 {
+            let delay = testingAttachDelay
+            testingAttachDelay = 0
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in self?.attach(download, to: item) }
+        } else {
+            attach(download, to: item)
+        }
+    }
+
+    /// The item a delegate call is about: only the download the item currently owns (an old one that was replaced is ignored).
+    private func currentItem(for download: WKDownload) -> DownloadItem? {
+        guard let item = webItems[ObjectIdentifier(download)], item.webDownload === download else { return nil }
+        item.lastEvent = ProcessInfo.processInfo.systemUptime
+        return item
+    }
+
+    private func watch(_ download: WKDownload, item: DownloadItem) {
+        item.lastEvent = ProcessInfo.processInfo.systemUptime
+        Task { [weak self, weak item, weak download] in
+            while true {
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+                guard let self, let item, let download, item.webDownload === download, item.state == .downloading else { return }
+                if ProcessInfo.processInfo.systemUptime - item.lastEvent > self.stallSeconds {
+                    self.recoverStalled(item, download: download)
+                    return
+                }
+            }
+        }
+    }
+
+    private func recoverStalled(_ item: DownloadItem, download: WKDownload) {
+        trace("stalled \(item.fileName), restarts so far \(item.restarts)")
+        item.webDownload = nil
+        item.progressObservations.removeAll()
+        Task { _ = await download.cancel() }
+        if let part = item.partURL { try? FileManager.default.removeItem(at: part) }
+        item.partURL = nil
+        guard item.restarts < 2 else {
+            item.state = .failed("The browser did not deliver the file. Try the download again.")
+            return
+        }
+        item.restarts += 1
+        item.receivedBytes = 0
+        item.resumeData = nil
+        startWeb(item, request: item.request ?? URLRequest(url: item.sourceURL))
+    }
+
+    /// MOD_DOWNLOADS_TRACE=1 prints the browser downloads' delegate events (a debugging aid for the iPad lab and the tests).
+    private static let tracing = ProcessInfo.processInfo.environment["MOD_DOWNLOADS_TRACE"] != nil
+    fileprivate func trace(_ message: @autoclosure () -> String) {
+        if Self.tracing { print("[trace \(String(format: "%.2f", ProcessInfo.processInfo.systemUptime.truncatingRemainder(dividingBy: 1000)))] \(message())") }
+    }
+
     init(dir: URL, browser: BrowserModel? = nil, bookmarks: BookmarkStore? = nil, linkDownloader: LinkDownloader = LinkDownloader()) {
         self.dir = dir
         self.browser = browser ?? BrowserModel()
@@ -166,9 +228,10 @@ final class DownloadsModel: NSObject, ObservableObject {
             if let data = item.resumeData {
                 item.resumeData = nil
                 item.state = .downloading
-                Task {
-                    let download = await browser.webView.resumeDownload(fromResumeData: data)
-                    attach(download, to: item)
+                // the completion-handler form, not the async one: the delegate has to be in place before the first event, and an
+                // executor hop in between lets a fast download finish unseen
+                browser.webView.resumeDownload(fromResumeData: data) { [weak self] download in
+                    self?.attachSoon(download, to: item)
                 }
             } else {
                 startWeb(item, request: item.request ?? URLRequest(url: item.sourceURL))
@@ -206,22 +269,26 @@ final class DownloadsModel: NSObject, ObservableObject {
     private func startWeb(_ item: DownloadItem, request: URLRequest) {
         item.state = .downloading
         item.request = request
-        Task {
-            let download = await browser.webView.startDownload(using: request)
-            attach(download, to: item)
+        browser.webView.startDownload(using: request) { [weak self] download in
+            self?.attachSoon(download, to: item)
         }
     }
 
     fileprivate func attach(_ download: WKDownload, to item: DownloadItem) {
+        trace("attach \(item.fileName) state=\(item.state) download=\(ObjectIdentifier(download).hashValue % 10000)")
         download.delegate = self
         item.webDownload = download
         item.request = item.request ?? download.originalRequest
         webItems[ObjectIdentifier(download)] = item
+        watch(download, item: item)
         let progress = download.progress
         item.progressObservations = [
             progress.observe(\.completedUnitCount, options: [.initial, .new]) { progress, _ in
                 let done = progress.completedUnitCount
-                Task { @MainActor in if item.state == .downloading { item.receivedBytes = done } }
+                Task { @MainActor in
+                    if item.state == .downloading { item.receivedBytes = done }
+                    item.lastEvent = ProcessInfo.processInfo.systemUptime
+                }
             },
             progress.observe(\.totalUnitCount, options: [.initial, .new]) { progress, _ in
                 let total = progress.totalUnitCount
@@ -282,7 +349,8 @@ extension DownloadsModel: BrowserDownloadHandler {
 
 extension DownloadsModel: WKDownloadDelegate {
     func download(_ download: WKDownload, decideDestinationUsing response: URLResponse, suggestedFilename: String) async -> URL? {
-        guard let item = webItems[ObjectIdentifier(download)] else { return nil }
+        trace("decideDestination download=\(ObjectIdentifier(download).hashValue % 10000) mapped=\(webItems[ObjectIdentifier(download)] != nil) length=\(response.expectedContentLength) status=\((response as? HTTPURLResponse)?.statusCode ?? 0)")
+        guard let item = currentItem(for: download) else { return nil }
         item.finalURL = response.url
         var name = FileNaming.sanitize(suggestedFilename)
         if (name as NSString).pathExtension.isEmpty, let ext = FileNaming.pathExtension(forMIME: response.mimeType) { name += "." + ext }
@@ -311,12 +379,14 @@ extension DownloadsModel: WKDownloadDelegate {
     }
 
     func downloadDidFinish(_ download: WKDownload) {
-        guard let item = webItems[ObjectIdentifier(download)], item.state == .downloading else { return }
+        trace("didFinish download=\(ObjectIdentifier(download).hashValue % 10000) mapped=\(webItems[ObjectIdentifier(download)] != nil) state=\(String(describing: webItems[ObjectIdentifier(download)]?.state))")
+        guard let item = currentItem(for: download), item.state == .downloading else { return }
         finishWeb(item)
     }
 
     func download(_ download: WKDownload, didFailWithError error: Error, resumeData: Data?) {
-        guard let item = webItems[ObjectIdentifier(download)] else { return }
+        trace("didFail download=\(ObjectIdentifier(download).hashValue % 10000) error=\((error as NSError).domain) \((error as NSError).code) resume=\(resumeData?.count ?? 0)")
+        guard let item = currentItem(for: download) else { return }
         item.progressObservations.removeAll()
         item.resumeData = resumeData
         guard item.state == .downloading else { return } // cancelled by the user, or already failed with a better message

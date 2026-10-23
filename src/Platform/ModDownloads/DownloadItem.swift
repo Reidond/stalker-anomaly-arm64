@@ -39,6 +39,9 @@ final class DownloadItem: ObservableObject, Identifiable {
     var request: URLRequest?
     var partURL: URL?
     var progressObservations: [NSKeyValueObservation] = []
+    /// When the browser last said anything about this download (a delegate call or a progress change), for the stall watchdog.
+    var lastEvent: TimeInterval = ProcessInfo.processInfo.systemUptime
+    var restarts = 0
 
     init(origin: DownloadedFile.Kind, sourceURL: URL, pageURL: URL? = nil, fileName: String? = nil, state: State) {
         self.origin = origin

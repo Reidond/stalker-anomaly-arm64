@@ -12,6 +12,7 @@ var out = "mod_downloads.png"
 var width: CGFloat = 1180
 var height: CGFloat = 760
 var dark = false
+var solid = false
 var args = Array(CommandLine.arguments.dropFirst())
 while let arg = args.first {
     args.removeFirst()
@@ -20,6 +21,7 @@ while let arg = args.first {
     case "--width": width = CGFloat(Double(args.removeFirst()) ?? 1180)
     case "--height": height = CGFloat(Double(args.removeFirst()) ?? 760)
     case "--dark": dark = true
+    case "--solid": solid = true // Reduce Transparency / no glass
     case "--narrow": width = 700; height = 900
     default: print("unknown argument \(arg)"); exit(2)
     }
@@ -27,10 +29,10 @@ while let arg = args.first {
 
 let samplePage = """
 <!DOCTYPE html><html><head><meta charset="utf-8"><title>Sample page</title>
-<style>body{font-family:-apple-system,Helvetica,sans-serif;margin:40px;color:#222;background:#fff}
-h1{font-size:28px}.card{border:1px solid #ccd;border-radius:10px;padding:14px 18px;margin:12px 0;max-width:640px}
-.btn{display:inline-block;background:#2a6df4;color:#fff;border-radius:8px;padding:10px 18px;font-weight:600}
-small{color:#667}</style></head><body>
+<style>body{font-family:-apple-system,Helvetica,sans-serif;margin:40px;padding-top:150px;color:#e6e2d8;background:#1c2530}
+h1{font-size:28px}.card{border:1px solid #3a4756;border-radius:12px;padding:14px 18px;margin:12px 0;max-width:640px;background:#232f3c}
+.btn{display:inline-block;background:#3b6ea5;color:#fff;border-radius:8px;padding:10px 18px;font-weight:600}
+small{color:#93a1b1}</style></head><body>
 <h1>Web page area</h1>
 <p>This is the web view. In the app it shows ModDB, GitHub or any other site; here a local sample page stands in.</p>
 <div class="card"><b>Example addon</b><br><small>Version 1.0 &middot; 12.3 MB</small><br><br><span class="btn">Download</span></div>
@@ -75,16 +77,19 @@ func run() async {
 
     // the colour sets the size; the image only fills it
     let page: AnyView = AnyView(
-        Color.white.overlay(alignment: .topLeading) {
+        Color(red: 0.11, green: 0.145, blue: 0.19).overlay(alignment: .topLeading) {
             if let snapshot { Image(nsImage: snapshot).resizable().aspectRatio(contentMode: .fill) }
         }
         .clipped()
     )
 
+    var theme = DownloadsTheme.anomaly
+    theme.prefersGlass = !solid
     let view = DownloadsView(model: model, webContent: page)
         .frame(width: width, height: height)
         .environment(\.colorScheme, dark ? .dark : .light)
         .environment(\.snapshotMode, true)
+        .downloadsTheme(theme)
     let renderer = ImageRenderer(content: view)
     renderer.scale = 2
     guard let image = renderer.nsImage, let tiff = image.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff),

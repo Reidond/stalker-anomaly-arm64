@@ -69,6 +69,28 @@ bookmarks, the web page (WKWebView), and the downloads list (a side panel on wid
     code only reads the pad (no handlers are installed), so it cannot take input from anything else. A hardware keyboard scrolls the page as usual, and has Cmd+L (address), Cmd+[ and Cmd+] (back, forward) and Cmd+R (reload).
 - Both layouts (wide and narrow) are in the PR as offscreen renders.
 
+### Look
+
+Dark, Anomaly-themed, with Liquid Glass chrome floating over the page.
+
+- **Glass** (iOS 26 / macOS 26, which the devices run): the nav cluster, the address field, the bookmark and downloads buttons, the bookmark chips,
+  the downloads panel and the notices are `glassEffect` surfaces inside a `GlassEffectContainer`, so neighbours blend and the Go button morphs out of the
+  address field when you start typing. The page is laid out under the bar (`WKWebView.obscuredContentInsets`) and shows through it. Below iOS 26 /
+  macOS 26 the same shapes use `.ultraThinMaterial` with a hairline edge, with the page below the bar. With **Reduce Transparency** on, or
+  `prefersGlass == false`, every surface is opaque (`surface` / `surfaceRaised`) with a hairline edge.
+- **Theme**: `DownloadsTheme` (colours, panel radius, `prefersGlass`) comes from the environment. The default is `.anomaly`: warm blacks, rust
+  `#B4532A` for the one thing to press (Go, Retry, Allow), amber `#F0A830` for focus, progress, the star and badges, and radiation yellow-green
+  `#B7D43A` only for a finished download. The launcher supplies its own with `.downloadsTheme(_:)` on `DownloadsView` or any ancestor.
+- **Motion**: quick springs with no bounce (0.3 s for a panel or notice, 0.18 s for press and small swaps), exits shorter than enters, a slide of 8 to 24
+  points and never the full height, icons swap with scale 0.25 -> 1, opacity and blur 4 -> 0, press feedback 0.96 on the controls that are not system
+  glass (the system's interactive glass reacts to touch itself). Download progress follows the bytes with a short spring and a faint highlight drifts across
+  the fill (2.4 s a pass, 30 fps, only while it runs); an unknown size is a soft segment sliding to and fro. **Reduce Motion**: no slide, scale, drift or sliding
+  segment, only short fades. Focus moves instantly (it repeats all day with a controller).
+- **Controller / keyboard focus**: a 3 pt amber ring with a soft glow and a slight growth on every control and on the address field; the cursor for the page
+  is an amber ring with a dark core.
+- **Previews**: `mod_downloads_snapshot` renders the view offscreen. ImageRenderer has no backdrop to refract, so the glass in those renders is a
+  stand-in with the same shapes; the real glass is in the iPad screenshot in the PR.
+
 ### What is downloaded, and when
 
 - **Nothing downloads without a tap.** WebKit turns a navigation into a download (an `<a download>`, an attachment, a type
@@ -82,6 +104,10 @@ bookmarks, the web page (WKWebView), and the downloads list (a side panel on wid
   - anything else is not started. It shows as a row "<host> tried to start this without a tap" with Allow and an x, and a notice.
     Allow starts it with the web view's cookies, as the user's own tap.
   - scripted pop-ups (`window.open`) are dropped unless a tap caused them; links with other schemes are refused.
+- **A browser download that goes quiet is started again.** WebKit gives a download started with `startDownload` or `resumeDownload` (Allow, Retry)
+  no events until it has a delegate, and a loaded main thread sometimes loses that race: the download then never moves. A download with no event for
+  10 s is cancelled and started again, twice at most, and then reported as failed. (Found by the headless tests on a heavily loaded Mac; `MOD_DOWNLOADS_TRACE=1`
+  prints the delegate events.)
 - **http and https only**, in the web view, in downloads and in every redirect (the downloader refuses a redirect to `ftp:` or `file:`).
   iPadOS's App Transport Security also blocks plain http for both the downloader and the web view; the app's Info.plist has no
   exception, so an http-only mirror shows "only offers a plain http connection". The Mac has no such rule.
@@ -140,7 +166,7 @@ a small HTTP server on 127.0.0.1 and checks:
   that ignores Range, cancel then resume, cancel before start, progress, stale partials.
 - the gate, address parsing, bookmarks and the controller mapping, as pure logic;
 - the web view, headless: a typed link to a file downloads, a page's own script cannot start a download (both `a.click()` and a timed `location`), Allow
-  starts a held one, a scripted click does not open the gate while the trusted-tap message does, one tap pays for one download, an unknown type
+  starts a held one, a download whose delegate arrives late is restarted, a scripted click does not open the gate while the trusted-tap message does, one tap pays for one download, an unknown type
   is downloaded, `javascript:` and a page's `ftp:` link are refused, WKDownload cancel and Retry resume from the kept bytes, pasted links.
 
 The Swift sources build with `Swift_COMPILATION_MODE wholemodule` and CMP0157: CMake 3.28's default smashes `-incremental` into the Debug flags,

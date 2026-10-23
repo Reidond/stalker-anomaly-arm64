@@ -136,19 +136,24 @@ final class ControllerBridge: ObservableObject {
 struct ControllerLayer: View {
     let browser: BrowserModel
     @StateObject private var bridge = ControllerBridge()
+    @Environment(\.downloadsTheme) private var theme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         GeometryReader { geo in
             if bridge.cursorVisible {
+                // amber ring with a dark core: visible on a white page and on a black one
                 Circle()
-                    .strokeBorder(Color.white, lineWidth: 3)
-                    .background(Circle().fill(Color.accentColor.opacity(0.55)))
-                    .frame(width: 26, height: 26)
-                    .shadow(radius: 3)
+                    .strokeBorder(theme.highlight, lineWidth: 3)
+                    .background(Circle().fill(Color.black.opacity(0.45)))
+                    .frame(width: 28, height: 28)
+                    .shadow(color: .black.opacity(0.5), radius: 3)
                     .position(x: bridge.cursor.x * geo.size.width, y: bridge.cursor.y * geo.size.height)
+                    .transition(.opacity)
             }
         }
         .allowsHitTesting(false)
+        .animation(Motion.animation(Motion.exit, reduceMotion: reduceMotion), value: bridge.cursorVisible)
         .onAppear { bridge.start(browser: browser) }
         .onDisappear { bridge.stop() }
     }

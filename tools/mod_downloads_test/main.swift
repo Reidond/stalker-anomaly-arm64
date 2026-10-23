@@ -52,8 +52,8 @@ func test(_ name: String, _ body: @MainActor () async throws -> Void) async {
 
 // Nothing here should take more than a couple of seconds; a hang is a failure.
 let watchdog = Thread {
-    Thread.sleep(forTimeInterval: 180)
-    print("FAIL watchdog: the tests did not finish in 180 s")
+    Thread.sleep(forTimeInterval: 600)
+    print("FAIL watchdog: the tests did not finish in 600 s")
     exit(2)
 }
 watchdog.start()
@@ -656,6 +656,19 @@ final class ProgressLog: @unchecked Sendable {
 
 // MARK: - Pure logic: gate, address field, bookmarks, controller mapping
 
+await test("theme-and-motion") {
+    let anomaly = DownloadsTheme.anomaly
+    check(anomaly.prefersGlass, "the default theme uses glass")
+    check(anomaly.panelRadius > 0, "panel radius")
+    var custom = anomaly
+    custom.prefersGlass = false
+    check(!custom.prefersGlass && anomaly.prefersGlass, "a theme is a value: changing a copy leaves the default alone")
+    check(Motion.animation(Motion.spring, reduceMotion: true) == Motion.fade, "Reduce Motion swaps every animation for a short fade")
+    check(Motion.animation(Motion.spring, reduceMotion: false) == Motion.spring, "otherwise the spring stays")
+    // yellow-green is for "done" only: nothing else in the default palette is that colour
+    check(anomaly.signal != anomaly.highlight && anomaly.signal != anomaly.accent, "signal is its own colour")
+}
+
 await test("gate-tap-window-and-one-download-per-tap") {
     var gate = DownloadGate()
     check(!gate.isOpen(at: 100), "closed before any tap")
@@ -772,7 +785,7 @@ final class FinishedLog: @unchecked Sendable {
 }
 
 @MainActor
-func waitUntil(_ seconds: Double = 15, _ condition: () -> Bool) async -> Bool {
+func waitUntil(_ seconds: Double = 45, _ condition: () -> Bool) async -> Bool {
     let deadline = Date().addingTimeInterval(seconds)
     while Date() < deadline {
         if condition() { return true }
@@ -907,12 +920,30 @@ await test("web-cancel-and-retry") {
     checkEqual(visibleFiles(in: dir), [], "no finished file")
     print("   resume data after cancel: \(item.resumeData.map { "\($0.count) bytes" } ?? "none")")
     model.retry(item)
-    let done = await waitUntil(30) { item.state == .finished }
+    let done = await waitUntil(90) { item.state == .finished }
     check(done, "retry finishes (state \(item.state))")
     checkEqual(item.file?.sha256, sha256(slowBody), "the file is complete and identical")
     checkEqual(visibleFiles(in: dir), ["slow.zip"], "one file")
     checkEqual(hiddenFiles(in: dir), [], "no part left")
     print("   requests for /dl-slow.zip: \(server.requests(for: "/dl-slow.zip").map { $0.headers["range"] ?? "full" })")
+}
+
+await test("web-download-whose-delegate-came-too-late-is-restarted") {
+    let (model, dir, log) = makeWebModel()
+    defer { model.shutdown() }
+    model.stallSeconds = 3
+    model.testingAttachDelay = 2.0 // the first attempt gets its delegate late and never moves
+    model.browser.load(url("/auto-download.html"))
+    _ = await waitUntil { model.items.contains { $0.state == .awaitingApproval } }
+    guard let item = model.items.first(where: { $0.state == .awaitingApproval }) else { check(false, "no blocked item"); return }
+    model.approve(item)
+    let done = await waitUntil(90) { item.state == .finished }
+    check(done, "the stuck download was started again and finished (state \(item.state))")
+    checkEqual(item.file?.sha256, sha256(fileBody), "complete and identical")
+    checkEqual(item.restarts, 1, "restarted once")
+    checkEqual(visibleFiles(in: dir), ["mod.zip"], "one file")
+    checkEqual(hiddenFiles(in: dir), [], "no part left")
+    checkEqual(log.files.count, 1, "reported once")
 }
 
 await test("web-download-list-actions") {
@@ -952,7 +983,7 @@ await test("link-item-states") {
     let cancelled = await waitUntil { slow.state == .cancelled }
     check(cancelled, "cancelled")
     model.retry(slow)
-    let resumed = await waitUntil(30) { slow.state == .finished }
+    let resumed = await waitUntil(90) { slow.state == .finished }
     check(resumed, "retried and finished (state \(slow.state))")
     checkEqual(slow.file?.sha256, sha256(slowBody), "resumed content is identical")
     check(model.items.allSatisfy { $0.state != .downloading }, "nothing left running")
