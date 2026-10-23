@@ -127,6 +127,7 @@ void CLevelChanger::feel_touch_new(CObject* tpObject)
 
 	if (m_bSilentMode)
 	{
+		Msg("* Level changer %s (silent) touched by the actor", cName().c_str());
 		NET_Packet p;
 		p.w_begin(M_CHANGE_LEVEL);
 		p.w(&m_game_vertex_id, sizeof(m_game_vertex_id));
