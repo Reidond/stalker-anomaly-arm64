@@ -41,6 +41,7 @@
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_main.h>
 
+#include <Platform/Apple/FramePacer.h>
 #include <Platform/Apple/GraphicsProfile.h>
 #include <Platform/Apple/Launcher.h>
 #include <Platform/Apple/Shell.h>
@@ -102,7 +103,13 @@ struct App
     Uint64 present_mark = 0;
     Uint64 footprint_sample_ns = 0;
     Uint64 quit_requested_ns = 0; // set when the app asked the engine to quit; it disconnects and unloads the level first
-    Uint64 next_frame_ns = 0;     // frame rate cap (gfx_fps): when the next frame may start
+    AppleShell::FramePacer pacer; // frame rate cap (gfx_fps): when the next frame may start
+    // The time between the starts of consecutive frames in the current 10 s window, in the buckets of kIntervalEdgesMs (logged with the
+    // frame rate: a locked 40 fps on a 120 Hz panel is all in the 22 to 28 ms bucket, 40 fps on a 60 Hz one is split in two)
+    static constexpr int kIntervalBuckets = 12;
+    unsigned interval_hist[kIntervalBuckets] = {};
+    Uint64 last_frame_start_ns = 0;
+    Uint64 interval_max_ns = 0;
 
     // where the scripted pointer is, window points: motion events carry the position and the delta
     float pointer_x = 0, pointer_y = 0;
@@ -691,23 +698,33 @@ SDL_AppResult SDL_AppIterate(void* appstate)
         const int cap = AppleShell::Graphics::EffectiveFrameCap();
         if (cap > 0 && xr_engine::InGame())
         {
-            const Uint64 interval_ns = 1000000000ull / Uint64(cap);
-            if (app->next_frame_ns == 0 || frame_start_ns > app->next_frame_ns + interval_ns)
-                app->next_frame_ns = frame_start_ns; // behind by more than a frame: do not catch up
-            if (frame_start_ns + 1000000ull < app->next_frame_ns)
-            {
-                const Uint64 wait_ns = app->next_frame_ns - frame_start_ns;
 #if defined(SDL_PLATFORM_IOS)
-                if (wait_ns > 5000000ull)
-                    return SDL_APP_CONTINUE; // the next display link tick is closer to the target than this one
+            const Uint64 skip_over_ns = 5000000ull; // the next display link tick is closer to the target than this one
+#else
+            const Uint64 skip_over_ns = 0;
 #endif
-                SDL_DelayPrecise(wait_ns);
+            const AppleShell::FramePacer::Step step = app->pacer.Begin(frame_start_ns, 1000000000ull / Uint64(cap), skip_over_ns);
+            if (!step.run)
+                return SDL_APP_CONTINUE;
+            if (step.sleep_ns)
+            {
+                SDL_DelayPrecise(step.sleep_ns);
                 frame_start_ns = SDL_GetTicksNS();
             }
-            app->next_frame_ns += interval_ns;
         }
         else
-            app->next_frame_ns = 0;
+            app->pacer.Reset();
+        if (app->last_frame_start_ns && frame_start_ns > app->last_frame_start_ns)
+        {
+            const Uint64 gap_ns = frame_start_ns - app->last_frame_start_ns;
+            static const double edges_ms[App::kIntervalBuckets - 1] = {6, 11, 14, 19, 22, 28, 31, 37, 45, 55, 100};
+            int bucket = 0;
+            while (bucket < App::kIntervalBuckets - 1 && double(gap_ns) * 1e-6 >= edges_ms[bucket])
+                ++bucket;
+            ++app->interval_hist[bucket];
+            app->interval_max_ns = std::max(app->interval_max_ns, gap_ns);
+        }
+        app->last_frame_start_ns = frame_start_ns;
         if (!xr_engine::Frame())
             return SDL_APP_SUCCESS;
         // one line in the shell log every 10 s: frames per second of the main loop, the CPU time of a frame (time inside
@@ -753,6 +770,24 @@ SDL_AppResult SDL_AppIterate(void* appstate)
                         double(st.renderPasses - app->last_stats.renderPasses) / frames, st.textureBytes / 1048576.0,
                         st.renderTargetBytes / 1048576.0, st.bufferBytes / 1048576.0, st.deviceAllocatedBytes / 1048576.0);
                 app->last_stats = st;
+            }
+            {
+                // the share of frames by time since the previous frame started: <6 | 6-11 (8.3) | 11-14 | 14-19 (16.7) | 19-22 | 22-28 (25) |
+                // 28-31 | 31-37 (33.3) | 37-45 | 45-55 (50) | 55-100 | >=100 ms
+                unsigned total = 0;
+                for (unsigned n : app->interval_hist)
+                    total += n;
+                if (total)
+                {
+                    char text[256];
+                    int len = 0;
+                    for (int i = 0; i < App::kIntervalBuckets; ++i)
+                        len += snprintf(text + len, sizeof(text) - len, "%s%.1f", i ? " " : "", 100.0 * app->interval_hist[i] / total);
+                    AppleShell::Log("anomaly: frame intervals (%% of frames, ms: <6 6-11 11-14 14-19 19-22 22-28 28-31 31-37 37-45 45-55 55-100 >=100): %s; longest %.1f ms",
+                        text, double(app->interval_max_ns) * 1e-6);
+                }
+                memset(app->interval_hist, 0, sizeof(app->interval_hist));
+                app->interval_max_ns = 0;
             }
             app->fps_window_ns = now_ns;
             app->fps_frames = 0;

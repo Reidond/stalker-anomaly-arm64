@@ -2,7 +2,7 @@
 
 On the iPad and the Mac the game does not ask the player to tune a PC. The device picks **a profile** for its class: texture level,
 shadows, sun and lights, ambient occlusion, grass, distances, render size, anti-aliasing and the post-process set, chosen from
-measurements for the best picture it keeps at 60 fps. The profile is applied on every start and **locked**: the options menu does
+measurements for the best picture it keeps at a steady frame rate. The profile is applied on every start and **locked**: the options menu does
 not show those settings, and the console, scripts and addons cannot change them. The player keeps what a console offers: a mode
 (Quality or Performance), a frame rate cap, field of view, brightness, motion blur, and the HUD and crosshair.
 
@@ -13,7 +13,7 @@ Everything here is Apple only (`XR_PLATFORM_APPLE`). On Windows the options menu
 |---|---|
 | Device detection, the profile tables, the lock rules (plain C++, tested on any host) | `src/Platform/Apple/GraphicsProfile.{h,cpp}`, hardware probe in `DeviceInfo.mm` |
 | Applying the profile after `user.ltx`, the lock in the console, `gfx_mode`, `gfx_fps`, `gfx_profile` | `src/xrEngine/xr_graphics_profile.{h,cpp}`, hooks in `XR_IOConsole.cpp`, `x_ray.cpp`, `xr_ioc_cmd.cpp` |
-| The frame rate cap | `src/Platform/App/main.cpp` |
+| The frame rate cap and its pacing, the frame interval histogram in the log | `src/Platform/App/main.cpp`, `src/Platform/Apple/FramePacer.h` |
 | The reduced options menu | `gamedata/scripts/console_options.script`, hooked in `ui_options_modded_exes.script`; strings in `gamedata/configs/text/*/ui_mm_console_graphics.xml` |
 | Tests and measurements | `tools/graphics_profile_test`, `tools/profile_measure.py`, `tools/render_harness/{measure_profile.sh,scenes/2*.script,scenes/30_*.script}` |
 
@@ -52,7 +52,7 @@ measured class had it.
 | Setting | ipad-8gb | ipad-16gb | ipad-6gb | mac-pro | mac-base | mac-base-8gb | mac-max | mac-ultra |
 |---|---|---|---|---|---|---|---|---|
 | texture level | 1 | 0 | 2 | 1 | 1 | 2 | 0 | 0 |
-| render size | scale 0.42 / 0.375 (without a scale: 1152x864 / 1024x768) | scale 0.47 / 0.42 (without a scale: 1280x960 / 1152x864) | scale 0.375 / 0.33 (without a scale: 1024x768 / 896x672) | scale 1.0 / 0.7 | scale 0.7 / 0.5 | scale 0.7 / 0.5 | scale 1.0 / 0.8 | scale 1.0 / 0.9 |
+| render size | scale 0.6 / 0.42 (without a scale: 1152x864 / 1024x768) | scale 0.67 / 0.47 (without a scale: 1280x960 / 1152x864) | scale 0.375 / 0.33 (without a scale: 1024x768 / 896x672) | scale 1.0 / 0.7 | scale 0.7 / 0.5 | scale 0.7 / 0.5 | scale 1.0 / 0.8 | scale 1.0 / 0.9 |
 | sun/shadow quality | low | low | low | medium / low | low | low | high / medium | high / medium |
 | light shadow quality | 0.5 | 0.5 | 0.5 | 1.0 / 0.7 | 0.7 / 0.5 | 0.7 / 0.5 | 1.0 | 1.0 |
 | AO level (HDAO on the iPad, SSDO on the Mac) | low / off | low / off | low / off | medium / low | low / off | low / off | high / medium | high / medium |
@@ -74,23 +74,32 @@ All profiles share `apple` (unsupported features off, see [below](#unsupported-f
 
 | | Quality | Performance |
 |---|---|---|
-| Goal | the best picture the device keeps at 60 fps in the worst measured scene | headroom: a steadier frame rate, or 120 fps where the display runs 120 Hz |
+| Goal | the best picture the device keeps at a steady rate: 40 fps on an iPad whose display shows it evenly (120 Hz), 30 on a 60 Hz one, 60 on a Mac | a locked 60 fps, 120 on a 120 Hz Mac |
 | How | the profile's full set at a higher render scale | cheaper shadows and AO, shorter grass and view distance, a lower render scale |
-| Frame cap (Auto) | 60 | 120 on a 120 Hz Mac (`mac-pro`, `mac-max`, `mac-ultra`); 60 everywhere else |
+| Frame cap (Auto) | iPad 40 (30 on a 60 Hz panel), Mac 60 | 60; 120 on a 120 Hz Mac (`mac-pro`, `mac-max`, `mac-ultra`) |
 
-The brief for this work assumed a 120 Hz iPad Air. **The iPad Air 13-inch (M3) panel is 60 Hz**: the shell reads
-`UIScreen.maximumFramesPerSecond` and the device reports 60. On it Performance cannot mean 120 fps, so it means a lower render scale and
-cheaper settings that keep 60 even in the worst scene and when the iPad is warm. The 120 Hz path exists (cap choices 30, 60, 120;
-Performance defaults to 120 where the profile allows it and the display runs 120 Hz) and is unit tested, but **no 120 Hz iPad was
-available to measure it**. A ProMotion iPad Pro falls in `ipad-8gb` or `ipad-16gb` and gets cap choices up to 120 with Auto at 60.
+**The frame rate cap shows only rates the display holds evenly.** A frame is shown at a display refresh, so its length is a whole number of
+refreshes or the frame times alternate. 30 fps on a 60 Hz panel is every second refresh, 40 fps on a 120 Hz panel every third, 60 on either
+every refresh or every second one: all even. **40 fps on a 60 Hz panel is 1.5 refreshes**: frames alternate 16.7 and 33.3 ms (25 ms on average, no
+frame at 25 ms), a judder that a cap cannot fix. `FrameCaps()` therefore offers 30 and 60 on a 60 Hz display, and 30, 40, 60 and 120 on a 120 Hz one,
+and the mode's default is the largest offered rate that is not above the profile's: **the iPad's Quality asks for 40 and is 30 on a 60 Hz iPad**
+(the iPad Air 13-inch M3 is 60 Hz: the shell reads `UIScreen.maximumFramesPerSecond` and the device reports 60, it is not a ProMotion panel),
+40 on a ProMotion iPad Pro. `--unlocked-graphics` accepts any rate from 10 to 240 (`gfx_fps 40`), which is how the uneven 40 on the Air is measured
+below. The 120 Hz iPad path is unit tested (the pacer is replayed against simulated 60 and 120 Hz displays) but **no 120 Hz iPad was available to measure it**.
+
+**Frame pacing.** The app's loop is called at every display refresh (the display link); `FramePacer` runs a frame at the first tick at or after
+the time the last frame's schedule says, and skips a tick that is more than 5 ms early, so the frames fall on whole numbers of refreshes and
+the schedule does not drift. The engine's own limiter (`r__framelimit`) busy-waits and is compiled out on iOS: it stays 0. The shell log has, every 10 s,
+the share of frames by the time since the previous frame started (`frame intervals`), and `profile_measure.py summarize` prints it as a second table.
 
 **A warm iPad is the other limit.** The iPad leaves Nominal for Serious within a minute or two of load and then runs 12 to 20 % slower on the
-main thread (RENDERER.md, measured by the MetalFX session: every render scale up to 0.67 then fell to 45 to 51 fps). The two modes divide the
-problem: **Quality holds 60 fps cool** (59.2 in the heaviest rain measured: no frame to spare there), so a warm iPad will dip under it; **Performance
-holds 60 fps** with about 20 % of the frame to spare (21 % fewer scene pixels than Quality, no AO: about 13 ms against 16.6 in that rain), about the 12 to 20 %
-slowdown of the warm state. A player who wants an even frame rate whatever the temperature has the frame
-rate cap: 30 fps paces frames evenly (the app skips every other display tick). The measurement tables below have a two-minute warm-up in the
-busiest scene before the scenes and a thermal column, so they show what state each window ran in.
+main thread (RENDERER.md, measured by the MetalFX session: every render scale up to 0.67 then fell to 45 to 51 fps). The two modes face it
+differently. **Quality has room**: with no cap at scale 0.6 the iPad ran 54 to 60 fps in Serious ([below](#ipad-air-13-inch-m3-8-gb-2732x2048-at-60-hz)),
+so 30 fps keeps about 45 % of the frame to spare even then (40 fps a quarter at full clocks, less under the cap: see the uneven 40 below).
+**Performance asks 60 of a 1.0 Mpixel scene and has almost none in the heaviest rain**: 57.5 fps there, cool (the other four scenes held 59.5 to 59.9), and it was not measured in Serious. A player
+who wants an even frame rate whatever the temperature has the frame rate cap: 30 fps paces frames evenly (the app skips every other display
+tick). The measurement tables below have a two-minute warm-up in the busiest scene before the scenes and a thermal column, so they show what
+state each window ran in.
 
 Switching mode in the menu applies the profile's settings for that mode and restarts the video (`vid_restart`, a second or two); the
 mode is saved in `user.ltx` as `gfx_mode`. The default is Quality.
@@ -100,7 +109,7 @@ mode is saved in `user.ltx` as `gfx_mode`. The default is Quality.
 | Menu | Option | Console | Why it stays |
 |---|---|---|---|
 | Visual / Basic | Graphics mode | `gfx_mode` | the one quality choice a console offers |
-| | Frame rate | `gfx_fps` | 30 / 60 / (120): the player's choice of smoothness against battery and heat. Auto follows the mode |
+| | Frame rate | `gfx_fps` | 30 / 60 (and 40 / 120 on a 120 Hz display): the player's choice of smoothness against battery and heat, only rates the display shows evenly. Auto follows the mode |
 | | Brightness | `r__exposure` | rooms differ and so do screens; the stock menu already used this variable for R4 (its gamma ramp is ignored on Metal) |
 | | Text size | `ui_text_scale` | the UI text follows the screen's height by itself ([below](#ui-text-size)); this makes it larger or smaller still, for the distance the player sits at. 0.75 to 1.5, applies at the next video restart |
 | | FOV, HUD FOV | `fov`, `hud_fov` | comfort. FOV is limited to 45 to 90 |
@@ -189,15 +198,15 @@ not a clamp: a profile asking for 0.42 would leave the scale at 1.0, the iPad at
 
 | | Without `r__render_scale` | With it |
 |---|---|---|
-| iPad | `vid_mode` is the render size (Quality 1152x864, Performance 1024x768 on the 8 GB class); the Metal layer scales it to the panel | `vid_mode` is the panel's native size (a sharp UI) and the scene is `r__render_scale` of it: 0.42 and 0.375, the same pixels; bilinear with sharpening 0.25 |
+| iPad | `vid_mode` is the render size (Quality 1152x864, Performance 1024x768 on the 8 GB class); the Metal layer scales it to the panel | `vid_mode` is the panel's native size (a sharp UI) and the scene is `r__render_scale` of it: Quality 0.6 (1639x1229, 2.0 Mpixel), Performance 0.42 (1147x860, 1.0 Mpixel); bilinear with sharpening 0.25 |
 | Mac | the window or display size, which is the player's | Quality 1.0 (no scaling), Performance 0.7 with MetalFX (free on the Mac: 6.5 against 6.9 ms) |
 
-**The iPad scales are below the renderer's minimum of 0.5, and below what the MetalFX session recommends (0.6 for Quality, 0.5 for Performance).** That
-recommendation keeps the old preset's GPU cost (15.3 ms in a field in the rain, 56 to 59 fps). The on-device runs of this profile (below) show that a
-frame of that cost does not hold 60 fps in the rain (54.6 fps at 1280x960, 1.23 Mpixel: about 15 ms a Mpixel), so the profile asks for about 1.0 Mpixel of
-scene for Quality and 0.79 for Performance (a margin of about 20 %): scales 0.42 and 0.375 of the panel. This change lowers the renderer's minimum to 0.35 (the `0.5f` in `CMD4(CCC_RenderScale, "r__render_scale", ...)` in `xrRender_console.cpp`, as the MetalFX session offered);
-a build with the old minimum would run the iPad at 0.5, which is 1.4 Mpixel (the old preset's pixel count: Quality dips under 60 in the rain), and
-`gfx_profile` prints the value that was set.
+**Quality's 0.6 is what the MetalFX session recommended for this iPad** (RENDERER.md) and is inside the renderer's old range. **Performance's 0.42 is
+below its minimum of 0.5**, so this work lowers the minimum to 0.35 (the `0.5f` in `CMD4(CCC_RenderScale, "r__render_scale", ...)` in `xrRender_console.cpp`,
+as the MetalFX session offered); a build with the old minimum would run Performance at 0.5, which is 1.4 Mpixel (the old preset's pixel count),
+and `gfx_profile` prints the value that was set. What the sizes cost on the iPad Air: at 0.6 (2.0 Mpixel) a frame took at most 18.5 ms with no cap, in Serious, so it fits
+30 fps with room and 40 fps only just; at 0.42 (1.0 Mpixel) the heaviest rain is at the edge of 16.7 ms (57.5 to 59.7 fps), and the cost of a frame is not simply proportional
+to its pixels (the measurements below).
 
 ## UI text size
 
@@ -254,11 +263,120 @@ What it says:
 
 ### iPad: Air 13-inch (M3, 8 GB), 2732x2048 at 60 Hz
 
-**Final run of the profile** (`tools/ios/measure_profile.sh`, 2026-10-23, `RelWithDebInfo`, the `ipad_test` save, locks on, the merged render scale: native 2732x2048 output, bilinear
-with sharpening 0.25, scene scale 0.42 for Quality and 0.375 for Performance, i.e. 1147x860 and 1024x768 of scene; one launch per mode). Each launch stands two
-minutes in the Rookie village first, so that the scenes run warm, then plays the five scenes (the thermal column says what state each window ran in). The frame
-rate is capped by the 60 Hz display, so a GPU time near 14 ms mostly says "the GPU waits for the display"; only a frame rate under 60 means the GPU or the CPU
-was the limit.
+**Final run of the profile** (2026-10-23, `RelWithDebInfo`, the `ipad_test` save, locks on, native 2732x2048 output, bilinear with sharpening 0.25, Quality at
+scene scale 0.6 (1639x1229) and Performance at 0.42 (1147x860); one launch per mode). Each launch stands two minutes in the Rookie village first, so that
+the scenes run warm, then plays the five scenes (the thermal column says what state each window ran in). Quality's cap is **30 fps on this 60 Hz panel** (its
+default is 40, which the panel cannot show evenly: [below](#the-uneven-40-on-the-60-hz-panel)). The frame rate is capped by the cap or the display, so the GPU time
+mostly says "the GPU waits for the next frame"; only a frame rate under the cap means the GPU or the CPU was the limit.
+
+| Run | Scene | windows | fps | slowest | CPU ms | GPU ms | draws | footprint MB | thermal |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---|
+| **Quality** (scale 0.6, cap 30) | field | 2 | 30.0 | 30.0 | 17.7 | 20.0 | 2129 | 4037 | Nominal |
+|  | rain | 3 | 30.0 | 30.0 | 11.0 | 18.3 | 2201 | 4076 | Nominal |
+|  | bunker | 2 | 30.0 | 30.0 | 16.1 | 18.4 | 1492 | 4081 | Nominal |
+|  | village | 2 | 29.9 | 29.9 | 10.9 | 20.7 | 1975 | 4158 | Nominal |
+|  | night | 3 | 30.0 | 30.0 | 21.5 | 24.1 | 2260 | 4151 | Nominal |
+| **Performance** (scale 0.42, cap 60) | field | 2 | 59.9 | 59.7 | 16.6 | 13.0 | 1994 | 3962 | Nominal |
+|  | rain | 3 | 57.5 | 57.4 | 17.2 | 15.7 | 2777 | 4001 | Nominal |
+|  | bunker | 2 | 59.6 | 59.5 | 15.9 | 11.4 | 1505 | 4013 | Nominal |
+|  | village | 2 | 59.9 | 59.8 | 16.4 | 14.1 | 1945 | 4060 | Nominal |
+|  | night | 3 | 59.5 | 59.2 | 14.2 | 13.3 | 1653 | 4149 | Nominal |
+
+Frame intervals, % of the frames by the time since the previous frame started (the shell log's `frame intervals` line; 16.7 ms is one refresh of this panel,
+33.3 two):
+
+| Run | Scene | under 14 ms | 14 to 19 (17) | 19 to 22 | 22 to 28 (25) | 28 to 31 | 31 to 37 (33) | 37 to 55 | over 55 | longest ms |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| **Quality** (scale 0.6, cap 30) | field | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 | 100.0 | 0.0 | 0.0 | 34 |
+|  | rain | 0.0 | 0.0 | 0.2 | 0.0 | 0.0 | 99.6 | 0.2 | 0.0 | 47 |
+|  | bunker | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 | 100.0 | 0.0 | 0.0 | 34 |
+|  | village | 0.0 | 0.3 | 0.0 | 0.0 | 0.0 | 99.2 | 0.3 | 0.1 | 67 |
+|  | night | 0.0 | 0.0 | 0.0 | 0.5 | 0.1 | 99.2 | 0.2 | 0.0 | 50 |
+| **Performance** (scale 0.42, cap 60) | field | 0.1 | 99.5 | 0.1 | 0.0 | 0.1 | 0.0 | 0.0 | 0.1 | 66 |
+|  | rain | 0.6 | 86.4 | 10.7 | 2.1 | 0.0 | 0.1 | 0.1 | 0.0 | 50 |
+|  | bunker | 0.2 | 99.2 | 0.1 | 0.1 | 0.0 | 0.1 | 0.0 | 0.2 | 80 |
+|  | village | 0.4 | 98.9 | 0.5 | 0.0 | 0.1 | 0.0 | 0.1 | 0.0 | 45 |
+|  | night | 0.8 | 97.7 | 0.7 | 0.5 | 0.0 | 0.1 | 0.1 | 0.1 | 148 |
+
+- **Quality ran at 30.0 fps in all five scenes, 99.2 to 100 % of the frames 31 to 37 ms apart**: the frame time is even. The longest interval of a window was
+  34 to 67 ms (an occasional hitch of one or two frames).
+- **Performance held 59.5 to 59.9 fps in four scenes and fell to 57.5 in the rain** (slowest window 57.4; 13 % of the frames took 19 to 28 ms; 2777 draws,
+  15.7 ms of GPU). The previous profile's 0.375 held 59.9 there ([below](#the-earlier-profile)); at 0.42 it is the one place
+  where the locked 60 is not met.
+- The footprint is 4.0 to 4.3 GB of the 7.99 GB budget; the scene size changes the render targets (390 MB at scale 0.6, 223 MB at 0.42), not the textures (2.4 to
+  2.7 GB).
+- **Thermal state stayed Nominal** through the warm-up and the scenes in both launches. The two no-cap launches that followed read Serious, the uneven-40 and
+  sweep launches after them Nominal again. What happens to Performance in Serious was not measured; Quality's capacity in Serious was
+  ([next](#what-the-ipad-could-do-at-scale-06-without-a-cap)).
+
+#### What the iPad could do at scale 0.6 without a cap
+
+`--unlocked-graphics` and `gfx_fps unlimited` (the display still limits at 60), the same warm-up and scenes, **in thermal state Serious** (the fourth and fifth launches of the session). Bilinear with sharpening 0.25 is the profile's; MetalFX is the same scale with `r__upscaler metalfx`:
+
+| Run | Scene | windows | fps | slowest | CPU ms | GPU ms | draws | footprint MB | thermal |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---|
+| **bilinear** 0.25 (no cap) | field | 2 | 59.9 | 59.7 | 7.2 | 13.1 | 1981 | 4031 | Serious |
+|  | rain | 3 | 56.0 | 54.1 | 17.7 | 16.3 | 2376 | 4117 | Serious |
+|  | bunker | 3 | 59.7 | 59.3 | 16.4 | 17.6 | 1475 | 4150 | Serious |
+|  | village | 2 | 57.6 | 57.6 | 17.3 | 24.2 | 1968 | 4185 | Serious |
+|  | night | 3 | 56.1 | 54.1 | 17.8 | 15.0 | 2256 | 4155 | Serious |
+| **MetalFX** (no cap) | field | 2 | 56.8 | 56.8 | 17.4 | 16.7 | 2087 | 4107 | Serious |
+|  | rain | 3 | 56.0 | 55.9 | 17.8 | 26.0 | 2186 | 4183 | Serious |
+|  | bunker | 2 | 59.5 | 59.3 | 16.6 | 17.1 | 1484 | 4183 | Serious |
+|  | village | 2 | 48.0 | 47.8 | 20.8 | 30.2 | 1972 | 4210 | Serious |
+|  | night | 3 | 48.2 | 47.5 | 20.3 | 17.4 | 2260 | 4312 | Serious |
+
+- With bilinear the iPad ran 54.1 to 59.9 fps in Serious: at full clocks a frame is at most 18.5 ms, so 30 fps leaves 45 % of the frame and 40 fps 26 %. A capped GPU
+  runs at lower clocks, so the real margin at 40 is smaller: the uneven-40 run below missed 40 by 0.5 fps in the field.
+- MetalFX costs about 3 ms of frame time in the village and at night (48 against 56 to 58 fps; GPU 30.2 against 24.2 ms in the village) and 1 ms in the field; the rain and
+  the bunker are display limited either way.
+  Screenshots of the same frame (field scene, crops of the same region, `ab_bilinear` and `ab_metalfx` in the PR) show MetalFX a little sharper in foliage and ground detail.
+  The profile keeps bilinear: Performance cannot afford MetalFX, and for Quality the sharper picture was not measured warm at its cap. To try it, put
+  `r__upscaler metalfx` and `r__upscale_sharpness 0` into `ipad-8gb`'s Quality list in `GraphicsProfile.cpp`.
+
+#### The uneven 40 on the 60 Hz panel
+
+For the record, the cap the brief asked for, on this panel: `--unlocked-graphics` and `gfx_fps 40` (not offered otherwise), Quality at scale 0.6, locks off, Nominal:
+
+| Run | Scene | windows | fps | slowest | CPU ms | GPU ms | draws | footprint MB | thermal |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---|
+| **Quality**, uneven 40 (scale 0.6, cap 40) | field | 2 | 39.5 | 39.2 | 22.8 | 27.6 | 2647 | 4076 | Nominal |
+|  | rain | 3 | 40.0 | 40.0 | 11.0 | 21.9 | 1965 | 4134 | Nominal |
+|  | bunker | 2 | 40.0 | 40.0 | 16.6 | 20.4 | 1505 | 4172 | Nominal |
+|  | village | 2 | 39.8 | 39.6 | 10.3 | 27.2 | 1646 | 4249 | Nominal |
+|  | night | 3 | 39.8 | 39.7 | 9.0 | 18.4 | 1918 | 4265 | Nominal |
+
+Frame intervals (time between frame starts in the app's loop):
+
+| Run | Scene | under 14 ms | 14 to 19 (17) | 19 to 22 | 22 to 28 (25) | 28 to 31 | 31 to 37 (33) | 37 to 55 | over 55 | longest ms |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| **Quality**, uneven 40 | field | 0.0 | 5.2 | 11.0 | 66.5 | 0.4 | 15.4 | 1.6 | 0.0 | 55 |
+|  | rain | 0.0 | 0.2 | 46.7 | 6.5 | 46.6 | 0.0 | 0.1 | 0.0 | 46 |
+|  | bunker | 0.0 | 44.0 | 0.8 | 10.6 | 0.0 | 44.6 | 0.0 | 0.0 | 33 |
+|  | village | 1.1 | 42.8 | 1.1 | 9.0 | 1.6 | 43.9 | 0.5 | 0.0 | 50 |
+|  | night | 0.0 | 45.5 | 1.7 | 4.9 | 1.8 | 45.7 | 0.4 | 0.1 | 65 |
+
+It runs at 39.5 to 40.0 fps, but **it cannot be even**: the panel shows a frame at a refresh, so with two frames to three refreshes the frames are on screen for 16.7
+and 33.3 ms in turn (the bunker, village and night rows: 43 to 46 % each); none is shown for 25 ms. In the field (66 % at 22 to 28 ms) and the rain (21 and 29 ms) the
+loop's start times do not follow that pattern, but the panel still shows each frame at a refresh, so what is on screen is 16.7, 33.3 or 50 ms per frame, never 25. The same
+scenes at 30 fps are 99 to 100 % at 33 ms. This is why a 60 Hz panel is offered 30, not 40.
+
+#### Performance's scale in the rain
+
+The rain is where Performance's 60 is marginal. One launch, the profile's Performance settings, only the render scale changed, 22 s each (one or two of the shell log's 10 s windows: 0.4 and 0.375 have one each), `--unlocked-graphics`, Nominal:
+
+| Performance scale | windows | fps | slowest | CPU ms | GPU ms | draws | footprint MB | 14 to 19 ms | 19 to 28 ms |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 0.42 (the profile) | 2 | 59.7 | 59.6 | 15.6 | 14.1 | 2003 | 3999 | 96.4 | 2.4 |
+| 0.4 | 1 | 60.0 | 60.0 | 16.6 | 11.4 | 1815 | 3964 | 100.0 | 0.0 |
+| 0.375 | 1 | 60.0 | 60.0 | 16.6 | 10.5 | 1822 | 3931 | 99.7 | 0.2 |
+
+0.42 is within 0.3 fps of 60 here and 2.5 under in the full run above; 0.4 and 0.375 held 60.0. One window is thin evidence for 0.4, but the earlier full run at 0.375
+held 59.9 in all five scenes ([below](#the-earlier-profile)). The profile asks for 0.42 as chosen; **0.4 or 0.375 would make the locked 60 hold in the rain**.
+
+#### The earlier profile
+
+The profile before this change (Quality 0.42 and Performance 0.375, both at 60 fps; the same method, 2026-10-23, Nominal throughout):
 
 | Run | Scene | windows | fps | slowest | CPU ms | GPU ms | draws | footprint MB | thermal |
 |---|---|---:|---:|---:|---:|---:|---:|---:|---|
@@ -273,39 +391,9 @@ was the limit.
 |  | village | 2 | 60.0 | 59.9 | 16.6 | 14.2 | 1943 | 4060 | Nominal |
 |  | night | 3 | 60.0 | 59.8 | 12.4 | 13.5 | 2226 | 4085 | Nominal |
 
-- **Quality held 59.2 to 60.0 fps** in every scene; the rain is the worst (59.2, slowest window 58.4, 2773 draws, 16.6 ms of GPU).
-- **Performance held 59.9 to 60.0**, slowest window 59.7, in every scene.
-- The footprint is 3.9 to 4.1 GB of the 7.99 GB budget in both modes; the scene size changes the render targets (223 MB at scale 0.42, 190 MB at 0.375), not the
-  textures (2.4 to 2.5 GB).
-- **The iPad stayed at thermal state Nominal** through the two-minute warm-up and the four minutes of scenes in both launches, so the Serious state the MetalFX
-  measurements describe (45 to 51 fps at any scale, 12 to 20 % slower main thread) was not reached here, and nothing was measured in it. What the profile
-  does about it is the margin: Performance has about 20 % of the frame to spare in the worst scene (21 % fewer scene pixels than Quality and no AO), Quality none in the
-  rain.
-
-**Where the sizes come from.** The first on-device run of the profile (2026-10-23; before the render scale was merged, so the render size was `vid_mode`) had
-Quality at 1280x960 (1.23 Mpixel) and Performance at 1152x864 (1.0 Mpixel):
-
-| Run | Scene | windows | fps | slowest | CPU ms | GPU ms | draws | footprint MB | thermal |
-|---|---|---:|---:|---:|---:|---:|---:|---:|---|
-| **Quality** (1280x960) | field | 2 | 60.0 | 60.0 | 13.8 | 12.9 | 1718 | 3864 | Nominal |
-|  | rain | 3 | 54.6 | 53.6 | 18.1 | 15.4 | 2222 | 3929 | Nominal |
-|  | bunker | 2 | 59.9 | 59.7 | 15.9 | 12.9 | 1489 | 3968 | Nominal |
-|  | village | 2 | 59.8 | 59.6 | 12.2 | 13.2 | 1515 | 3971 | Nominal |
-|  | night | 3 | 59.9 | 59.8 | 14.4 | 14.1 | 1890 | 4044 | Nominal |
-| **Performance** (1152x864) | field | 2 | 60.0 | 60.0 | 13.2 | 11.2 | 1667 | 3808 | Nominal |
-|  | rain | 3 | 59.5 | 59.2 | 10.0 | 12.4 | 2191 | 3905 | Nominal |
-|  | bunker | 2 | 60.0 | 60.0 | 16.6 | 11.4 | 1484 | 3952 | Nominal |
-|  | village | 2 | 59.5 | 59.0 | 15.3 | 14.0 | 1472 | 4011 | Nominal |
-|  | night | 3 | 60.0 | 60.0 | 16.6 | 15.0 | 1890 | 4038 | Nominal |
-
-Quality held 60 in four of the five scenes and **dropped to 54.6 fps in the rain** (slowest window 53.6, 18 ms a frame, 2222 draws): at 1.23 Mpixel the frame
-costs about 15 ms a Mpixel there, so 1.0 Mpixel (scale 0.42 of the panel) is the size at which that rain holds 60 (59.2 measured) and 0.79 Mpixel (0.375) leaves about 20 % of a 16.7 ms frame. The previous
-preset's 1366x1024 was 49 to 55 fps in the village (`IPAD.md`; 1.4 Mpixel, about 10 ms a Mpixel). The MetalFX session's recommendation for this iPad (scale
-0.6 for Quality, 0.5 for Performance, `RENDERER.md`) keeps that old cost class (15.3 ms in a field in the rain) and is not enough here; its minimum of 0.5
-cannot express these sizes either, so this change lowers the renderer's minimum to 0.35.
-
-Render size sweeps in the rain and in the village (one launch, the profile's Quality settings, one change at a time, 22 s each) were all display limited at
-60 fps and showed only that 1152x864 and below hold 60 where 1280x960 did not always; the numbers are in the PR for this change.
+The sizes came from a first run before the render scale existed (Quality 1280x960, 1.23 Mpixel: 54.6 fps in the rain, slowest window 53.6, 18 ms a frame; Performance 1152x864,
+1.0 Mpixel: 59.5 in the rain), which gave about 15 ms a Mpixel in the rain. The previous preset's 1366x1024 was 49 to 55 fps in the village (`IPAD.md`; 1.4 Mpixel).
+Render size sweeps in the rain and in the village were all display limited at 60 fps and showed only that 1152x864 and below hold 60 where 1280x960 did not always.
 
 ## Verification
 
@@ -320,12 +408,14 @@ Checks and where their output is:
 | The iPad menu | `scripts/settings_menu.txt` (Down three times, Return, a screenshot) | Visual / Basic with Graphics mode, Frame rate, Brightness, Text size, FOV, HUD FOV, Motion Blur and no Screen mode row; text sharp at the native output and as tall as on a 1080p PC |
 | Brightness changes the picture | `scenes/24_brightness.script`, `r__exposure` 0.7 / 1.0 / 1.5 | mean pixel value 46 / 65 / 94 |
 | Windows menu untouched | code review, below | every change guarded; the `--graphics-profile none` tree equals the stock one |
-| Profile tables | `ctest -R graphics_profile_test` | device selection for iPad and Mac cases, the render scale clamp, unsupported features off in every profile and mode, lock rules, frame caps, MetalFX entries |
+| Profile tables | `ctest -R graphics_profile_test` | device selection for iPad and Mac cases, the render scale clamp, unsupported features off in every profile and mode, lock rules, frame caps (40 on 120 Hz only; Quality's 40 is 30 on 60 Hz), MetalFX entries |
+| Frame pacing is even where the display allows | the same test replays `FramePacer` against simulated 60 and 120 Hz displays with 0.3 ms of jitter | 30 on 60 Hz, 60 on both, 40 and 30 on 120 Hz: every frame a whole, equal number of refreshes at the cap's rate; 40 on 60 Hz alternates 1 and 2 refreshes |
+| The cap on the iPad | `scripts/lock_test.txt` plus `gfx_fps 40`, `gfx_fps 25`, with locks on | `gfx_fps 40` and `25`: `Invalid syntax` (not on offer on 60 Hz); `gfx_fps 30` accepted; `gfx_fps unlimited` refused; a `user.ltx` that saved `r__upscaler metalfx` from an unlocked run: `1 of them differ from the profile: r__upscaler metalfx`, ignored |
 
 Menus were screenshotted on the Mac (Settings, Visual / Basic, Modded Exes) and on the iPad. Changing a value by clicking through a drop-down was not
 scripted (the cursor starts in the middle of the screen when a dialog opens and a click on a drop-down arrow needs calibration): Apply goes through
 the stock `On_Accept`, which runs `exec_console_cmd` (the console path above) and `vid_restart` for the mode row, and `gfx_mode performance` through the
-console was checked to re-apply the profile (`graphics profile mac-pro applied (mode change)`, and on the iPad the scale 0.375 of Performance).
+console was checked to re-apply the profile (`graphics profile mac-pro applied (mode change)`, and on the iPad the scale 0.42 of Performance).
 
 ## Windows is unchanged
 

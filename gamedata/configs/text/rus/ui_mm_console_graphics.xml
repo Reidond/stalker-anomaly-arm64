@@ -3,13 +3,13 @@
 <!-- The console-like graphics options (gamedata/scripts/console_options.script, docs/ios-port/SETTINGS.md) -->
 <string_table>
 	<string id="ui_mm_gfx_desc">
-		<text>Graphics are set for this device. Quality shows the best picture it keeps at 60 frames per second; Performance keeps a safety margin, and runs at 120 where the display does.</text>
+		<text>Graphics are set for this device. Quality shows the best picture it can keep steady: 40 frames per second on a 120 Hz iPad display (30 on a 60 Hz one), 60 on a Mac. Performance lowers the render resolution for a locked 60 frames per second, and runs at 120 on a Mac display that has it.</text>
 	</string>
 	<string id="ui_mm_gfx_mode">
 		<text>Graphics mode</text>
 	</string>
 	<string id="ui_mm_gfx_mode_desc">
-		<text>Quality: the best picture the device keeps at 60 frames per second. Performance: lower render resolution for a steadier frame rate, or 120 frames per second on a 120 Hz display.</text>
+		<text>Quality: the best picture at a steady 40 frames per second (30 on a 60 Hz display, 60 on a Mac). Performance: lower render resolution for a locked 60 frames per second, or 120 on a 120 Hz Mac display.</text>
 	</string>
 	<string id="ui_mm_lst_gfx_mode_quality">
 		<text>Quality</text>
@@ -21,13 +21,16 @@
 		<text>Frame rate</text>
 	</string>
 	<string id="ui_mm_gfx_fps_desc">
-		<text>Limits the frame rate. Auto uses the mode's rate: 60, or 120 in Performance mode on a 120 Hz display.</text>
+		<text>Limits the frame rate to a rate the display shows evenly. Auto uses the mode's rate: Quality 40 on a 120 Hz iPad display, 30 on a 60 Hz one, 60 on a Mac; Performance 60 (120 on a 120 Hz Mac display).</text>
 	</string>
 	<string id="ui_mm_lst_gfx_fps_auto">
 		<text>Auto</text>
 	</string>
 	<string id="ui_mm_lst_gfx_fps_30">
 		<text>30 fps</text>
+	</string>
+	<string id="ui_mm_lst_gfx_fps_40">
+		<text>40 fps</text>
 	</string>
 	<string id="ui_mm_lst_gfx_fps_60">
 		<text>60 fps</text>

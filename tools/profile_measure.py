@@ -9,7 +9,9 @@ the trader's bunker, the Rookie village (a busy base) at noon, and the village a
 long (default 30) after `--settle` seconds (default 10) that the shell log's 10 s windows do not count. `summarize` reads the shell
 log of such a run (anomaly-shell.log; on the iPad `tools/ios/ipad.sh logs`) and prints one row per mode and scene: the frame rate
 (mean of the windows, and the slowest window), the CPU time of a frame, the GPU time, draws, the memory the OS charges (peak),
-the Metal memory, and the thermal state.
+the Metal memory, and the thermal state. A second table gives the frame intervals (the time between the starts of two frames, from the
+shell log's "frame intervals" line): the share of the frames at about 8, 17, 25, 33 ms ..., which shows whether a capped frame rate is even
+(40 fps on a 120 Hz panel is all at 25 ms; on a 60 Hz one it is split between 17 and 33 ms).
 """
 import argparse
 import re
@@ -33,6 +35,10 @@ def make_script(args):
         out.append("1.2 console gfx_mode %s" % modes[0])
     if args.unlimited:  # no frame cap: what the device could do (needs --unlocked-graphics)
         out.append("1.4 console gfx_fps unlimited")
+    elif args.fps:  # a cap that the display does not show evenly is refused unless the run is --unlocked-graphics
+        out.append("1.4 console gfx_fps %d" % args.fps)
+    for k, c in enumerate(args.console):  # more settings, e.g. "r__upscaler metalfx" (--unlocked-graphics: the profile locks them)
+        out.append("%g console %s" % (1.5 + 0.05 * k, c))
     out.append("2 console start server(%s/single/alife/load) client(localhost)" % args.save)
     out.append("3 waitlevel 300 l01_escape")
     t = 3.0
@@ -97,6 +103,7 @@ STAT = re.compile(r"^\[\s*([\d.]+)\] anomaly: ([\d.]+) fps \((\d+) frames in ([\
                   r"footprint (\d+) MB \(peak (\d+)\), available (\d+) MB, thermal (\w+)")
 METAL = re.compile(r"^\[\s*([\d.]+)\] anomaly: metal: gpu ([\d.]+) ms/frame, cpu ([\d.]+) ms/frame \(blocked ([\d.]+)\), (\d+) draws, ([\d.]+) passes/frame; "
                    r"textures (\d+) MB \(render targets (\d+) MB\), buffers (\d+) MB, allocated (\d+) MB")
+INTERVALS = re.compile(r"^\[\s*([\d.]+)\] anomaly: frame intervals \([^)]*\): ((?:[\d.]+ ){11}[\d.]+); longest ([\d.]+) ms")
 # the marker is logged twice ("script t=161.0 log MEAS ..." and "script: MEAS ..."); a log line from another thread can split one of them
 MARK = re.compile(r"^\[\s*([\d.]+)\] anomaly: script(?: t=[\d.]+ log|:) MEAS (\w+) (\w+) (begin|end)")
 
@@ -117,11 +124,15 @@ def load_contention(path):
 
 
 def summarize(paths, contention_path=None):
-    rows = []
+    rows, interval_rows = [], []
     contention = load_contention(contention_path)
     for path in paths:
-        stats, metals, marks = [], [], {}
+        stats, metals, marks, gaps = [], [], {}, []
         for line in open(path, errors="replace"):
+            m = INTERVALS.match(line)
+            if m:
+                gaps.append((float(m.group(1)), [float(x) for x in m.group(2).split()], float(m.group(3))))
+                continue
             m = STAT.match(line)
             if m:
                 stats.append((float(m.group(1)), [float(x) if i not in (10,) else x for i, x in enumerate(m.groups())]))
@@ -149,6 +160,13 @@ def summarize(paths, contention_path=None):
                 w = clean
             else:
                 note = " (contended)"
+            # the interval line of each window follows its fps line within a moment
+            g = [(buckets, longest) for t, _ in w for tg, buckets, longest in gaps if t <= tg <= t + 0.5]
+            if g:
+                share = [mean([b[i] for b, _ in g]) for i in range(12)]
+                # <6 6-11 11-14 14-19 19-22 22-28 28-31 31-37 37-45 45-55 55-100 >=100
+                interval_rows.append((mode, scene, len(g), share[0] + share[1] + share[2], share[3], share[4], share[5], share[6], share[7],
+                                      share[8] + share[9], share[10] + share[11], max(longest for _, longest in g)))
             rows.append((mode, scene + note, len(w),
                          mean([v[1] for _, v in w]), min(v[1] for _, v in w),
                          mean([v[4] for _, v in w]), mean([x[1] for x in m]), mean([x[4] for x in m]),
@@ -158,6 +176,14 @@ def summarize(paths, contention_path=None):
     print("|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|")
     for r in rows:
         print("| %s | %s | %d | %.1f | %.1f | %.1f | %.1f | %.0f | %.0f | %.0f | %.0f | %s |" % r)
+    if interval_rows:
+        print()
+        print("Frame intervals, % of the frames by the time since the previous frame started:")
+        print()
+        print("| Mode | Scene | windows | under 14 ms | 14 to 19 (17) | 19 to 22 | 22 to 28 (25) | 28 to 31 | 31 to 37 (33) | 37 to 55 | over 55 | longest ms |")
+        print("|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|")
+        for r in interval_rows:
+            print("| %s | %s | %d | %.1f | %.1f | %.1f | %.1f | %.1f | %.1f | %.1f | %.1f | %.0f |" % r)
 
 
 def main():
@@ -170,6 +196,8 @@ def main():
     s.add_argument("--settle", type=float, default=10)
     s.add_argument("--soak", type=float, default=0, help="seconds to stand in the village first, to measure warm (default 0: cool)")
     s.add_argument("--unlimited", action="store_true", help="run without the profile's frame cap (the run needs --unlocked-graphics)")
+    s.add_argument("--fps", type=int, default=0, help="a frame cap of this many fps instead of the mode's (an uneven one needs --unlocked-graphics)")
+    s.add_argument("--console", action="append", default=[], metavar="CMD", help="a console command to run before the level loads (repeatable)")
     w = sub.add_parser("sweep")
     w.add_argument("--save", required=True)
     w.add_argument("--scene", default="rain", choices=[n for n, _ in SCENES])
