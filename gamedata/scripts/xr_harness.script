@@ -165,3 +165,34 @@ function torch(on)
 	t:enable_torch(on ~= false)
 	log("torch %s", tostring(t:torch_enabled()))
 end
+
+-- prints the options menu tree as the player would see it: one line per page with its rows, and OPTIONS LOCKED for a row whose console
+-- command the device profile locks (there must be none: docs/ios-port/SETTINGS.md). Needs the menu code, so call it from the main menu.
+function options_tree()
+	if #ui_options.options == 0 then
+		ui_options.init_opt_base()
+	end
+	local locked = 0
+	local function walk(node, path)
+		for _, child in ipairs(node) do
+			local child_path = path ~= "" and (path .. "/" .. child.id) or child.id
+			if child.sh then
+				local ids = {}
+				for _, row in ipairs(child.gr or {}) do
+					if row.type ~= "line" and row.type ~= "slide" and row.type ~= "title" and row.type ~= "desc" then
+						ids[#ids + 1] = row.id
+						if row.cmd and gfx_is_locked and gfx_is_locked(row.cmd) then
+							locked = locked + 1
+							log("OPTIONS LOCKED %s/%s -> %s", child_path, row.id, row.cmd)
+						end
+					end
+				end
+				log("OPTIONS page %s (%d rows): %s", child_path, #ids, table.concat(ids, " "))
+			elseif child.gr then
+				walk(child.gr, child_path)
+			end
+		end
+	end
+	walk(ui_options.options, "")
+	log("OPTIONS locked rows visible: %d (locks %s)", locked, tostring(gfx_locks_active and gfx_locks_active() or false))
+end

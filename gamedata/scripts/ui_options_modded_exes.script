@@ -115,6 +115,12 @@ function on_xml_read()
 			end
 		end
 
+		-- Console-like menu (Apple builds, console_options.script): reduces the tree once every script has added to it, before
+		-- init_opt_coder indexes it. A no-op unless the engine's graphics locks are on.
+		if console_options.apply(ui_options.options) then
+			need_init_opt_coder = true
+		end
+
 		if need_init_opt_coder and ui_options.init_opt_coder then
 			ui_options.init_opt_coder()
 		end

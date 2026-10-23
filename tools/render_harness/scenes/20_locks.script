@@ -1,0 +1,27 @@
+# standalone
+# The device profile's locks (docs/ios-port/SETTINGS.md): locked settings refuse changes from the console and from scripts, the
+# first refusal of each is logged once, the player's own settings change. Read the engine log for the "graphics:" and "LOCKTEST" lines.
+2 console r_screenshot_mode png
+3 log LOCKTEST before
+4 console gfx_profile
+5 console r2_sun_quality
+6 console r2_sun_quality st_opt_extreme
+7 console r2_sun_quality st_opt_extreme
+8 console run_string exec_console_cmd("texture_lod 4")
+9 console run_string exec_console_cmd("r4_enable_tessellation on")
+10 console run_string exec_console_cmd("ssfx_ssr (1, 1, 1, 1)")
+11 console run_string exec_console_cmd("vid_mode 640x480")
+12 console r2_sun_quality
+13 console texture_lod
+14 console r4_enable_tessellation
+15 console fov 80
+16 console fov
+17 console gfx_mode performance
+18 console gfx_mode
+19 console gfx_fps 30
+20 console gfx_fps
+21 console gfx_fps unlimited
+22 console gfx_fps
+23 log LOCKTEST after
+24 console cfg_save
+25 quit

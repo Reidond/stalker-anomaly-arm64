@@ -5,6 +5,9 @@
 #include "ai_space.h"
 #include "script_engine.h"
 #include "../xrSound/Sound.h"
+#ifdef XR_PLATFORM_APPLE
+#include "../xrEngine/xr_graphics_profile.h"
+#endif
 
 using namespace luabind;
 
@@ -111,11 +114,37 @@ static void console_execute(lua_State* L, CConsole* c, LPCSTR cmd)
 	return table;
 }
 
+#ifdef XR_PLATFORM_APPLE
+// The device graphics profile for the options menu (gamedata/scripts/console_options.script). Apple builds only: the functions do
+// not exist on Windows, and the script checks for them.
+static bool gfx_locks_active() { return xr_gfx::LocksActive(); }
+static bool gfx_is_locked(LPCSTR command) { return xr_gfx::IsLocked(command); }
+static LPCSTR gfx_profile_id() { return xr_gfx::ProfileId(); }
+static bool gfx_is_mac() { return xr_gfx::IsMac(); }
+static ::luabind::object gfx_frame_caps()
+{
+	::luabind::object table = ::luabind::newtable(ai().script_engine().lua());
+	xr_vector<int> caps;
+	xr_gfx::FrameCaps(caps);
+	int idx = 1;
+	for (int fps : caps)
+		table[idx++] = fps;
+	return table;
+}
+#endif
+
 #pragma optimize("s",on)
 void console_registrator::script_register(lua_State* L)
 {
 	module(L)
 	[
+#ifdef XR_PLATFORM_APPLE
+		def("gfx_locks_active", &gfx_locks_active),
+		def("gfx_is_locked", &gfx_is_locked),
+		def("gfx_profile_id", &gfx_profile_id),
+		def("gfx_frame_caps", &gfx_frame_caps),
+		def("gfx_is_mac", &gfx_is_mac),
+#endif
 		def("get_console", &console),
 
 		class_<CConsole>("CConsole")

@@ -41,6 +41,7 @@
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_main.h>
 
+#include <Platform/Apple/GraphicsProfile.h>
 #include <Platform/Apple/Launcher.h>
 #include <Platform/Apple/Shell.h>
 
@@ -101,6 +102,7 @@ struct App
     Uint64 present_mark = 0;
     Uint64 footprint_sample_ns = 0;
     Uint64 quit_requested_ns = 0; // set when the app asked the engine to quit; it disconnects and unloads the level first
+    Uint64 next_frame_ns = 0;     // frame rate cap (gfx_fps): when the next frame may start
 
     // where the scripted pointer is, window points: motion events carry the position and the delta
     float pointer_x = 0, pointer_y = 0;
@@ -682,7 +684,30 @@ SDL_AppResult SDL_AppIterate(void* appstate)
     auto* app = static_cast<App*>(appstate);
     if (app->engine_up)
     {
-        const Uint64 frame_start_ns = SDL_GetTicksNS();
+        Uint64 frame_start_ns = SDL_GetTicksNS();
+        // The frame rate cap of the device profile (gfx_fps; the engine's own limiter is a busy-wait and is compiled out on iOS).
+        // Only in the game: the menus and loading run at the display's rate. On the iPad the display link calls at the display's rate, so
+        // a tick that comes too early is skipped; on a Mac the loop is not paced by anything but the present, so it sleeps.
+        const int cap = AppleShell::Graphics::EffectiveFrameCap();
+        if (cap > 0 && xr_engine::InGame())
+        {
+            const Uint64 interval_ns = 1000000000ull / Uint64(cap);
+            if (app->next_frame_ns == 0 || frame_start_ns > app->next_frame_ns + interval_ns)
+                app->next_frame_ns = frame_start_ns; // behind by more than a frame: do not catch up
+            if (frame_start_ns + 1000000ull < app->next_frame_ns)
+            {
+                const Uint64 wait_ns = app->next_frame_ns - frame_start_ns;
+#if defined(SDL_PLATFORM_IOS)
+                if (wait_ns > 5000000ull)
+                    return SDL_APP_CONTINUE; // the next display link tick is closer to the target than this one
+#endif
+                SDL_DelayPrecise(wait_ns);
+                frame_start_ns = SDL_GetTicksNS();
+            }
+            app->next_frame_ns += interval_ns;
+        }
+        else
+            app->next_frame_ns = 0;
         if (!xr_engine::Frame())
             return SDL_APP_SUCCESS;
         // one line in the shell log every 10 s: frames per second of the main loop, the CPU time of a frame (time inside

@@ -314,7 +314,7 @@ bool mtl_d3d11::EncodeSpatialUpscale(ID3D11DeviceContext*, ID3D11Texture2D* src,
 
 | Console variable | Range, default | Applied |
 |---|---|---|
-| `r__render_scale` | 0.5 to 1.0, 1.0 | at once, with a device reset (like `vid_mode`: new render targets, about 0.2 s); saved in `user.ltx` |
+| `r__render_scale` | 0.35 to 1.0, 1.0 (0.5 to 1.0 in the MetalFX measurements; the settings session lowered the minimum for the iPad profile) | at once, with a device reset (like `vid_mode`: new render targets, about 0.2 s); saved in `user.ltx` |
 | `r__upscaler` | `metalfx` or `bilinear`, `metalfx` | next frame; saved |
 | `r__upscale_sharpness` | 0 to 1, 0 | next frame; saved |
 

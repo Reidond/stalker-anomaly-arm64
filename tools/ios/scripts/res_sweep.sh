@@ -14,5 +14,5 @@ for res in $sizes; do
 100 quit
 EOT
     echo "== $res"
-    $here/../ipad.sh script $tmp/res_$res.txt -dbg 2>&1 | tee -a ${TMPDIR:-/tmp}/res_sweep.raw | grep -a -E "RES|fps" | grep -a -v "script t=" | cut -c1-200
+    $here/../ipad.sh script $tmp/res_$res.txt -dbg --unlocked-graphics 2>&1 | tee -a ${TMPDIR:-/tmp}/res_sweep.raw | grep -a -E "RES|fps" | grep -a -v "script t=" | cut -c1-200
 done

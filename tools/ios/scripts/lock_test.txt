@@ -1,0 +1,28 @@
+# The device profile's locks on the iPad (docs/ios-port/SETTINGS.md). Needs -dbg for run_string:
+#   tools/ios/ipad.sh script tools/ios/scripts/lock_test.txt -dbg
+# Locked settings refuse changes from the console and from scripts (the first refusal of each is logged once), the player's own settings
+# change, and cfg_save then writes user.ltx with the profile's values. Read the engine log (ipad.sh logs): "graphics:" and "LOCKTEST" lines.
+# Run it twice: the second run's startup line shows what the first one saved.
+2 log LOCKTEST before
+3 console gfx_profile
+4 console r2_sun_quality
+5 console r2_sun_quality st_opt_extreme
+6 console r2_sun_quality st_opt_extreme
+7 console run_string exec_console_cmd("texture_lod 4")
+8 console run_string exec_console_cmd("r4_enable_tessellation on")
+9 console run_string exec_console_cmd("ssfx_ssr (1, 1, 1, 1)")
+10 console run_string exec_console_cmd("vid_mode 640x480")
+11 console run_string get_console():execute("r3_msaa 4x")
+12 console r2_sun_quality
+13 console texture_lod
+14 console r4_enable_tessellation
+15 console r3_msaa
+16 console vid_mode
+17 console fov 80
+18 console fov
+19 console gfx_fps 30
+20 console gfx_fps
+21 console gfx_fps unlimited
+22 log LOCKTEST after
+23 console cfg_save
+25 quit

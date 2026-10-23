@@ -11,8 +11,9 @@
 # (ANOMALY_STATE_ROOT), so it neither reads nor changes the player's settings and saves. The app runs unattended
 # (offscreen, background); see docs/ios-port/INTEGRATION.md.
 #
-# Environment: HARNESS_COLD_SHADERS=1 (empty shader cache), HARNESS_ENV="VAR=value ..." (passed to the app),
-# HARNESS_FOOTPRINT=1 (writes footprint.txt: `footprint` of the app at about 40 s; tools/render_harness/perf_report.sh reads it).
+# Environment: HARNESS_COLD_SHADERS=1 (empty shader cache), HARNESS_ENV="VAR=value ..." (passed to the app), HARNESS_ARGS="..." (more
+# app arguments; `-p preset` already adds `--graphics-profile none`),
+# HARNESS_STATE=<dir> (use that state root instead of a fresh one), HARNESS_FOOTPRINT=1 (writes footprint.txt: `footprint` of the app at about 40 s; tools/render_harness/perf_report.sh reads it).
 set -euo pipefail
 
 root=$(cd "$(dirname "$0")/../.." && pwd)
@@ -50,10 +51,13 @@ mkdir -p "$saves"
 
 for scene in "${scenes[@]}"; do
     src=$root/tools/render_harness/scenes/$scene.script
+    # a path to a script file works too (tools/profile_measure.py script)
+    if [ -f "$scene" ]; then src=$(cd "$(dirname "$scene")" && pwd)/$(basename "$scene"); scene=$(basename "${scene%.*}"); fi
     [ -f "$src" ] || { echo "no scene $src" >&2; exit 2; }
     run=$out/$tag/$scene
     rm -rf "$run"
-    state=$run/state
+    mkdir -p "$run"
+    state=${HARNESS_STATE:-$run/state} # HARNESS_STATE=<dir>: a state root that outlives the run (settings that must survive a restart)
     appdata=$state/Application\ Support/Anomaly/appdata
     mkdir -p "$appdata/savedgames" "$state/Caches/Anomaly" "$state/Logs/Anomaly"
     # the shader cache is shared with the player's by default (translating the whole shader set takes minutes);
@@ -80,6 +84,11 @@ for scene in "${scenes[@]}"; do
 
     args=(--data-root "$data" --script "$script" --exit-after "$limit" -dbg)
     [ -n "$size" ] && args+=(--size "$size")
+    # the Mac's graphics profile (docs/ios-port/SETTINGS.md) overrides user.ltx: a `-p preset` or `-x` run is about its own values, so it
+    # runs without a profile. HARNESS_ARGS adds anything else, e.g. "--graphics-profile ipad" or "--unlocked-graphics".
+    if [ -n "$preset" ] || [ ${#extras[@]} -gt 0 ]; then args+=(--graphics-profile none); fi
+    # shellcheck disable=SC2206
+    [ -n "${HARNESS_ARGS:-}" ] && args+=(${HARNESS_ARGS})
     echo "== $scene (tag $tag${preset:+, preset $preset}${extras[*]:+, ${extras[*]}})"
     start=$(date +%s)
     envargs=()

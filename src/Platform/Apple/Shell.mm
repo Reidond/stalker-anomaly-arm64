@@ -327,14 +327,10 @@ bool Init(const InitParams& params)
             FormatBytes(device.storage_free_raw).c_str(), FormatBytes(device.storage_total).c_str());
 
         {
-            // the iPad graphics preset: merged into user.ltx before the engine reads it
-            std::string preset;
-#if TARGET_OS_IOS
-            preset = "ipad";
-#endif
-            bool reset = false;
-            // `--device-preset <reset|none|ipad>` from commandline.txt (the engine reads the same file; iPad: Documents/, Mac: the
-            // app support folder), then from the command line, which wins
+            // The device's graphics profile (GraphicsProfile.h). `--graphics-profile <id|none>` and `--unlocked-graphics` come from
+            // commandline.txt (the engine reads the same file; iPad: Documents/, Mac: the app support folder), then from the command
+            // line, which wins. `--device-preset none|ipad` is the old spelling.
+            Graphics::Options options;
             std::vector<std::string> words;
             {
                 std::istringstream file(ReadFile(
@@ -357,14 +353,19 @@ bool Init(const InitParams& params)
             }
             for (int i = 1; params.argv && i < params.argc; ++i)
                 words.push_back(params.argv[i]);
-            for (size_t i = 0; i + 1 < words.size(); ++i)
+            for (size_t i = 0; i < words.size(); ++i)
             {
-                if (words[i] != "--device-preset")
-                    continue;
-                reset = words[i + 1] == "reset";
-                preset = words[i + 1] == "none" ? "" : "ipad";
+                if (words[i] == "--unlocked-graphics")
+                    options.unlocked = true;
+                else if (i + 1 < words.size() && words[i] == "--graphics-profile")
+                    options.profile = words[i + 1];
+                else if (i + 1 < words.size() && words[i] == "--device-preset")
+                    options.profile = words[i + 1] == "none" ? "none" : words[i + 1] == "ipad" ? "ipad" : options.profile;
             }
-            Internal::ApplyDevicePreset(preset, reset, p.appdata, p.app_support);
+            Graphics::Init(Internal::DetectHardware(), options);
+            Log("%s", Graphics::Describe().c_str());
+            if (Graphics::Enabled() && !Graphics::CommandLine().empty())
+                Log("graphics profile: engine command line '%s'", Graphics::CommandLine().c_str());
         }
 
         // The generated fsgame.ltx mounts the archive only when this run packed (or found current) the one for the overlay it
@@ -412,7 +413,7 @@ bool IsInitialized()
 
 const std::string& DevicePresetCommandLine()
 {
-    return Internal::DevicePresetCommandLine();
+    return Graphics::CommandLine();
 }
 
 const Paths& GetPaths()

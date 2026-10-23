@@ -36,6 +36,7 @@ free from ModDB.
 | Graphics | Anomaly's DX11 renderer is kept and runs on a D3D11 subset implemented on Metal (`src/Platform/MetalD3D11`). | [METAL-SHIM.md](docs/ios-port/METAL-SHIM.md) |
 | Shaders | Translated at runtime with an on-disk cache, so addon shaders keep working (`src/Platform/ShaderXlat`). The pipeline is HLSL → vkd3d-shader → SPIR-V → SPIRV-Cross → MSL. | [SHADERS.md](docs/ios-port/SHADERS.md) |
 | Controls | `src/Platform/GameInput`, over SDL3 and GameController. | [CONTROLS.md](docs/ios-port/CONTROLS.md) |
+| Graphics settings | Console-like: a profile per device class (iPad model, Mac chip tier) sets and locks the quality settings; the menu keeps a mode (Quality or Performance), the frame rate, field of view, brightness, motion blur and the HUD. `src/Platform/Apple/GraphicsProfile.*`. | [SETTINGS.md](docs/ios-port/SETTINGS.md) |
 | App shell | `src/Platform/Apple`: paths, game-data checks, lifecycle, memory/thermal callbacks, launcher. | [APP-SHELL.md](docs/ios-port/APP-SHELL.md) |
 | Scripts | LuaJIT 2.1. JIT on the Mac; interpreter on the iPad, or JIT through SideStore + StikDebug. | [IPAD-JIT.md](docs/ios-port/IPAD-JIT.md) |
 | Audio and video | OpenAL Soft on CoreAudio; Ogg, Vorbis and Theora. | |

@@ -50,6 +50,11 @@ protected:
 
 	u32 uFlags;
 
+#ifdef XR_PLATFORM_APPLE
+	// Text size on Apple (docs/ios-port/SETTINGS.md, "UI text size"): the multiplier of this font's glyph height, 1 on a small screen
+	float fTextScale = 1.0f;
+#endif
+
 public:
 	enum
 	{
@@ -119,5 +124,10 @@ public:
 
 // Resolves which atlas key of `section` to load for the current Device.dwHeight.
 ENGINE_API LPCSTR GetFontTextureName(LPCSTR section);
+
+#ifdef XR_PLATFORM_APPLE
+// The player's text size multiplier (console `ui_text_scale`, 0.75 to 1.5, applied to the fonts created after it changes: `vid_restart`).
+extern ENGINE_API float ps_ui_text_scale;
+#endif
 
 #endif // _XR_GAMEFONT_H_
