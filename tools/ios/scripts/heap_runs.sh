@@ -49,7 +49,7 @@ write_script() { # scenario file
         menu) printf '%s\n' '25 quit' > $2 ;;
         loading) printf '%s\n' '8 console start server(ipad_test/single/alife/load) client(localhost)' '38 quit' > $2 ;;
         play) printf '%s\n' '8 console start server(ipad_test/single/alife/load) client(localhost)' \
-            '60 key Space' '90 key Space' '120 key Space' '150 key Space' '180 keydown W' '195 keyup W' '205 keydown A' '215 keyup A' '230 quit' > $2 ;;
+            '60 key Space' '90 key Space' '110 keydown W' '125 keyup W' '135 keydown A' '145 keyup A' '150 quit' > $2 ;;
         churn) printf '%s\n' '8 console start server(ipad_test/single/alife/load) client(localhost)' \
             '45 key Space' '60 key Space' '62 console run_string ipad_debug.tp(54.9, 3.5, 157.1)' \
             '77 console run_string ipad_debug.tp(-14.5, 2.5, 274.7)' '92 console run_string ipad_debug.tp(-81.3, 1.5, 113.2)' \
