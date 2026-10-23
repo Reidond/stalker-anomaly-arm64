@@ -76,8 +76,8 @@ HUD models (the scenes carry no weapon in hand), MP maps.
 ### Visual pass (M5)
 
 Every scene above, in four configurations, looked at one by one: `mac-pro` Quality (native 1.0) and Performance (MetalFX 0.7), and the
-iPad's `ipad-8gb` profile on the Mac (unlocked) in Quality (0.6) and Performance (0.42) with `r__upscaler metalfx`. 76 runs with the final
-build: no crash, no shader-linkage line, no `pipeline creation failed` (`HARNESS_CONSOLE`, tools/render_harness/run_scene.sh).
+iPad's `ipad-8gb` profile on the Mac (unlocked) in Quality (0.6) and Performance (0.42) with `r__upscaler metalfx`. 72 runs: no shader-linkage line and no `pipeline creation failed`;
+two teleport crashes (below) were rerun clean (`HARNESS_CONSOLE`, tools/render_harness/run_scene.sh).
 There is no PC reference at hand; the pictures were judged against what Anomaly 1.5.3 looks like.
 
 | Scene | Verdict |
@@ -113,7 +113,7 @@ What is not right or not checked:
 | `tools/sweep/run.sh smoke` on this branch, release build, 4 runs | 0 `[MetalD3D11]` lines in the stderr of every run; the unmodified main app prints 3 (`waterd` twice, `wmark` + `simple`) |
 | the same plan under ASan+UBSan, 2 runs | run 1 (completed): 0 ASan reports, 2 UBSan (NaN into `iFloor`/`iCeil` in the occlusion rasteriser, fixed after it); run 2: 0 and 0 |
 | scenes, 4 configurations x 18 | 72 runs, 0 linkage lines, 0 `pipeline creation failed`; 2 crashes (below), rerun clean |
-| scope, aimed, 4 configurations | 0 % magenta pixels in the final build (12 runs of 12 magenta before it under load; screenshots in the PR) |
+| scope, aimed, 4 configurations | 0 % magenta pixels in the final build; before the two fixes every aimed scope was magenta (the second time only under heavy machine load); screenshots in the PR |
 
 The smoke plan's last step, the arrival in the Garbage, intermittently never starts the driver ("driver armed" and then nothing, until the plan's
 timeout): the unmodified main app does it too (1 of 2 runs here), this branch 2 of 4. Not caused by this change; the plan's earlier parts, the
