@@ -148,35 +148,46 @@ CSE_Abstract* CALifeSimulatorBase::spawn_item(LPCSTR section, const Fvector& pos
 	return (dynamic_object);
 }
 
-// An entity costs about half a kilobyte; the oldest goes when this many are parked
-static const size_t deferred_destroy_cap = 16384;
+// An entity is a few hundred bytes to a few kilobytes; the oldest goes when this many are parked
+static const size_t deferred_destroy_cap = 32768;
 
-void CALifeSimulatorBase::defer_destroy(CSE_Abstract* object)
+void CALifeSimulatorBase::defer_destroy(CSE_Abstract* object) const
 {
 	if (!object)
 		return;
 
-	xrCriticalSectionGuard guard(m_deferred_destroy_lock);
-	if (std::find(m_deferred_destroy.begin(), m_deferred_destroy.end(), object) != m_deferred_destroy.end())
-		return;
-
-	m_deferred_destroy.push_back(object);
-	if (m_deferred_destroy.size() > deferred_destroy_cap)
+	CSE_Abstract* evicted = nullptr;
 	{
-		F_entity_Destroy(m_deferred_destroy.front());
-		m_deferred_destroy.erase(m_deferred_destroy.begin());
+		xrCriticalSectionGuard guard(m_deferred_destroy_lock);
+		if (!m_deferred_destroy_set.insert(object).second)
+			return;
+
+		m_deferred_destroy.push_back(object);
+		if (m_deferred_destroy.size() > deferred_destroy_cap)
+		{
+			evicted = m_deferred_destroy.front();
+			m_deferred_destroy.pop_front();
+			m_deferred_destroy_set.erase(evicted);
+		}
 	}
+
+	// outside the lock: the destructor of a script-derived entity releases Lua references
+	if (evicted)
+		F_entity_Destroy(evicted);
 }
 
 void CALifeSimulatorBase::flush_deferred_destroy()
 {
-	xr_vector<CSE_Abstract*> parked;
+	std::deque<CSE_Abstract*> parked;
 	{
 		xrCriticalSectionGuard guard(m_deferred_destroy_lock);
 		parked.swap(m_deferred_destroy);
+		m_deferred_destroy_set.clear();
 	}
 
-	// outside the lock: the destructor of a script-derived entity releases Lua references
+	if (!parked.empty())
+		Msg("* ALife: %u entities released by scripts or the simulator were kept until now", u32(parked.size()));
+
 	for (CSE_Abstract*& object : parked)
 		F_entity_Destroy(object);
 }

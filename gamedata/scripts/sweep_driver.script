@@ -540,6 +540,7 @@ local function trade()
 	pause(4000)
 	try("trader state", function()
 		trader = get_story_object("esc_m_trader")
+		check("the actor is alive", db.actor:alive(), "health " .. tostring(db.actor.health))
 		say("trader alive %s, %s m away, is_trade_enabled %s", tostring(trader:alive()), tostring(math.floor(db.actor:position():distance_to(trader:position()))), tostring(trader:is_trade_enabled()))
 	end)
 	try("gear", function()
@@ -597,6 +598,28 @@ local function reprocess()
 		check("register " .. i .. ": the old object still reads its id 15 s later", o.se.id == o.id)
 	end
 	check("registered items arrived", count_of(db.actor, "bread") >= 6, tostring(count_of(db.actor, "bread")))
+
+	-- alife():release: the entity is freed by the simulator, a script that kept it (axr_companions keeps squads in a table and reads
+	-- them later) still reads it
+	local released = {}
+	for i = 1, 6 do
+		local se, id = nil, nil
+		try("create for release " .. i, function()
+			se = alife_create("bread", db.actor:position(), db.actor:level_vertex_id(), db.actor:game_vertex_id())
+			id = se.id
+		end)
+		if se then
+			pause(500)
+			try("release " .. i, function() alife():release(se, true) end)
+			check("release " .. i .. ": the released object reads its id", se.id == id and se:section_name() == "bread")
+			released[#released + 1] = { se = se, id = id }
+			pause(300)
+		end
+	end
+	pause(15000)
+	for i, o in ipairs(released) do
+		check("release " .. i .. ": the released object still reads 15 s later", o.se.id == o.id and o.se:section_name() == "bread")
+	end
 end
 
 -- the loot window of a body or a stash: opened the way the engine's use does, everything taken with the window's own keys
@@ -878,8 +901,11 @@ local phases = {
 		function() -- after the reload: PDA, trade, a level change, one more save, then reload that one too
 			if not wait_for("the reload", 240000, function() return actor_ready() and level_is("l01_escape") end) then return { quit = true } end
 			enable_ui()
+			-- the save was made with enemies around and god mode is not part of a save: without it they kill the actor while the PDA
+			-- and the trade steps run (a dead actor cannot be teleported or talk, and a level change then never gets its first update)
+			god(true)
 			pause(6000)
-			say("reloaded, health %s", tostring(db.actor.health))
+			say("reloaded, health %s, alive %s", tostring(db.actor.health), tostring(db.actor:alive()))
 			pda()
 			reprocess()
 			trade()
