@@ -78,7 +78,7 @@ for ((i = 1; i <= runs; i++)); do
     result=other
     if (( secs >= limit )); then result=hang
     elif [[ -s $d/crash.log ]] && grep -a -q -i "SIGABRT\|abort" $d/crash.log; then result=abort
-    elif grep -a -q -i "pointer being freed was not allocated\|malloc: \*\*\* error\|Heap corruption" $d/console.txt $d/crash.log 2>/dev/null; then result=abort
+    elif grep -a -q -i "pointer being freed\|malloc: \*\*\* error\|malloc: Heap corruption detected\|corruption detected" $d/console.txt $d/crash.log 2>/dev/null; then result=abort
     elif [[ -s $d/crash.log ]]; then result=crash
     elif grep -a -q "anomaly: quit (ok)" $d/shell.log $d/console.txt 2>/dev/null && grep -a -q "exit code 0" $d/console.txt; then result=ok
     fi
