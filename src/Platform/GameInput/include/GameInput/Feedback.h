@@ -6,6 +6,7 @@
 #pragma once
 
 #include <cstdint>
+#include <string>
 #include <string_view>
 #include <vector>
 
@@ -73,6 +74,8 @@ struct TriggerEffect
     static TriggerEffect MakeSlope(float start, float end, float strength, float end_strength);
 };
 const char* TriggerEffectName(const TriggerEffect& effect);
+// "weapon start 0.40 end 0.62 strength 0.55": the arguments the DualSense layer passes to GameController (after its clamping), for logs.
+std::string DescribeTriggerEffect(const TriggerEffect& effect);
 
 struct TriggerPair
 {

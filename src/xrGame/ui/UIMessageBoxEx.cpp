@@ -114,7 +114,13 @@ bool CUIMessageBoxEx::OnKeyboardAction(int dik, EUIMessages keyboard_action)
 			*/
 		}
 		else
+		{
+#ifdef XR_PLATFORM_APPLE
+			if (dik == DIK_ESCAPE && m_pMessageBox->OnEscape())
+				return true;
+#endif
 			return CUIDialogWnd::OnKeyboardAction(dik, keyboard_action);
+		}
 	}
 	return CUIDialogWnd::OnKeyboardAction(dik, keyboard_action);
 }

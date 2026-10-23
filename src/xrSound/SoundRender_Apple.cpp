@@ -132,6 +132,30 @@ void use_anomaly_alsoft_conf()
 		Msg("SOUND: OpenAL Soft settings from %s", conf.c_str());
 		return;
 	}
+	// No ini (the iPad has no bin\: tools/ios/push_gamedata.sh leaves the Windows binaries behind): write the settings that matter. The engine
+	// asks for snd_targets = 1024 sources and OpenAL Soft's default allows 256, so every start logged "Max targets - 256" and "Can't create source.
+	// Error: Out of Memory" and lowered snd_targets; the rest is Anomaly's own ini minus `stereo-mode = headphones`, which would run the HRTF on the
+	// speaker (`auto` leaves it to the output).
+	if (FS.path_exist("$app_data_root$"))
+	{
+		string_path out_v;
+		FS.update_path(out_v, "$app_data_root$", "alsoft.ini");
+		const std::string out_path = xr_native_path(out_v);
+		std::ofstream out(out_path, std::ios::trunc);
+		out << "[general]\nperiods = 4\nsources = 1024\nhrtf-mode = full\n";
+		if (FS.path_exist("$fs_root$"))
+		{
+			string_path root_v;
+			FS.update_path(root_v, "$fs_root$", "");
+			out << "hrtf-paths = " << xr_native_path(root_v) << '\n';
+		}
+		if (out.good())
+		{
+			setenv("ALSOFT_CONF", out_path.c_str(), 0);
+			Msg("SOUND: no alsoft.ini in the game data, OpenAL Soft settings written to %s", out_path.c_str());
+			return;
+		}
+	}
 	Msg("SOUND: no alsoft.ini found, OpenAL Soft defaults");
 }
 } // namespace

@@ -176,12 +176,18 @@ public:
 		std::function<void(float ui_x, float ui_y)> cursor_jump; // GetUICursor().SetUICursorPosition(...)
 		std::function<void(int command)> ui_action;              // 0 previous page, 1 next page (tabs)
 		std::function<void(bool connected)> connection;          // pause + "reconnect the controller"
+		std::function<void()> other_input;                       // a key, a mouse button or a touch: ends the pause for a missing controller
 	};
 	PadHooks pad_hooks;
 
 	// The controller layer (DualSense): bindings, tuning, feedback, key capture. Created with CInput.
 	gameinput::GameInput* Pad();
 	gameinput::SdlPadSource* PadSource();
+	// Console `pad_feedback_log`: log every rumble and light bar change with its parameters (trigger effects always are).
+	void SetPadFeedbackLog(bool on);
+	bool PadFeedbackLog();
+	// Console `pad_info`: one log line per connected controller (model, capabilities, which one drives the game).
+	void LogPadInfo();
 #endif
 };
 

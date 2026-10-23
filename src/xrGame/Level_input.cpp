@@ -165,6 +165,11 @@ void CLevel::IR_OnKeyboardPress(int key)
 	bool b_ui_exist = (!!CurrentGameUI());
 
 	EGameActions _curr = get_binded_action(key);
+#ifdef XR_PLATFORM_APPLE
+	// scripted pad runs (console pad_feedback_log): which action a pad key reached
+	if (pInput && pInput->PadFeedbackLog() && key >= 1200)
+		Msg("* pad key %d -> action %s", key, _curr == kNOTBINDED ? "(none)" : id_to_action_name(_curr));
+#endif
 
     if (_curr == kEDITOR)
     {
