@@ -69,6 +69,7 @@ final class LauncherHost {
         #elseif canImport(AppKit)
         let window = Unmanaged<NSWindow>.fromOpaque(pointer).takeUnretainedValue()
         guard let content = window.contentView else { return false }
+        window.backgroundColor = .windowBackgroundColor
         let view = NSHostingView(rootView: root)
         view.frame = content.bounds
         view.autoresizingMask = [.width, .height]

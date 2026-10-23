@@ -4,18 +4,29 @@
 file(GLOB anomaly_launcher_sources CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/*.swift")
 set(ANOMALY_LAUNCHER_SOURCES ${anomaly_launcher_sources} CACHE INTERNAL "SwiftUI launcher sources (also compiled into tools/launcher_snapshot)")
 
-# CMake does not pass the deployment target to swiftc, which would then build for the SDK's newest OS.
-if(ANOMALY_IOS)
-    set(ANOMALY_LAUNCHER_SWIFT_TRIPLE "arm64-apple-ios${CMAKE_OSX_DEPLOYMENT_TARGET}" CACHE INTERNAL "swiftc -target of the launcher")
-else()
-    set(ANOMALY_LAUNCHER_SWIFT_TRIPLE "arm64-apple-macosx${CMAKE_OSX_DEPLOYMENT_TARGET}" CACHE INTERNAL "swiftc -target of the launcher")
+# CMake does not pass the deployment target to swiftc with the Ninja generator, which would then build for the SDK's newest OS (the Xcode
+# generator passes it itself, and a second -target there only draws a warning).
+set(ANOMALY_LAUNCHER_SWIFT_TARGET_OPTION "" CACHE INTERNAL "swiftc -target of the launcher (Ninja)")
+if(NOT CMAKE_GENERATOR STREQUAL "Xcode")
+    if(ANOMALY_IOS)
+        set(ANOMALY_LAUNCHER_SWIFT_TARGET_OPTION "SHELL:-target arm64-apple-ios${CMAKE_OSX_DEPLOYMENT_TARGET}" CACHE INTERNAL "" FORCE)
+    else()
+        set(ANOMALY_LAUNCHER_SWIFT_TARGET_OPTION "SHELL:-target arm64-apple-macosx${CMAKE_OSX_DEPLOYMENT_TARGET}" CACHE INTERNAL "" FORCE)
+    endif()
 endif()
 
 add_library(anomaly_launcher STATIC ${anomaly_launcher_sources} AnomalyLauncher.h)
+# The sanitizer flags (-fsanitize=..., cmake/AnomalyPlatform.cmake) are directory-wide options and swiftc rejects them: this target drops
+# what it inherited. Whole-module: the driver's -incremental mode intermittently fails to link with `cannotResolveTempPath`.
+set_property(TARGET anomaly_launcher PROPERTY COMPILE_OPTIONS "")
+set_property(TARGET anomaly_launcher PROPERTY LINK_OPTIONS "")
 set_target_properties(anomaly_launcher PROPERTIES
     Swift_LANGUAGE_VERSION 5
+    Swift_COMPILATION_MODE wholemodule
     Swift_MODULE_NAME AnomalyLauncher)
-target_compile_options(anomaly_launcher PRIVATE "SHELL:-target ${ANOMALY_LAUNCHER_SWIFT_TRIPLE}")
+if(ANOMALY_LAUNCHER_SWIFT_TARGET_OPTION)
+    target_compile_options(anomaly_launcher PRIVATE "${ANOMALY_LAUNCHER_SWIFT_TARGET_OPTION}")
+endif()
 foreach(anomaly_launcher_dep ModManagerCore ModDownloads)
     if(TARGET ${anomaly_launcher_dep})
         target_link_libraries(anomaly_launcher PUBLIC ${anomaly_launcher_dep})

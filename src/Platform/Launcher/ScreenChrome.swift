@@ -20,9 +20,11 @@ struct ScreenChrome<Trailing: View>: ViewModifier {
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 12)
+            .background(.bar)
             Divider()
             content
         }
+        .background(Color(nsColor: .windowBackgroundColor))
         #else
         content
             .navigationTitle(title)

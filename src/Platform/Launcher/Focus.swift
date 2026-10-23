@@ -159,7 +159,7 @@ struct PadFocusModifier: ViewModifier {
                 if focused {
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
                         .strokeBorder(Color.accentColor, lineWidth: 3)
-                        .padding(-4)
+                        .padding(1)
                         .allowsHitTesting(false)
                 }
             }
