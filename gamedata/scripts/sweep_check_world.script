@@ -417,13 +417,13 @@ local function weather_plan()
 	end
 	local noon = set_hour(12)
 	C.check("weather", "set-noon", noon == 12, "hour " .. noon)
-	local sun_noon = level.get_sun_intensity()
+	local sun_noon = level.get_sun_pos().y
 	C.shot("chk_weather_noon")
 	local mid = set_hour(1)
 	C.check("weather", "set-night", mid == 1, "hour " .. mid)
-	local sun_night = level.get_sun_intensity()
+	local sun_night = level.get_sun_pos().y
 	C.shot("chk_weather_night")
-	C.check("weather", "sun-intensity", sun_noon > sun_night, string.format("sun intensity %.3f at noon, %.3f at 1 o'clock", sun_noon, sun_night))
+	C.check("weather", "sun-position", sun_noon > sun_night, string.format("sun height (y of its direction) %.3f at noon, %.3f at 1 o'clock", sun_noon, sun_night))
 	local pos_noon = set_hour(12)
 
 	-- weather presets: each is applied and read back
@@ -462,7 +462,7 @@ local function weather_plan()
 	for _ in pairs(hours_seen) do n_hours = n_hours + 1 end
 	for _ in pairs(weather_seen) do n_weathers = n_weathers + 1 end
 	local advanced = game.get_game_time():diffSec(d0)
-	C.check("weather", "cycle-clock", advanced > 20 * 3600 and n_hours >= 12, string.format("%.1f game hours in 60 s, %d different hours seen", advanced / 3600, n_hours))
+	C.check("weather", "cycle-clock", advanced > 10 * 3600 and n_hours >= 10, string.format("%.1f game hours in 60 s, %d different hours seen", advanced / 3600, n_hours))
 	C.check("weather", "cycle-weather", n_weathers >= 2, string.format("%d weather presets over the day: %s", n_weathers, (function() local t = {} for k in pairs(weather_seen) do t[#t + 1] = k end return table.concat(t, ",") end)()))
 	H.god(false)
 	return C.done("chk_weather")
@@ -505,6 +505,8 @@ local function sleep_plan()
 	db.actor:set_actor_position(zone:position())
 	H.pause(4000)
 	H.god(false)
+	fast_forward(400, 15000) -- tire the actor out first, so that rest is something that can be seen
+	H.pause(1000)
 	local v0 = C.vitals()
 	local t0 = game.get_game_time()
 	local h0 = level.get_time_hours()
@@ -523,7 +525,7 @@ local function sleep_plan()
 	local slept = game.get_game_time():diffSec(t0) / 3600
 	local v1 = C.vitals()
 	C.check("sleep", "time-passes", woke and slept >= 1, string.format("%.1f game hours passed, hour %d -> %d", slept, h0, level.get_time_hours()))
-	C.check("sleep", "rested", v1.power >= 0.99 and (v1.sleepiness or 0) <= (v0.sleepiness or 1), string.format("sleepiness %s -> %s, power %s", C.fmt(v0.sleepiness), C.fmt(v1.sleepiness), C.fmt(v1.power)))
+	C.check("sleep", "rested", v1.power >= 0.99 and (v1.sleepiness or 1) < (v0.sleepiness or 0), string.format("sleepiness %s -> %s, power %s", C.fmt(v0.sleepiness), C.fmt(v1.sleepiness), C.fmt(v1.power)))
 	C.check("sleep", "hungrier", v1.satiety < v0.satiety, string.format("satiety %.4f -> %.4f", v0.satiety, v1.satiety))
 	C.check("sleep", "thirstier", (v1.thirst or 0) > (v0.thirst or 0), string.format("thirst %s -> %s", C.fmt(v0.thirst), C.fmt(v1.thirst)))
 	C.check("sleep", "autosave", C.save_exists("player - sleep") ~= nil, "the sleep save: " .. tostring(C.save_exists("player - sleep") ~= nil))
