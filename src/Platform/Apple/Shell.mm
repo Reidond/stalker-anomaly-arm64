@@ -302,6 +302,7 @@ bool Init(const InitParams& params)
             p.mods_root = Normalize(env);
             default_mods_root = false;
         }
+        SetModsRoot(p.mods_root); // the one folder the mod removal functions act on
         p.overlay_source = ResolveOverlaySource(params);
         p.overlay_archive_dir = p.caches + "/overlay";
 

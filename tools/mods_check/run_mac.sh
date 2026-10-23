@@ -49,8 +49,20 @@ if [ -z "$data_root" ]; then
 fi
 [ -d "$data_root/db" ] || { echo "no game data at $data_root (--data-root)" >&2; exit 2; }
 [ -n "$out" ] || out="$repo/build/mods-check/$scenario"
-if [ "$keep" = 1 ]; then rm -rf "$out/game" "$out/state/Mods" "$out/stdout.txt" "$out/stderr.txt"; else rm -rf "$out"; fi
+# Nothing is removed unless it is a folder this script made: --out must not exist, be empty, or carry the marker file of an earlier run.
+marker=".mods_check_run"
+if [ -e "$out" ] && [ -n "$(ls -A "$out" 2>/dev/null)" ] && [ ! -f "$out/$marker" ]; then
+    echo "$out exists and was not made by this script (no $marker in it): not touching it, pass another --out" >&2
+    exit 2
+fi
+if [ "$keep" = 1 ]; then
+    [ -f "$out/$marker" ] || { echo "--keep needs the folder of an earlier run in $out" >&2; exit 2; }
+    rm -rf "$out/game" "$out/state/Mods" "$out/stdout.txt" "$out/stderr.txt"
+elif [ -f "$out/$marker" ]; then
+    rm -rf "$out"
+fi
 mkdir -p "$out"
+touch "$out/$marker"
 out="$(cd "$out" && pwd)"
 
 # the scratch game folder: the archives are the real ones, gamedata/ is empty and writable

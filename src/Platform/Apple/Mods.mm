@@ -286,28 +286,44 @@ namespace fs = std::filesystem;
 
 namespace
 {
-// The canonical mods root, or an empty path with the reason in `why`.
-fs::path CheckedRoot(const std::string& mods_root, std::string& why)
+std::string g_mods_root; // Paths::mods_root as the shell resolved it (SetModsRoot)
+
+// The canonical mods root when removing from it is allowed; otherwise an empty path and the reason in `why`.
+fs::path RemovableRoot(std::string& why)
 {
     std::error_code ec;
-    if (mods_root.empty())
+    if (g_mods_root.empty())
     {
-        why = "no mods root";
+        why = "no mods root is set";
         return {};
     }
-    const fs::path root = fs::weakly_canonical(fs::path(mods_root), ec);
+    const fs::path root = fs::weakly_canonical(fs::path(g_mods_root), ec);
     if (ec || !fs::is_directory(root, ec))
     {
         why = "the mods root is not a folder";
         return {};
     }
-    size_t parts = 0;
-    for (const fs::path& part : root)
-        if (!part.empty() && part != "/")
-            ++parts;
-    if (parts < 3)
+    if (root.filename() != "Mods")
     {
-        why = "the mods root is too close to the top of the file system";
+        why = "the mods root is not a folder named Mods";
+        return {};
+    }
+    // the marker: modlist.json, or nothing but mod folders (each holds a mod.json), which includes an empty folder
+    if (fs::is_regular_file(root / "modlist.json", ec))
+        return root;
+    for (fs::directory_iterator it(root, ec), end; !ec && it != end; it.increment(ec))
+    {
+        const fs::path& entry = it->path();
+        std::error_code e2;
+        if (!fs::is_directory(fs::symlink_status(entry, e2)) || !fs::is_regular_file(entry / "mod.json", e2))
+        {
+            why = "the mods root has no modlist.json and holds something that is not a mod folder (" + entry.filename().string() + ")";
+            return {};
+        }
+    }
+    if (ec)
+    {
+        why = "the mods root cannot be listed";
         return {};
     }
     return root;
@@ -343,11 +359,16 @@ void RemoveEntry(const fs::path& root, const fs::path& entry, AppleShell::ModsRe
 
 namespace AppleShell
 {
-ModsRemoval RemoveModFolder(const std::string& mods_root, const std::string& id)
+void SetModsRoot(const std::string& mods_root)
+{
+    g_mods_root = mods_root;
+}
+
+ModsRemoval RemoveModFolder(const std::string& id)
 {
     ModsRemoval out;
     std::string why;
-    const fs::path root = CheckedRoot(mods_root, why);
+    const fs::path root = RemovableRoot(why);
     if (root.empty())
     {
         out.refused.push_back(id + ": " + why);
@@ -358,18 +379,33 @@ ModsRemoval RemoveModFolder(const std::string& mods_root, const std::string& id)
         out.refused.push_back("\"" + id + "\": not a plain folder name");
         return out;
     }
-    RemoveEntry(root, root / id, out);
+    const fs::path entry = root / id;
+    std::error_code ec;
+    const fs::file_status status = fs::symlink_status(entry, ec);
+    if (!fs::exists(status))
+        return out;
+    if (!fs::is_directory(status))
+    {
+        out.refused.push_back(id + ": not a mod folder (a link or a file)");
+        return out;
+    }
+    if (!fs::is_regular_file(entry / "mod.json", ec))
+    {
+        out.refused.push_back(id + ": no mod.json, not a mod folder");
+        return out;
+    }
+    RemoveEntry(root, entry, out);
     return out;
 }
 
-ModsRemoval ClearModsRoot(const std::string& mods_root)
+ModsRemoval ClearModsRoot()
 {
     ModsRemoval out;
     std::string why;
-    const fs::path root = CheckedRoot(mods_root, why);
+    const fs::path root = RemovableRoot(why);
     if (root.empty())
     {
-        out.refused.push_back(mods_root + ": " + why);
+        out.refused.push_back(why);
         return out;
     }
     std::error_code ec;

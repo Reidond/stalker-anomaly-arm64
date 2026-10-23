@@ -126,7 +126,7 @@ not the one that is appended to), which `cfg_file` hits only for a mod that ship
 
 ### Tests
 
-- `ctest -R mods_mount` (`tools/mods_mount_test`, Mac): 12 scenarios, each in its own process because xrCore initializes once. They generate a
+- `ctest -R mods_mount` (`tools/mods_mount_test`, Mac): 13 scenarios, each in its own process because xrCore initializes once. They generate a
   stock-like archive, mods and a manual install in a temporary folder, write the `fsgame.ltx` the shell would, start the real `CLocatorAPI` and read
   what it serves: list order and the later mod winning a file (also reversed), a mod replacing a stock file, a mod's archive and its loose files, the
   game folder's own `gamedata/` winning over every mod, a disabled mod, an unlisted folder and a removed one, `GameData/Configs/CaseTest.LTX` opened as
@@ -146,11 +146,23 @@ not the one that is appended to), which `cfg_file` hits only for a mod that ship
 
 ### Removing mods from a test run
 
-A device has no way to delete a file from outside, so the app does it: `AppleShell::RemoveModFolder(mods_root, id)` and `ClearModsRoot(mods_root)`
-(`Mods.mm`), exposed to `--script` timelines as `<t> mods_delete <id>` and `<t> mods_clear` (put it last: the engine still has the mounted mods open).
-Only entries directly inside the mods root are touched: the id must be a plain folder name, the entry's parent must resolve (`weakly_canonical`) to the
-mods root, a symbolic link is removed as a link and never followed (`remove_all`), and a mods root with fewer than three path components is refused.
-Each removal is logged (`anomaly: script: removed <path>`). The launcher can use the same functions to delete a mod.
+A device has no way to delete a file from outside, so the app does it: `AppleShell::RemoveModFolder(id)` and `ClearModsRoot()` (`Mods.mm`), exposed to
+`--script` timelines as `<t> mods_delete <id>` and `<t> mods_clear` (put it last: the engine still has the mounted mods open). The launcher can use the
+same functions to delete a mod.
+
+They are safe by construction, not by a path check: they take no path. They act on the mods root the shell resolved (`Paths::mods_root`, handed over by
+`Init` through `SetModsRoot`) and refuse unless
+
+- that folder's last component is exactly `Mods`, and
+- it has a marker: a regular file `modlist.json`, or it is empty, or everything in it is a mod folder (a real folder holding a `mod.json`).
+
+`RemoveModFolder(id)` also needs `id` to be a plain name (no separator, not `.`/`..`/empty) and `<root>/<id>` to be a real folder (not a link) with a `mod.json`.
+Entries go with `remove_all`, which never follows a symbolic link: a link is removed as a link. Each removal is logged (`anomaly: script: removed <path>`).
+
+The tests follow the same rule: `mods_mount_test` makes every folder inside a fresh `mkdtemp` folder that carries a marker file, points
+`ANOMALY_MODS_ROOT` at `.../Mods` inside it, never passes or computes a parent path, and only removes a tree whose marker it finds
+(`mods_mount_removal_refuses` runs the functions on folders that are not a mods root: another name, no marker, a folder without `mod.json`, lower case, a link;
+they refuse and delete nothing). `tools/mods_check/run_mac.sh` only removes an `--out` folder that holds the marker file of an earlier run of itself.
 
 ### Cost of a big mod
 

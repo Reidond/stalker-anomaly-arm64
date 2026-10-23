@@ -616,11 +616,10 @@ bool RunScript(App& app)
             AppleShell::Log("anomaly: script: %s", step.args.c_str());
         else if (step.command == "mods_delete" || step.command == "mods_clear")
         {
-            // test runs that leave the mods folder as they found it (the iPad has no way to delete a file from outside): only entries directly
-            // inside the mods root are touched, see AppleShell::RemoveModFolder
-            const std::string& root = AppleShell::GetPaths().mods_root;
+            // test runs that leave the mods folder as they found it (the iPad has no way to delete a file from outside): these act on the
+            // shell's own mods root only, and only when it is a folder named Mods with a modlist.json or nothing but mod folders in it
             const AppleShell::ModsRemoval result =
-                step.command == "mods_clear" ? AppleShell::ClearModsRoot(root) : AppleShell::RemoveModFolder(root, step.args);
+                step.command == "mods_clear" ? AppleShell::ClearModsRoot() : AppleShell::RemoveModFolder(step.args);
             for (const std::string& path : result.removed)
                 AppleShell::Log("anomaly: script: removed %s", path.c_str());
             for (const std::string& why : result.refused)

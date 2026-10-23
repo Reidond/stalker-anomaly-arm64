@@ -88,6 +88,8 @@ function make_big(files, size, base)
     for _, d in ipairs({"/Documents", "/Documents/Mods", "/Documents/Mods/big", "/Documents/Mods/big/content", "/Documents/Mods/big/content/gamedata", "/Documents/Mods/big/content/gamedata/textures"}) do
         lfs.mkdir(base .. d)
     end
+    local mj = io.open(base .. "/Documents/Mods/big/mod.json", "w")
+    if mj then mj:write('{"schema":1,"id":"big","name":"big test mod","version":"1"}') mj:close() end
     for i = 0, files - 1 do
         local dir = root .. "/dir" .. (i % 40)
         if i < 40 then lfs.mkdir(dir) end
