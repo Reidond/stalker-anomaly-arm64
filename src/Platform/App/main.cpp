@@ -855,13 +855,18 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char** argv)
 
     InstallTerminateSource();
     const bool data_ok = AppleShell::ValidateGameData(paths.data_root).state == AppleShell::DataState::Ok;
+    // --no-launcher, --script and --exit-after (also on the iPad, where unattended mode is off) start the engine with modlist.json as it is
+    const bool skip_launcher = AppleShell::SkipLauncher();
+    if (skip_launcher)
+        want_launcher = false;
     if (data_ok && !want_launcher)
         return StartEngine(*app) ? SDL_APP_CONTINUE : SDL_APP_FAILURE;
-    if (app->unattended)
+    if (app->unattended || skip_launcher)
     {
         // nobody is there to read a launcher: fail instead of waiting for a click
-        AppleShell::Log("anomaly: unattended: the game data at %s is not usable, not showing the launcher", paths.data_root.c_str());
-        fprintf(stderr, "anomaly: unattended: the game data at %s is not usable\n", paths.data_root.c_str());
+        AppleShell::Log("anomaly: %s: the game data at %s is not usable, not showing the launcher", app->unattended ? "unattended" : "no launcher",
+                        paths.data_root.c_str());
+        fprintf(stderr, "anomaly: the game data at %s is not usable (no launcher was asked for)\n", paths.data_root.c_str());
         return SDL_APP_FAILURE;
     }
     return OpenLauncher(*app) ? SDL_APP_CONTINUE : SDL_APP_FAILURE;

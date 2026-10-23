@@ -100,6 +100,13 @@ function read_data()
     log("MODTEST io.open " .. (f and f:read("*l") or "nothing"))
     if f then f:close() end
 end
+
+-- the same with forward slashes in the path
+function read_data_slash()
+    local f = io.open((getFS():update_path("\$game_config\$", "") .. "modtest_data.txt"):gsub("\\\\", "/"), "r")
+    log("MODTEST io.open slash " .. (f and f:read("*l") or "nothing"))
+    if f then f:close() end
+end
 LUA
     printf '{"schema":1,"id":"%s","name":"Mod %s","version":"1","file_count":2}\n' "$id" "$id" > "$mods/$id/mod.json"
 }
@@ -137,6 +144,7 @@ cat > "$out/run.script" <<'EOF'
 8 console run_string if modtest_b then modtest_b.run() else log("MODTEST script of mod b missing") end
 9 console run_string if modtest_b then modtest_b.read_data() else log("MODTEST io.open nothing: mod b missing") end
 9.5 console lua_cache info
+9.2 console run_string if modtest_b then modtest_b.read_data_slash() else log("MODTEST io.open slash nothing: mod b missing") end
 10 quit
 EOF
 

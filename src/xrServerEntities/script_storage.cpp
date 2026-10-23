@@ -339,9 +339,12 @@ static const char* script_read_path(const char* virtual_path)
 	const char* native = xr_native_path(virtual_path);
 	if (access(native, F_OK) == 0)
 		return native;
-	string_path lowered;
+	string_path lowered; // the registry's spelling: lower case, '\\' separators (a script may have used '/')
 	xr_strcpy(lowered, sizeof(lowered), virtual_path);
 	xr_strlwr(lowered);
+	for (char* c = lowered; *c; ++c)
+		if (*c == '/')
+			*c = '\\';
 	if (const CLocatorAPI::file* entry = FS.exist(lowered))
 		if (LPCSTR real = FS.mounted_path(*entry))
 			return real;
