@@ -2371,6 +2371,15 @@ bool CScriptGameObject::InstallUpgrade(LPCSTR upgrade)
 	if (!pSettings->section_exist(upgrade))
 		return false;
 
+	// a section that exists but is not an upgrade of the manager (a group such as up_gr_firstab_ak74, or any other section): the
+	// manager's VERIFY2s are debug-only and upgrade_verify went on with a null Upgrade
+	if (!ai().alife().inventory_upgrade_manager().get_upgrade(upgrade))
+	{
+		ai().script_engine().script_log(ScriptStorage::eLuaMessageTypeError,
+			"CInventoryItem : install_upgrade: [%s] is not an upgrade!", upgrade);
+		return false;
+	}
+
 	return ai().alife().inventory_upgrade_manager().upgrade_install(*item, upgrade, false);
 }
 
