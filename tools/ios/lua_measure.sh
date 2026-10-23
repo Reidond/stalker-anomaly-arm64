@@ -16,6 +16,7 @@
 #     -g           also the new-game test (about 90 s a launch)
 #     -q           the load test only (no timer or profiler runs)
 #     -P           the profiler run only
+#     -c states    cache states of the load test (default "off cold warm")
 #     -T           the timer runs only
 #     -m modes     graphics modes of the timer runs (default "quality performance")
 #
@@ -35,8 +36,9 @@ quick=0
 profonly=0
 timersonly=0
 modes="quality performance"
-while getopts "is:o:k:n:w:gqPTm:" opt; do
-    case $opt in i) install=1;; s) save=$OPTARG;; o) out=$OPTARG;; k) lock=$OPTARG;; n) loads=$OPTARG;; w) soak=$OPTARG;; g) newgame=1;; m) modes=$OPTARG;; T) timersonly=1;; q) quick=1;; P) profonly=1; quick=1;; *) exit 2;; esac
+states="off cold warm"
+while getopts "is:o:k:n:w:gqPTm:c:" opt; do
+    case $opt in i) install=1;; s) save=$OPTARG;; o) out=$OPTARG;; k) lock=$OPTARG;; n) loads=$OPTARG;; w) soak=$OPTARG;; g) newgame=1;; m) modes=$OPTARG;; c) states=$OPTARG;; T) timersonly=1;; q) quick=1;; P) profonly=1; quick=1;; *) exit 2;; esac
 done
 if [[ -n $lock && -e $lock ]]; then echo "the iPad is in use ($lock exists)" >&2; exit 3; fi
 mkdir -p "$out"
@@ -156,7 +158,7 @@ EOF
 kinds=(load)
 (( newgame )) && kinds+=(newgame)
 for kind in $kinds; do
-    for config in off cold warm; do
+    for config in ${=states}; do
         for n in $(seq 1 $loads); do
             case $config in
                 off) script=$out/$kind.script; args=(-dbg -lua_perf -no_lua_cache);;

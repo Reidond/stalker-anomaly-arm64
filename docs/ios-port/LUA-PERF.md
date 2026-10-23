@@ -95,6 +95,10 @@ Console and command-line summary:
   **corrupt**; the VM's own bytecode loader has the last word (`luaL_loadbuffer` of the bytecode fails: corrupt).
 - **Any miss compiles from the text** and stores the entry again (a temporary file, then `rename`: two launches never see half an entry). Any
   failure to read, write or create the directory gives the same result as no cache. The result of `load` is always that of `luaL_loadbuffer(text)`.
+- **Read-ahead.** Opening and reading ~475 small files was most of the time of a hit (53 of 60 ms on the iPad, 59 to 91 ms on the Mac), more than decoding the bytecode
+  (6 ms on the iPad) and as much as parsing the text (65 ms). `set_directory` starts a thread that reads the directory's entries into memory; a load takes its entry from
+  there (once) and reads the file only when the thread has not got to it. The engine calls `set_directory` again at every new Lua state, which refills the read-ahead.
+  An entry read ahead is checked like any other, so one that was replaced or damaged afterwards is a stale or corrupt entry, never a wrong script.
 - `lua_cache warm` runs every `*.script` of `$game_scripts$` (the stock archives, the Monolith overlay, loose addon files) through the same
   `do_file` path without running it, so the first level load is already warm. `-no_lua_cache` turns it off.
 
@@ -163,17 +167,94 @@ while the main thread is inside a call into Lua.)
 
 ### Level loads and the bytecode cache on the Mac
 
-The h_cordon save loads 476 scripts (6.58 MB of text) at the level load: from the archives (`file read`), compiled (`compile / cache`) and run (main chunks). Four launches
-per cache state, the quietest set (load 12 to 15, two other games); the load time is from the `start` command to `level ready`:
+The h_cordon save loads 476 scripts (6.58 MB of text) at the level load: from the archives (`file read`), compiled (`compile / cache`) and run (main chunks). Three or four launches
+per cache state, the quietest sets (load 12 to 15, two other games); the load time is from the `start` command to `level ready`:
 
-| Cache | seconds to level ready | Lua part of the load ms | file read | compile / cache | run main chunks |
+| Cache | seconds to level ready | Lua part of the load, ms | file read | compile / cache | run main chunks |
 |---|---:|---:|---:|---:|---:|
-| off (`-no_lua_cache`) | 5.8 to 8.3 | 462 to 568 | 10 to 14 | 94 to 107 | 353 to 449 |
-| cold (empty: compile and store 407 entries) | 6.4 to 7.4 | 640 to 698 | 12 to 19 | 249 to 301 | 371 to 405 |
-| warm | 5.2 to 7.9 | 419 to 559 | 9 to 18 | 74 to 111 | 336 to 440 |
+| off (`-no_lua_cache`) | 5.8 to 8.3 | 462 to 568 | 10 to 18 | 91 to 107 | 353 to 449 |
+| cold (empty: compile and store 407 entries) | 5.8 to 7.4 | 588 to 698 | 9 to 19 | 235 to 301 | 344 to 405 |
+| warm, one file per script read on demand | 5.2 to 7.9 | 419 to 559 | 9 to 18 | 74 to 111 | 336 to 440 |
+| warm, with the read-ahead | 5.9 to 8.7 | 407 to 432 | 9 to 17 | 16 to 21 | 379 to 395 |
 
-- **The cache does not shorten the load on the Mac.** Compiling 6.58 MB takes LuaJIT about 100 ms (66 MB/s); loading the bytecode is 10 to 15 ms of that, but reading 474 small
-  files costs 59 to 91 ms there (an endpoint-security agent on this Mac makes every `open` slow: 130 to 190 µs a file), so a warm load is 74 to 111 ms against 94 to 107 from
-  the text. Standalone (`lua_cache_test --bench`, the same scripts, files in the page cache) the same work is 36 to 50 ms against 100 to 135. The level load itself is 5 to 8 s
-  and the scripts are 0.45 to 0.57 s of it; **running the main chunks (350 to 450 ms) is the Lua cost of a load, not compiling.**
+- **Without the read-ahead the cache did not shorten the load**: loading the bytecode is 10 to 15 ms, but 474 `open`+`read` pairs cost 59 to 91 ms (an endpoint-security agent on this
+  Mac makes every `open` slow, 130 to 190 µs a file), so a warm load was 74 to 111 ms against 91 to 107 from the text. **With it a warm load is 16 to 21 ms**: 70 to 90 ms saved
+  of a 5 to 8 s level load (473 of 474 hits came from memory). Standalone (`lua_cache_test --bench`, the same scripts, files in the page cache): 37 to 50 ms against 103 to 136.
+- The level load is 5 to 8 s and the scripts are 0.4 to 0.57 s of it. **Running the main chunks (340 to 450 ms) is the Lua cost of a load, not compiling.**
 - A cold start costs 0.15 to 0.2 s more once (the entries are written); `lua_cache warm` does that in one go.
+- The seconds to level ready vary by more than the cache can move them (load and thermal state of the Mac).
+
+New game from the main menu (two loads, as the Cordon save): the Lua part is the same 340 to 520 ms. The shell's `level ready` fires after the first stage, so the new-game time
+is read from the frame rate: the first 10 s window at 60 fps ends 27 to 29 s after the click on Start on the iPad.
+
+## Measurements: the iPad (Air 13-inch, M3, 8 GB, 60 Hz), LuaJIT interpreter
+
+`tools/ios/lua_measure.sh`, `ipad_test` save, the signed `RelWithDebInfo` build, a two-minute warm-up in the village first, then 34 s per place. Quality is render scale 0.6 at the even
+30 fps cap, Performance is 0.42 at 60 (SETTINGS.md); the frame cap is set by hand in the script (a cap a previous run saved in `user.ltx` stays on when the mode changes).
+Thermal state was Nominal throughout. Another session also launched the app on the iPad in this time, which made some launches fail (error 10002) and be repeated; every run listed
+reached its `quit` and is a complete one.
+
+| | Quality field | Quality village | Quality Bar | Performance field | Performance village | Performance Bar |
+|---|---:|---:|---:|---:|---:|---:|
+| Frame rate (windows of 10 s) | 29.9 | 29.9 | 30.0 | 60.0 | 59.8 (59.4) | 60.0 |
+| Frames on the beat (33 ms / 17 ms) | 98.5 % | 99.3 % | 100 % | 99.6 % | 98.5 % | 99.8 % |
+| Frame p95 / longest ms | 37.4 / 97 | 37.4 / 83 | 36.6 / 34 | 18.8 / 20 | 19.9 / 61 | 19.2 / 22 |
+| **Lua per frame, ms (CPU)** | **2.64** | **3.58** | **2.85** | **0.88** | **1.96** | **1.11** |
+| Lua p50 / p95 / max ms | 2.3 / 5.0 / 18 | 3.2 / 6.1 / 25 | 2.4 / 5.5 / 20 | 0.8 / 1.9 / 5 | 1.7 / 4.0 / 44 | 0.7 / 3.1 / 12 |
+| Lua share of the frame budget (33.3 / 16.7 ms) | 8 % | 11 % | 8 % | 5 % | 12 % | 7 % |
+| binders / other / callbacks, ms | 1.70 / 0.84 / 0.08 | 2.02 / 1.42 / 0.10 | 1.16 / 1.56 / 0.09 | 0.63 / 0.23 / 0.01 | 1.21 / 0.66 / 0.09 | 0.71 / 0.38 / 0.02 |
+| calls into Lua per frame | 149 | 216 | 190 | 69 | 120 | 63 |
+| collector steps on the second thread, ms | 3.8 | 3.3 | 3.6 | 4.1 | 2.8 | 3.4 |
+| `actor_on_update` / `npc_on_hear_callback`, ms | 0.53 / 0.06 | 0.51 / 0.22 | 0.32 / 0.64 (77 calls) | 0.24 / 0.01 | 0.41 / 0.07 | 0.30 / 0.05 |
+
+- **The budget holds in both modes.** Quality keeps its 30 fps with 98.5 to 100 % of the frames on the 33 ms beat and Lua at 8 to 11 % of the budget; Performance keeps its 60 with
+  98.5 to 99.8 % of the frames on the 17 ms beat and Lua at 5 to 12 % of the budget (the village is the busiest and the one with the longest Lua frames: p95 4.0 ms, one frame of 44 ms
+  that shows as the 61 ms longest interval). The iPad's interpreter is as fast as the Mac's in Lua time per frame (compare the Mac table); the cost is engine calls and the collector,
+  not bytecode.
+- Lua per frame is higher in Quality because a Quality frame covers two Performance frames of game time: per second of play the cost is 79 to 107 ms in Quality and 53 to 118 ms in
+  Performance, 5 to 12 % of one core.
+- **Where it goes** (profile, Quality, 1316 to 2720 samples of 1 ms): bytecode in the interpreter 22 to 24 %, C functions called from scripts 48 to 54 %, the collector inside allocations
+  24 to 29 %. The profile is as flat as the Mac's: `simulation_objects.get_server_entity` 2.5 to 7.3 % (one `alife_object` call), `anomaly_restrictor_update` 3.8 to 5.2 %, `bind_campfire` `actor_on_update`
+  4.9 to 5.0 %, `HUD_fog` 2.4 to 3.2 %, `hspairs` 1.8 to 4.6 %, `get_object_squad` 1.8 to 3.5 %, `pick_section_from_condlist` 1.9 to 2.8 %, `time_global` 1.8 to 2.3 %, the `npc_on_hear_callback` chain 8 %
+  in the Bar (18 % with the binder's `hear_callback` around it). Cumulatively `SendScriptCallback` is 30 to 34 % and `generic_object_binder:update` 10 %.
+
+### Level load and new game on the iPad
+
+The `ipad_test` save, three launches per cache state (warm = the entries of an earlier launch; the cache directory is `Library/Caches/Anomaly/lua`, 476 entries, about 5 MB):
+
+| Cache | seconds to level ready | Lua part of the load, ms | file read | compile / cache | run main chunks |
+|---|---:|---:|---:|---:|---:|
+| off | 5.9 to 7.2 | 327 to 343 | 13 | 65 to 66 | 249 to 264 |
+| cold | 5.9 to 6.4 | 450 to 464 | 11 to 12 | 184 to 191 (compile 67, store 106) | 248 to 266 |
+| warm, one file per script read on demand (the build measured) | 5.7 to 6.1 | 327 to 348 | 14 | 63 to 67 (file I/O 53 to 57, decode 6, hash 1) | 250 to 268 |
+
+- A level load is about 6 s and the scripts are 0.33 to 0.35 s of it: **there is nothing to win in compiling** (65 ms of parsing, the iPad parses 100 MB/s). The bytecode loads in 6 ms, but opening
+  and reading 474 small files takes 53 to 57 ms (115 µs a file in the app's sandbox), so a warm load cost what the parse costs. The read-ahead (added after these runs; Mac result above)
+  moves that off the load; **it has not been measured on the iPad**: the one run for it was cut off by another session's launches. Expected from the split: 63 ms becomes about 8.
+- New game from the menu (3 launches per state): the Lua part is 342 to 344 ms off, 460 cold, 349 to 352 warm; a steady 60 fps window ends 27 to 29 s after the click on Start in every state.
+  (IPAD.md's first measurement of a new game was about 45 s.)
+
+## Step 3, the hot paths: not needed
+
+The plan's condition for porting script functions to C++ was a Lua share that makes Quality miss its 30 fps cap or Performance its 60 in the Cordon or a busy base. It does not (tables
+above): on the iPad's interpreter Quality holds 29.9 to 30.0 fps with Lua at 8 to 11 % of the 33.3 ms budget, Performance holds 59.4 to 60.0 fps with Lua at 5 to 12 % of 16.7 ms, and
+98.5 % or more of the frames land on their beat in every place. Nothing was ported.
+
+What a port could win is small anyway. The profile is flat (no function above 7 % of the Lua time, which is 0.2 ms of a Quality frame), half of the Lua time is already inside C functions
+and a quarter in the collector, and only a fifth is interpreted bytecode, so the JIT's 3x on bytecode ([IPAD-JIT.md](IPAD-JIT.md)) would also give back well under a millisecond a frame.
+If a future scene needs it, in the order of what the profile says: the collector (25 % of the Lua time, inline in allocations: `setpause` / `setstepmul`, or more of its steps on the second
+thread), the `get_server_entity` and `anomaly_restrictor_update` loops, the `npc_on_hear_callback` chain (0.64 ms and 77 calls a frame in the Bar).
+
+Limits of these numbers: the places are quiet ones (nobody fights; the player is kept safe by `xr_harness`), so a firefight with many NPCs costs more Lua than the 3.6 ms of the village
+(its p95 frame is 6.1 ms in Quality and 4.0 in Performance, its longest 25 and 44); the save is a fresh new game, so the A-Life has not grown. Run `lua_measure.sh` on a later save to see.
+
+## Files
+
+| | |
+|---|---|
+| `src/xrServerEntities/script_perf.{h,cpp}` | timers, profiler, `lua_perf`, `lua_profile`, `lua_cache` |
+| `src/xrServerEntities/script_bytecode_cache.{h,cpp}` | the cache, the read-ahead |
+| `tools/lua_cache_test` | its tests (ctest `lua_cache_test`) and `--bench` |
+| `tools/lua_measure.py` | script generator (`script`), log summaries (`summarize`, `loadrow`) |
+| `tools/render_harness/lua_measure.sh`, `lua_load.sh` | the Mac runs: places per mode, level load and new game per cache state |
+| `tools/ios/lua_measure.sh` | the iPad runs. Engine flags go through `Documents/commandline.txt`; the app is launched without `--console` (a console launch failed with error 10002 after the first one) and polled until it exits; it leaves `user.ltx` at Quality / Auto |
