@@ -1622,7 +1622,11 @@ bool CLocatorAPI::check_for_file(LPCSTR path, LPCSTR _fname, string_path& fname,
 	if (I == m_files.end())
 		return (false);
 
+#ifdef XR_PLATFORM_APPLE
+	__atomic_fetch_add(&dwOpenCounter, 1u, __ATOMIC_RELAXED); // files are opened from several threads; the count drives the disk icon
+#else
 	++dwOpenCounter;
+#endif
 	desc = &*I;
 	return (true);
 }

@@ -2037,12 +2037,14 @@ HRESULT Context::GetData(ID3D11Asynchronous* pAsync, void* data, UINT size, UINT
     Query* q = static_cast<Query*>(static_cast<ID3D11Query*>(pAsync));
     if (!q)
         return E_INVALIDARG;
+    bool in_flight;
     {
         std::lock_guard<std::mutex> lk(dev_->queryMutex);
         if (!q->ended)
             return S_FALSE;
+        in_flight = !q->done && q->serial >= serial_; // done is set by the completion handler's thread, under this lock
     }
-    if (!q->done && q->serial >= serial_ && !(flags & D3D11_ASYNC_GETDATA_DONOTFLUSH))
+    if (in_flight && !(flags & D3D11_ASYNC_GETDATA_DONOTFLUSH))
         commit(false); // the query lives in the buffer being recorded: hand it to the GPU
     bool done;
     {
