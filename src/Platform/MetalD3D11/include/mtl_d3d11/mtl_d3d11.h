@@ -106,6 +106,7 @@ struct Stats
     uint64_t dispatches = 0;
     uint64_t pipelineCreates = 0;
     uint64_t pipelineHits = 0;
+    uint64_t linkAdaptedPairs = 0;   // vertex/pixel pairs whose pixel inputs were widened, narrowed or zero-filled to match (not an error)
     uint64_t passBreaksByTargetChange = 0;
     uint64_t passBreaksByClear = 0;
     uint64_t passBreaksByCopy = 0;

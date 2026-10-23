@@ -207,8 +207,9 @@ fps, CPU ms inside `Frame()`, GPU ms, footprint (peak), available memory and the
   `preproc_yyparse` while a shader is translated at run time: seen once, non-fatal, at start-up, and twice as a `SIGABRT` (once at quit, once
   mid-run), both times translating a `hud_font` shader requested by `CConsole::OnRender`. It never shows on the Mac. Shaders already in the cache
   do not go through vkd3d, so it shows when new shaders are needed (the first run of a level, the console font). Reported to the M2 session.
-- The renderer's known defects (INTEGRATION.md): rain over interior geometry, the 34 missing `ssfx_*` shaders, no tessellation. One
-  `pipeline creation failed (vs206 ps205): Fragment input user(locn2) mismatching` per load.
+- The renderer's known defects (INTEGRATION.md): the 34 missing `ssfx_*` shaders, no tessellation. (The rain over interiors and the
+  `pipeline creation failed (vs206 ps205): Fragment input user(locn2) mismatching` once per load are fixed: the pixel function of the
+  water distortion pass is adapted to the vertex shader's packing, `fc780483`, which this run predates.)
 - `sound: OpenAL: Can't create source. Error: Out of Memory.` once at start-up with 256 targets (the engine continues); `bin/alsoft.ini` is not on the
   iPad (the push script skips `bin/`), so OpenAL Soft runs on its defaults.
 - Runtime changes of `vid_mode` through the console work, but the engine saves the last one at exit, and it becomes the next start's size.

@@ -926,15 +926,17 @@ id<MTLFunction> Context::fragmentFunctionFor(VertexShader* vs, PixelShader* ps)
         NSString* src = [NSString stringWithUTF8String:text.c_str()];
         id<MTLLibrary> lib = dev_->newLibraryFromMsl(src, &err);
         id<MTLFunction> patched = lib ? [lib newFunctionWithName:[NSString stringWithUTF8String:ps->refl.entryPoint.c_str()]] : nil;
+        // D3D links a pixel input to a vertex output by semantic and component, Metal by location and type: a pair that packs
+        // differently (waterd, wmark/simple, ...) is the normal case, counted in the stats and not logged; only a pair that cannot be
+        // adapted is.
         if (patched)
         {
             fn = patched;
-            Log("pixel shader %s: %zu interpolant(s) that vertex shader %s does not write are zero-filled, %zu of another width adapted",
-                ps->debugName.c_str(), missing.size(), vs->debugName.c_str(), mismatched.size());
+            ++stats.linkAdaptedPairs;
         }
         else
-            Log("pixel shader %s: patching %zu unwritten and %zu mismatched input(s) failed: %s", ps->debugName.c_str(), missing.size(),
-                mismatched.size(), err ? err.localizedDescription.UTF8String : "?");
+            Log("pixel shader %s with vertex shader %s: adapting %zu unwritten and %zu mismatched input(s) failed: %s", ps->debugName.c_str(),
+                vs->debugName.c_str(), missing.size(), mismatched.size(), err ? err.localizedDescription.UTF8String : "?");
     }
     fragmentVariants_.emplace(key, fn);
     return fn;
@@ -1702,6 +1704,59 @@ void Context::uploadTexture(TextureCore* t, uint32_t mip, uint32_t slice, const 
            destinationSlice:slice
            destinationLevel:mip
           destinationOrigin:MTLOriginMake(0, 0, 0)];
+    t->lastWriteSerial = serial_;
+}
+
+void Context::zeroInitialise(TextureCore* t)
+{
+    id<MTLTexture> tex = t->tex;
+    if (!tex || !(tex.usage & MTLTextureUsageRenderTarget) || tex.textureType == MTLTextureType3D)
+        return;
+    const MTLPixelFormat pf = tex.pixelFormat;
+    const bool stencilOnly = pf == MTLPixelFormatStencil8;
+    const bool hasDepth = pf == MTLPixelFormatDepth32Float || pf == MTLPixelFormatDepth16Unorm || pf == MTLPixelFormatDepth32Float_Stencil8;
+    const bool hasStencil = stencilOnly || pf == MTLPixelFormatDepth32Float_Stencil8;
+    const NSUInteger slices = tex.textureType == MTLTextureTypeCube        ? 6
+                              : tex.textureType == MTLTextureTypeCubeArray ? tex.arrayLength * 6
+                                                                           : tex.arrayLength;
+    endEncoder();
+    ensureCommandBuffer();
+    for (NSUInteger level = 0; level < tex.mipmapLevelCount; ++level)
+        for (NSUInteger slice = 0; slice < slices; ++slice)
+        {
+            MTLRenderPassDescriptor* pd = [MTLRenderPassDescriptor renderPassDescriptor];
+            if (hasDepth || hasStencil)
+            {
+                if (hasDepth)
+                {
+                    pd.depthAttachment.texture = tex;
+                    pd.depthAttachment.level = level;
+                    pd.depthAttachment.slice = slice;
+                    pd.depthAttachment.loadAction = MTLLoadActionClear;
+                    pd.depthAttachment.clearDepth = 0.0;
+                    pd.depthAttachment.storeAction = MTLStoreActionStore;
+                }
+                if (hasStencil)
+                {
+                    pd.stencilAttachment.texture = tex;
+                    pd.stencilAttachment.level = level;
+                    pd.stencilAttachment.slice = slice;
+                    pd.stencilAttachment.loadAction = MTLLoadActionClear;
+                    pd.stencilAttachment.clearStencil = 0;
+                    pd.stencilAttachment.storeAction = MTLStoreActionStore;
+                }
+            }
+            else
+            {
+                pd.colorAttachments[0].texture = tex;
+                pd.colorAttachments[0].level = level;
+                pd.colorAttachments[0].slice = slice;
+                pd.colorAttachments[0].loadAction = MTLLoadActionClear;
+                pd.colorAttachments[0].clearColor = MTLClearColorMake(0, 0, 0, 0);
+                pd.colorAttachments[0].storeAction = MTLStoreActionStore;
+            }
+            [[cb_ renderCommandEncoderWithDescriptor:pd] endEncoding];
+        }
     t->lastWriteSerial = serial_;
 }
 

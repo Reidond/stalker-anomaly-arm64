@@ -267,7 +267,9 @@ Stock shader limits for sizing: largest cbuffer 3952 bytes, at most 10 inputs / 
    `model_def_lplanes` to `model_scope_lense` (TEXCOORD1) and `models_lfo_light_dot_weapons`
    (TEXCOORD1, TEXCOORD2), `model_distort` / `model_distort_inv` to `particle_distort` (TEXCOORD1),
    and `water_{regular,ryaska,studen,underground}` VS to PS (TEXCOORD7). Widths always match
-   otherwise (680 pairs checked, 0 mismatches). Fix on the shim side: drop the unmatched member
+   otherwise by semantic. A register's width can still differ between the stages (`waterd`: the vertex shader packs FOG next
+   to TEXCOORD2 into one float3, the pixel shader reads a float2; likewise `wmark` + `simple` and `accum_sun_*`): the shim adapts
+   those too (METAL-SHIM.md item 13). Fix on the shim side: drop the unmatched member
    from the fragment `main0_in` struct and declare it as a zero local.
 2. **Comparison sampling needs depth textures.** The MSL `sample_compare` goes through
    `spvDepthCast(texture)` because vkd3d declares the image as non-depth.

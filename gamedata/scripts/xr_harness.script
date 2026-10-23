@@ -32,7 +32,7 @@ function places()
 	end
 end
 
--- teleports the player; yaw in degrees (0 = +z)
+-- teleports the player; yaw in degrees (0 = +z, 90 = -x, 270 = +x: the engine turns the view anticlockwise seen from above)
 function tp(x, y, z, yaw)
 	db.actor:set_actor_position(vector():set(x, y, z))
 	if yaw then
@@ -243,15 +243,31 @@ function nightvision(on, section)
 	log("nightvision %s %s", tostring(on ~= false), section or "device_torch_nv_2")
 end
 
--- a weapon section (wpn_svd_1p29 has its scope built on) into the hands: `slot` 2 is the primary
+-- a weapon section (wpn_svd_1p29 has its scope built on) into `slot` (2 is the primary); then the slot's key (`key 2`) draws it
 function weapon(section, slot)
 	local w = db.actor:object(section)
 	if not w then
 		alife_create_item(section, db.actor)
-		log("weapon %s created, call again to take it", section)
+		log("weapon %s created, call again to put it in the slot", section)
 		return
 	end
 	db.actor:move_to_slot(w, slot or 2)
-	db.actor:activate_slot(slot or 2)
 	log("weapon %s in slot %d", section, slot or 2)
+end
+
+-- what the player holds: the active item and the weapon slots
+function hands()
+	local a = db.actor:active_item()
+	local function name(o) return o and o:section() or "-" end
+	log("hands active=%s slot1=%s slot2=%s slot0=%s", name(a), name(db.actor:item_in_slot(1)), name(db.actor:item_in_slot(2)), name(db.actor:item_in_slot(0)))
+end
+
+-- aims down the sights (the zoom key's action, as the game's own scripts press it); zoom(false) releases it
+function zoom(on)
+	if on == false then
+		level.release_action(bind_to_dik(key_bindings.kWPN_ZOOM))
+	else
+		level.press_action(bind_to_dik(key_bindings.kWPN_ZOOM))
+	end
+	log("zoom %s", tostring(on ~= false))
 end

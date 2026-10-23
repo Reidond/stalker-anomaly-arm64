@@ -647,6 +647,10 @@ HRESULT Device::createTexture(ResKind kind, const void* descIn, const D3D11_SUBR
     textureBytes += texBytes * (dynamic ? 3 : 1);
     if (p.bind & (D3D11_BIND_RENDER_TARGET | D3D11_BIND_DEPTH_STENCIL | D3D11_BIND_UNORDERED_ACCESS))
         renderTargetBytes += texBytes;
+    // D3D11 gives a render target or depth buffer without initial data zeroed; a private Metal texture shows what the memory held (the
+    // scope's fake-scope target, which the engine only ever samples, read as noise)
+    if (context && !init && td.storageMode == MTLStorageModePrivate && (p.bind & (D3D11_BIND_RENDER_TARGET | D3D11_BIND_DEPTH_STENCIL)))
+        context->zeroInitialise(t);
 
     if (init)
     {
