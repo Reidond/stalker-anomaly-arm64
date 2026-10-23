@@ -163,6 +163,7 @@ std::string BuildFsGameLtx(const Paths& p)
     out << "$app_data_root$         = true \t| false\t| " << p.appdata << "\n";
     out << "$app_cache_root$        = false | false\t| " << p.caches << "\n";
     out << "$shader_cache$          = false | false\t| " << p.shader_cache << "\n";
+    out << "$lua_cache$             = false | false\t| " << p.lua_cache << "\n";
     out << R"LTX($arch_dir$              = false	| false	| $fs_root$		 | db\
 $arch_dir_configs$		= false	| false	| $arch_dir$	 | configs\
 $arch_dir_maps$         = false	| false	| $arch_dir$	 | levels\
@@ -269,6 +270,7 @@ bool Init(const InitParams& params)
         p.saves = p.appdata + "/savedgames";
         p.caches = caches + "/Anomaly";
         p.shader_cache = p.caches + "/shaders";
+        p.lua_cache = p.caches + "/lua";
 #if TARGET_OS_IOS
         p.shell_dir = documents;
 #else
@@ -282,7 +284,7 @@ bool Init(const InitParams& params)
         p.overlay_archive_dir = p.caches + "/overlay";
 
         bool ok = true;
-        for (const std::string& dir : {p.app_support, p.appdata, p.logs, p.saves, p.caches, p.shader_cache, p.shell_dir})
+        for (const std::string& dir : {p.app_support, p.appdata, p.logs, p.saves, p.caches, p.shader_cache, p.lua_cache, p.shell_dir})
             ok = MakeDirs(dir) && ok;
 #if TARGET_OS_IOS
         // Make Documents/Anomaly exist so it shows up in Files and Finder, and keep 17 GB out of backups.
