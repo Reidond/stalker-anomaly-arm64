@@ -725,7 +725,9 @@ SDL_AppResult SDL_AppIterate(void* appstate)
             app->interval_max_ns = std::max(app->interval_max_ns, gap_ns);
         }
         app->last_frame_start_ns = frame_start_ns;
-        if (!xr_engine::Frame())
+        bool keep_going = true;
+        AppleShell::WithAutoreleasePool([&] { keep_going = xr_engine::Frame(); });
+        if (!keep_going)
             return SDL_APP_SUCCESS;
         // one line in the shell log every 10 s: frames per second of the main loop, the CPU time of a frame (time inside
         // Frame(): the rest of the frame interval is the wait for the GPU and the display), and the memory the OS charges us
