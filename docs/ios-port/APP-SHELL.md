@@ -136,7 +136,7 @@ AppleShell::AddListener(std::move(l));
 
 `AppleShell::Init` detects the hardware (`DetectHardware`: iPad or Mac, chip from the Metal device's name, GPU cores from the I/O registry on a
 Mac, RAM, the display's native size and refresh rate) and selects the device's graphics profile (`GraphicsProfile.h`), logging one line:
-`graphics profile ipad-8gb, quality mode, 60 fps cap, locks on (...)`. The engine applies the profile after `user.ltx` and locks what it sets;
+`graphics profile ipad-8gb, quality mode, 30 fps cap, locks on (...)`. The engine applies the profile after `user.ltx` and locks what it sets;
 the shell only holds the tables, the lock rules and the chosen mode and frame rate cap, and `DevicePresetCommandLine()` returns the engine
 flags the profile adds (`-smap1536`). Details, tables and measurements: [SETTINGS.md](SETTINGS.md). `--graphics-profile <id|none>` and
 `--unlocked-graphics` are read here (command line and `commandline.txt`).
