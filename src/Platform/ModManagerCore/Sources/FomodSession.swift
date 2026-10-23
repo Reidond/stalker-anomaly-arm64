@@ -28,6 +28,7 @@ public enum FomodCommand {
 /// Where the wizard's cursor is: an option of the current step, or one of the footer buttons.
 public enum FomodCursor: Hashable {
     case option(FomodPluginRef)
+    /// Only when the page has a Cancel button (`hasCancelButton`).
     case cancel
     case back
     case primary
@@ -46,6 +47,11 @@ public final class FomodSession: ObservableObject {
     @Published public private(set) var forward = true
     /// The highlighted element; moved by `send`, and set by a tap or a click.
     @Published public var cursor: FomodCursor?
+    /// Whether the cursor is drawn: true after a command from a pad or the keyboard, false once a touch or a click is the
+    /// last input (the same rule as the launcher's focus ring).
+    @Published public var showsCursor = false
+    /// True when the page has a Cancel button of its own (a host without one, such as a bare window, asks for it).
+    public var hasCancelButton = false
     /// What Install and Cancel do; the wizard view sets them.
     public var onFinish: ((FomodChoices) -> Void)?
     public var onCancel: (() -> Void)?
@@ -275,6 +281,7 @@ public final class FomodSession: ObservableObject {
 
     /// Moves the cursor or acts on it. Anything the current page cannot do is ignored.
     public func send(_ command: FomodCommand) {
+        showsCursor = true
         let options = optionRefs
         switch command {
         case .up:
@@ -296,7 +303,7 @@ public final class FomodSession: ObservableObject {
                 break
             }
         case .left, .right:
-            let row: [FomodCursor] = [.cancel] + (canGoBack ? [.back] : []) + [.primary]
+            let row: [FomodCursor] = (hasCancelButton ? [.cancel] : []) + (canGoBack ? [.back] : []) + [.primary]
             guard let current = cursor, let i = row.firstIndex(of: current) else { return }
             let target = command == .left ? i - 1 : i + 1
             if row.indices.contains(target) { cursor = row[target] }

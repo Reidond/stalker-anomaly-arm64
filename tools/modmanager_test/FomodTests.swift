@@ -1,5 +1,6 @@
 import Foundation
 import ImageIO
+import AppKit
 import SwiftUI
 @testable import ModManagerCore
 
@@ -353,11 +354,14 @@ func registerFomodTests() {
         let s = FomodSession(installer: installer)
         var finished: FomodChoices?
         var cancelled = 0
+        s.hasCancelButton = true                            // a bare window with a Cancel button of its own
         s.onFinish = { finished = $0 }
         s.onCancel = { cancelled += 1 }
 
         try expectEqual(s.cursor, .option(ref(0, 0, 0)), "the first option starts highlighted")
+        try expect(!s.showsCursor, "but it is not drawn until a pad or the keyboard is used")
         s.send(.up)
+        try expect(s.showsCursor, "a command shows the cursor")
         try expectEqual(s.cursor, .option(ref(0, 0, 0)), "up at the top stays")
         s.send(.down)
         try expectEqual(s.cursor, .option(ref(0, 0, 1)))
@@ -410,6 +414,9 @@ func registerFomodTests() {
 
         // a locked option under the cursor does nothing; an invalid page cannot be left
         let t = FomodSession(installer: installer)
+        t.cursor = .primary
+        t.send(.left)
+        try expectEqual(t.cursor, .primary, "without a Cancel button or a Back step there is nothing to the left")
         t.send(.next)
         t.cursor = .option(ref(1, 2, 0))                    // Alpha, the only one in "Pick some"
         t.send(.confirm)
@@ -537,7 +544,7 @@ func registerFomodTests() {
         }
     }
 
-    test("wizard: renders offscreen in glass, without transparency, with a custom theme, on step 2 with the pad cursor") {
+    test("wizard: renders offscreen as a native grouped form, on page 2 with the pad cursor, with a custom accent, in both colour schemes") {
         let installer = try installerFrom(Data(overhaulConfig.utf8))
         try await withTempDir { dir in
             let archive = dir.appendingPathComponent("Test Overhaul.zip")
@@ -547,11 +554,23 @@ func registerFomodTests() {
             let artifacts = ProcessInfo.processInfo.environment["MODMANAGER_TEST_ARTIFACTS"].map { URL(fileURLWithPath: $0) }
 
             try await MainActor.run {
-                @MainActor func render<V: View>(_ name: String, _ size: CGSize, _ view: V) throws -> CGImage {
-                    let renderer = ImageRenderer(content: view.frame(width: size.width, height: size.height).environment(\.fomodFlatLayout, true))
-                    renderer.scale = 1
-                    guard let image = renderer.cgImage else { throw TestFailure(message: "wizard did not render (\(name))") }
-                    try expectEqual(image.width, Int(size.width), name)
+                // The stock list and form are AppKit controls that ImageRenderer cannot draw, so the page is hosted in a window that
+                // is never shown and drawn into a bitmap (the launcher's snapshot tool does the same).
+                @MainActor func render<V: View>(_ name: String, _ size: CGSize, dark: Bool = true, glass: Bool = false, _ view: V) throws -> CGImage {
+                    let host = NSHostingView(rootView: view.environment(\.fomodGlassDisabled, !glass).environment(\.controlActiveState, .key))
+                    let window = NSWindow(contentRect: CGRect(origin: .zero, size: size), styleMask: [.titled], backing: .buffered, defer: false)
+                    window.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
+                    window.contentView = host
+                    host.frame = CGRect(origin: .zero, size: size)
+                    for _ in 0..<5 {
+                        RunLoop.main.run(until: Date().addingTimeInterval(0.2))
+                        host.layoutSubtreeIfNeeded()
+                        host.displayIfNeeded()
+                    }
+                    guard let rep = host.bitmapImageRepForCachingDisplay(in: host.bounds) else { throw TestFailure(message: "no bitmap (\(name))") }
+                    host.cacheDisplay(in: host.bounds, to: rep)
+                    guard let image = rep.cgImage else { throw TestFailure(message: "wizard did not render (\(name))") }
+                    try expect(!window.isVisible, "the window was never shown")
                     guard let data = image.dataProvider?.data, let bytes = CFDataGetBytePtr(data) else { throw TestFailure(message: "no pixels") }
                     var colors = Set<UInt32>()
                     var i = 0
@@ -562,60 +581,49 @@ func registerFomodTests() {
                     try expect(colors.count >= 8, "wizard render has content (\(name), \(colors.count) colors)")
                     if let artifacts {
                         try FileManager.default.createDirectory(at: artifacts, withIntermediateDirectories: true)
-                        let url = artifacts.appendingPathComponent("wizard-\(name).png")
-                        if let dest = CGImageDestinationCreateWithURL(url as CFURL, "public.png" as CFString, 1, nil) {
-                            CGImageDestinationAddImage(dest, image, nil)
-                            CGImageDestinationFinalize(dest)
-                        }
+                        try rep.representation(using: .png, properties: [:])?.write(to: artifacts.appendingPathComponent("wizard-\(name).png"))
                     }
                     return image
                 }
                 func fingerprint(_ image: CGImage) -> Int {
                     var hasher = Hasher()
-                    if let data = image.dataProvider?.data { hasher.combine(Data(bytes: CFDataGetBytePtr(data), count: min(CFDataGetLength(data), 400_000))) }
+                    if let data = image.dataProvider?.data { hasher.combine(Data(bytes: CFDataGetBytePtr(data), count: CFDataGetLength(data))) }
                     return hasher.finalize()
                 }
 
-                let wide = CGSize(width: 960, height: 640)
-                let narrow = CGSize(width: 480, height: 760)
-                // Offscreen renders cannot draw Liquid Glass (it is composited by the system), so the pictures show the material
-                // fallback that iOS 17 to 25 get; the glass path is forced off for them.
-                let first = try render("wide", wide, FomodWizardView(installer: withImages, onFinish: { _ in }, onCancel: {})
-                    .environment(\.fomodGlassDisabled, true))
-                _ = try render("narrow", narrow, FomodWizardView(installer: withImages, onFinish: { _ in }, onCancel: {})
-                    .environment(\.fomodGlassDisabled, true))
+                let size = CGSize(width: 820, height: 900)
+                let light = try render("light", size, dark: false, FomodWizardView(installer: withImages, onFinish: { _ in }, onCancel: {}))
+                let dark = try render("dark", size, FomodWizardView(installer: withImages, onFinish: { _ in }, onCancel: {}))
+                try expect(fingerprint(light) != fingerprint(dark), "both colour schemes render, differently")
 
-                // second page, driven the way a pad drives it: Next, then down to the locked option
+                // page 2, driven the way a pad drives it: Next, then the cursor on the locked option
                 let session = FomodSession(installer: withImages)
                 session.send(.next)
                 session.cursor = .option(ref(1, 0, 2))      // "Locked on": required
-                let padPage = try render("step2-pad-cursor", wide, FomodWizardView(session: session, onFinish: { _ in }, onCancel: {})
-                    .environment(\.fomodGlassDisabled, true))
-                try expect(fingerprint(padPage) != fingerprint(first), "another page renders differently")
+                session.showsCursor = true
+                let padPage = try render("page2-pad-cursor", size, FomodWizardView(session: session, onFinish: { _ in }, onCancel: {}))
+                try expect(fingerprint(padPage) != fingerprint(dark), "another page renders differently")
 
-                // the footer button under the cursor
+                // the cursor on the primary button
                 let footerSession = FomodSession(installer: withImages)
                 footerSession.cursor = .primary
-                _ = try render("footer-cursor", wide, FomodWizardView(session: footerSession, onFinish: { _ in }, onCancel: {})
-                    .environment(\.fomodGlassDisabled, true))
+                footerSession.showsCursor = true
+                _ = try render("footer-cursor", size, FomodWizardView(session: footerSession, onFinish: { _ in }, onCancel: {}))
 
-                // Reduce Transparency: solid panels
-                let solid = try render("reduced-transparency", wide, FomodWizardView(installer: withImages, onFinish: { _ in }, onCancel: {})
-                    .environment(\.fomodReduceTransparencyOverride, true))
-                try expect(fingerprint(solid) != fingerprint(first), "Reduce Transparency changes the surfaces")
+                // a host with its own Cancel asks for none; a bare window asks for one
+                _ = try render("with-cancel", size, FomodWizardView(installer: withImages, showsCancel: true, onFinish: { _ in }, onCancel: {}))
 
-                // Reduce Motion: the same page (its motion paths are fades; the resting picture must still be complete)
-                _ = try render("reduced-motion", wide, FomodWizardView(installer: withImages, onFinish: { _ in }, onCancel: {})
-                    .environment(\.fomodReduceMotionOverride, true)
-                    .environment(\.fomodGlassDisabled, true))
+                // Reduce Motion: the same page; the resting picture must still be complete
+                _ = try render("reduced-motion", size, FomodWizardView(installer: withImages, onFinish: { _ in }, onCancel: {})
+                    .environment(\.fomodReduceMotionOverride, true))
 
-                // an injected theme: other colours, no backdrop of its own (the launcher's shows through)
-                var blue = FomodTheme.anomaly
-                blue.accent = Color(red: 0.25, green: 0.55, blue: 1.0)
-                blue.backdrop = AnyView(Color(red: 0.05, green: 0.08, blue: 0.16).ignoresSafeArea())
-                let themed = try render("custom-theme", wide, FomodWizardView(installer: withImages, onFinish: { _ in }, onCancel: {}).fomodTheme(blue)
-                    .environment(\.fomodGlassDisabled, true))
-                try expect(fingerprint(themed) != fingerprint(first), "the theme changes the render")
+                // an injected theme: another accent and a backdrop of the host's own
+                let blue = FomodTheme(accent: Color(red: 0.25, green: 0.55, blue: 1.0),
+                                      backdrop: AnyView(LinearGradient(colors: [Color(red: 0.05, green: 0.08, blue: 0.20), .black],
+                                                                       startPoint: .top, endPoint: .bottom)))
+                let themed = try render("custom-theme", size, FomodWizardView(installer: withImages, onFinish: { _ in }, onCancel: {})
+                    .fomodTheme(blue))
+                try expect(fingerprint(themed) != fingerprint(dark), "the theme changes the render")
             }
         }
     }
