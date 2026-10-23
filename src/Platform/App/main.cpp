@@ -1039,6 +1039,7 @@ SDL_AppResult SDL_AppEvent(void* appstate, SDL_Event* event)
     {
     case AppleShell::Launcher::Action::StartGame:
         CloseLauncher(*app);
+        AppleShell::WriteFsGameLtx(); // the data root or the mod list may have changed since the shell started: the engine mounts what this file says
         return StartEngine(*app) ? SDL_APP_CONTINUE : SDL_APP_FAILURE;
     case AppleShell::Launcher::Action::Quit:
         return SDL_APP_SUCCESS;

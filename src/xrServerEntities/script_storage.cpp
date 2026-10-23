@@ -327,7 +327,26 @@ CScriptStorage::~CScriptStorage()
 
 extern int luaopen_lua_extensions(lua_State* L, bool IsDebug = false);
 #ifdef XR_PLATFORM_APPLE
+#include <unistd.h>
 extern void lua_ext_set_native_path_hook(const char* (*hook)(const char*));
+extern void lua_ext_set_read_path_hook(const char* (*hook)(const char*));
+
+// What a script reads when it opens a virtual path: scripts build the paths of the game folder's gamedata (getFS():update_path("$game_config$", "") ..
+// name), and the file of a mod lies in the mod's folder. A real file at the path wins (a manual install, or a file a script wrote itself), then the
+// file the registry says a mod provides; writes never come here.
+static const char* script_read_path(const char* virtual_path)
+{
+	const char* native = xr_native_path(virtual_path);
+	if (access(native, F_OK) == 0)
+		return native;
+	string_path lowered;
+	xr_strcpy(lowered, sizeof(lowered), virtual_path);
+	xr_strlwr(lowered);
+	if (const CLocatorAPI::file* entry = FS.exist(lowered))
+		if (LPCSTR real = FS.mounted_path(*entry))
+			return real;
+	return native;
+}
 #endif
 extern lua_CFunction luaopen_socket_core_init();
 extern void pdebug_init_init(lua_State* L);
@@ -488,6 +507,7 @@ void CScriptStorage::reinit()
 	luaopen_lua_extensions(lua(), isDebugEnabled);
 #ifdef XR_PLATFORM_APPLE
 	lua_ext_set_native_path_hook(xr_native_path); // lfs.*, io.open, ... take the engine's virtual paths
+	lua_ext_set_read_path_hook(script_read_path); // ... and what only reads also finds the files of mods
 #endif
 	disable_os_funcs(lua());
 #ifdef XR_PLATFORM_APPLE
