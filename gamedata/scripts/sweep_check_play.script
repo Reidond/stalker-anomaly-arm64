@@ -526,9 +526,174 @@ local function weapons()
 	return C.done("chk_weapons")
 end
 
+
+-- save, load, quick save, the autosave on a level change, death and load ----------------------------------------------------------------
+-- A reload or a level change rebuilds the Lua state, so what a phase wants the next one to compare against goes into a small file.
+local snap_file = nil
+local function snap_path()
+	snap_file = snap_file or (getFS():update_path("$app_data_root$", "") .. "chk_snapshot.txt")
+	return snap_file
+end
+
+local function snapshot()
+	local p = db.actor:position()
+	local t = {
+		x = p.x, y = p.y, z = p.z, level = level.name(), money = db.actor:money(),
+		bandages = C.count("bandage"), medkits = C.count("medkit"), items = C.inventory_total(),
+		health = db.actor.health, hour = level.get_time_hours(), minute = level.get_time_minutes(),
+	}
+	return t
+end
+
+local function write_snapshot(tag, t)
+	local f = io.open(snap_path(), "a")
+	local parts = { tag }
+	for k, v in pairs(t) do parts[#parts + 1] = k .. "=" .. tostring(v) end
+	f:write(table.concat(parts, " "), "\n")
+	f:close()
+end
+
+local function read_snapshot(tag)
+	local f = io.open(snap_path(), "r")
+	if not f then return nil end
+	local found
+	for line in f:lines() do
+		local t = {}
+		for k, v in string.gmatch(line, "(%w+)=(%S+)") do
+			t[k] = tonumber(v) or v
+		end
+		if string.match(line, "^" .. tag .. " ") then found = t end
+	end
+	f:close()
+	return found
+end
+
+local function same_state(sys, what, s)
+	local now = snapshot()
+	local d = math.sqrt((now.x - s.x) ^ 2 + (now.y - s.y) ^ 2 + (now.z - s.z) ^ 2)
+	C.check(sys, what .. "/position", d < 3, string.format("%.1f m from where it was saved", d))
+	C.check(sys, what .. "/money", now.money == s.money, string.format("money %d, saved %d", now.money, s.money))
+	C.check(sys, what .. "/inventory", now.bandages == s.bandages and now.medkits == s.medkits and now.items == s.items, string.format("bandages %d/%d medkits %d/%d items %d/%d", now.bandages, s.bandages, now.medkits, s.medkits, now.items, s.items))
+	C.check(sys, what .. "/level", now.level == s.level, now.level .. " vs " .. tostring(s.level))
+	C.check(sys, what .. "/game-time", now.hour == s.hour or now.hour == (s.hour + 1) % 24, string.format("hour %d, saved at %d", now.hour, s.hour))
+end
+
+local function saveload_phase1()
+	start_quiet()
+	local f0 = io.open(snap_path(), "w")
+	if f0 then f0:close() end
+	-- a plain save
+	give("bandage", 3)
+	give("medkit", 1)
+	H.pause(1500)
+	get_console():execute("save chk_a")
+	H.pause(4000)
+	local a = C.save_exists("chk_a")
+	C.check("save", "save", a ~= nil and a.size > 100000, a and ("chk_a.scop " .. a.size .. " bytes") or "no chk_a.scop")
+	local dds = getFS():exist("$game_saves$", "chk_a.dds")
+	C.check("save", "thumbnail", dds ~= nil, "chk_a.dds " .. tostring(dds ~= nil))
+
+	-- a quick save
+	local before = #C.saves("*quicksave*.scop")
+	local ok = level_input.action_quick_save()
+	H.pause(4000)
+	local q = C.saves("*quicksave*.scop")
+	C.check("save", "quick-save", ok == true and #q >= 1 and q[1].size > 100000, string.format("action returned %s, %d quicksave files (%d before), newest %s", tostring(ok), #q, before, q[1] and q[1].name or "-"))
+	write_snapshot("quick", snapshot())
+
+	-- the state a load must restore
+	give("bandage", 2)
+	db.actor:give_money(2500)
+	local pos, lvid = H.spot(25, 1.0)
+	db.actor:set_actor_position(pos)
+	H.pause(3000)
+	write_snapshot("b", snapshot())
+	get_console():execute("save chk_b")
+	H.pause(4000)
+	C.check("save", "save-again", C.save_exists("chk_b") ~= nil, "chk_b.scop written")
+
+	-- change everything, then load
+	db.actor:give_money(-1000)
+	local obj = db.actor:object("bandage")
+	if obj then db.actor:drop_item(obj) end
+	db.actor:set_actor_position(vector():set(db.actor:position()):add(vector():set(0, 0, -20)))
+	H.pause(2000)
+	return { reload = "chk_b" }
+end
+
+local function saveload_phase2()
+	H.wait_for("the load", 240000, H.actor_ready)
+	H.enable_ui()
+	H.pause(6000)
+	local s = read_snapshot("b")
+	C.check("load", "snapshot", s ~= nil, "the saved state is on file")
+	if s then same_state("load", "load", s) end
+	C.check("load", "alive", db.actor:alive(), "health " .. C.fmt(db.actor.health))
+
+	-- quick load
+	db.actor:give_money(7777)
+	H.pause(500)
+	local ok = level_input.action_quick_load()
+	C.check("load", "quick-load-call", ok == true, "action_quick_load returned " .. tostring(ok))
+	return { next = true }
+end
+
+local function saveload_phase3()
+	H.wait_for("the quick load", 240000, H.actor_ready)
+	H.enable_ui()
+	H.pause(6000)
+	local s = read_snapshot("quick")
+	if s then
+		local now = snapshot()
+		C.check("load", "quick-load/money", now.money == s.money, string.format("money %d, quick save had %d", now.money, s.money))
+		C.check("load", "quick-load/inventory", now.bandages == s.bandages, string.format("bandages %d, quick save had %d", now.bandages, s.bandages))
+	else
+		C.check("load", "quick-load", false, "no quick snapshot")
+	end
+	-- level change: the engine writes an autosave on the way
+	get_console():execute("jump_to_level l02_garbage")
+	return { next = true }
+end
+
+local function saveload_phase4()
+	H.wait_for("the Garbage", 240000, function() return H.level_is("l02_garbage") and H.actor_ready() end)
+	H.enable_ui()
+	H.pause(8000)
+	local list = C.saves("*.scop")
+	local newest = list[1]
+	local autosave
+	for _, e in ipairs(list) do
+		if e.name:lower():find("autosave") then autosave = e break end
+	end
+	C.check("save", "autosave", autosave ~= nil and autosave.size > 100000, autosave and (autosave.name .. " " .. autosave.size .. " bytes") or "no autosave file")
+	C.check("save", "autosave-is-latest", autosave ~= nil and newest ~= nil and (newest.name == autosave.name or newest.modif == autosave.modif or newest.name:lower():find("autosave") ~= nil), "newest save: " .. tostring(newest and newest.name))
+
+	-- death and the game-over load
+	write_snapshot("death", snapshot())
+	get_console():execute("save chk_death")
+	H.pause(4000)
+	H.god(false)
+	db.actor:kill(db.actor)
+	H.pause(2000)
+	C.check("death", "dead", not db.actor:alive(), "actor killed")
+	H.finish_game_over()
+	return { reload = "last" }
+end
+
+local function saveload_phase5()
+	H.wait_for("the reload", 240000, H.actor_ready)
+	H.enable_ui()
+	H.pause(6000)
+	C.check("death", "reload-alive", db.actor:alive() and db.actor.health > 0.3, "health " .. C.fmt(db.actor.health))
+	local s = read_snapshot("death")
+	if s then same_state("death", "reload", s) end
+	return C.done("chk_saveload")
+end
+
 function plans(c, h)
 	C, H = c, h
 	local out = {}
+	out.chk_saveload = { saveload_phase1, saveload_phase2, saveload_phase3, saveload_phase4, saveload_phase5 }
 	out.chk_weapons = { function() return weapons() end }
 	-- chk_probe: runs appdata/probe.lua (a scratch file, not part of the check) with the library and the helpers, to try an API out
 	out.chk_probe = { function()

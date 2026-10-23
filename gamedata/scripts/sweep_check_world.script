@@ -1,10 +1,308 @@
 --[[
-	Systems check, world plans. See sweep_check.script.
+	Systems check, part 2: the world. A-Life, combat AI, anomalies and artefacts, emissions, weather, sleeping, stashes,
+	companions, travel. See sweep_check.script.
 --]]
 
 local C, H
 
+local function give(...) return H.give(...) end
+
+local function start_quiet()
+	H.wait_for("actor", 240000, H.actor_ready)
+	H.enable_ui()
+	H.pause(6000)
+	H.god(false)
+end
+
+-- the game clock at `factor` times the normal rate for `ms` real milliseconds (surge_manager puts it back every second)
+local function fast_forward(factor, ms)
+	local t0 = game.get_game_time()
+	local normal = level.get_time_factor()
+	local t_end = time_global() + ms
+	while time_global() < t_end do
+		level.set_time_factor(factor)
+		coroutine.yield()
+	end
+	level.set_time_factor(normal)
+	return game.get_game_time():diffSec(t0)
+end
+
+local function dist3(a, b)
+	return a:distance_to(b)
+end
+
+-- A-Life -------------------------------------------------------------------------------------------------------------------------
+-- SIMBOARD.squads maps a squad id to true; the squad is the server object
+local function each_squad()
+	local list = {}
+	for id in pairs(SIMBOARD.squads) do
+		local sq = alife():object(id)
+		if sq then list[#list + 1] = sq end
+	end
+	return list
+end
+
+local function squad_snapshot()
+	local t = {}
+	for _, squad in ipairs(each_squad()) do
+		local id = squad.id
+		t[id] = { smart = squad.smart_id, assigned = squad.assigned_target_id, current = squad.current_target_id, pos = vector():set(squad.position), gvid = squad.m_game_vertex_id, online = squad.online }
+	end
+	return t
+end
+
+local function alife_plan()
+	start_quiet()
+	local n_squads, n_online, n_members, n_smarts = 0, 0, 0, 0
+	for _, squad in ipairs(each_squad()) do
+		n_squads = n_squads + 1
+		if squad.online then n_online = n_online + 1 end
+		for _ in squad:squad_members() do n_members = n_members + 1 end
+	end
+	for _ in pairs(SIMBOARD.smarts) do n_smarts = n_smarts + 1 end
+	C.check("a-life", "population", n_squads > 20 and n_smarts > 20 and n_members > 30, string.format("%d squads (%d online) with %d members, %d smart terrains", n_squads, n_online, n_members, n_smarts))
+
+	-- squads move between smart terrains as the clock runs
+	local s0 = squad_snapshot()
+	local secs = fast_forward(300, 45000)
+	local s1 = squad_snapshot()
+	local retargeted, moved_gv, lost = 0, 0, 0
+	for id, a in pairs(s0) do
+		local b = s1[id]
+		if not b then
+			lost = lost + 1
+		else
+			if a.assigned ~= b.assigned or a.smart ~= b.smart or a.current ~= b.current then retargeted = retargeted + 1 end
+			if a.gvid ~= b.gvid then moved_gv = moved_gv + 1 end
+		end
+	end
+	C.check("a-life", "clock", secs > 10000, string.format("%.0f game seconds simulated", secs))
+	C.check("a-life", "squads-retarget", retargeted >= 3, string.format("%d of %d squads picked a new smart terrain, %d moved on the game graph, %d gone", retargeted, n_squads, moved_gv, lost))
+	C.check("a-life", "squads-move", moved_gv >= 3, string.format("%d squads changed game vertex", moved_gv))
+
+	-- offline / online: the actor goes to the far side of the level; the squads there come online and the ones it left go offline
+	local function online_set()
+		local t = {}
+		for _, sq in ipairs(each_squad()) do
+			if sq.online then t[sq.id] = sq:name() end
+		end
+		return t
+	end
+	local function count(t) local n = 0 for _ in pairs(t) do n = n + 1 end return n end
+	local ap = vector():set(db.actor:position())
+	local my_level = game_graph():vertex(db.actor:game_vertex_id()):level_id()
+	local farthest, far_d = nil, 0
+	for _, squad in ipairs(each_squad()) do
+		for m in squad:squad_members() do
+			local se = alife_object(m.id)
+			if se and se.m_game_vertex_id and game_graph():vertex(se.m_game_vertex_id):level_id() == my_level then
+				local d = se.position:distance_to(ap)
+				if d > far_d then farthest, far_d = se, d end
+			end
+		end
+	end
+	if not farthest then
+		C.check("a-life", "online-switch", false, "no squad member on this level")
+		return C.done("chk_alife")
+	end
+	H.say("switch distance %s, farthest squad member %s at %s m", tostring(alife():switch_distance()), farthest:name(), tostring(math.floor(far_d)))
+	local before = online_set()
+	H.god(true)
+	db.actor:set_actor_position(farthest.position)
+	H.pause(25000)
+	local after = online_set()
+	local came, went = {}, {}
+	for id, n in pairs(after) do if not before[id] then came[id] = n end end
+	for id, n in pairs(before) do if not after[id] then went[id] = n end end
+	C.check("a-life", "goes-online", count(came) > 0, string.format("%d squads online before, %d after the actor moved %.0f m; %d came online", count(before), count(after), far_d, count(came)))
+	C.check("a-life", "goes-offline", count(went) > 0, string.format("%d squads left online range", count(went)))
+	local made = 0
+	for id in pairs(came) do
+		local sq = alife():object(id)
+		if sq then
+			for m in sq:squad_members() do
+				if level.object_by_id(m.id) then made = made + 1 end
+			end
+		end
+	end
+	C.check("a-life", "game-objects", made > 0, string.format("%d members of the squads that came online exist as game objects", made))
+	H.god(false)
+	return C.done("chk_alife")
+end
+
+-- combat AI ----------------------------------------------------------------------------------------------------------------------
+-- a walkable spot about `dist` metres from the actor: the direction (of eight) where the vertex search got farthest
+local function here(dist, ang)
+	local best, best_lvid, best_d = nil, nil, -1
+	for i = 0, 7 do
+		local pos, lvid = H.spot(dist, (ang or 0) + i * 0.785)
+		local d = db.actor:position():distance_to(pos)
+		if d > best_d then best, best_lvid, best_d = pos, lvid, d end
+	end
+	return best, best_lvid, best_d
+end
+
+local function spawn_at(sec, dist, ang)
+	local pos, lvid, d = here(dist, ang)
+	local se = alife_create(sec, pos, lvid, db.actor:game_vertex_id())
+	if se then se.__spawn_dist = d end
+	return se
+end
+
+local function hits_counter()
+	local n = { hits = 0 }
+	RegisterScriptCallback("actor_on_hit_callback", function(obj, amount, local_direction, who, bone_index)
+		n.hits = n.hits + 1
+		n.last_who = who and who:section() or "?"
+	end)
+	return n
+end
+
+local function mutants_plan()
+	start_quiet()
+	H.gear_up()
+	H.arm()
+	local counter = hits_counter()
+	-- one species after another: it comes at the actor, bites, and a rifle kills it
+	local species = { "dog_normal", "boar_normal", "flesh_normal", "snork_normal", "bloodsucker_normal", "pseudodog_normal", "cat_normal" }
+	for _, sec in ipairs(species) do
+		C.run("mutants", sec, function()
+			if not ini_sys:section_exist(sec) then return true, "no such section on this build, skipped" end
+			H.god(false)
+			db.actor.health = 1
+			local se = spawn_at(sec, 22, 1.0)
+			if not se then return false, "alife_create returned nil" end
+			H.pause(3000)
+			local m = level.object_by_id(se.id)
+			if not m then return false, "the mutant did not come online" end
+			local d0 = dist3(m:position(), db.actor:position())
+			local hits0 = counter.hits
+			local closest = d0
+			local attacked = false
+			for i = 1, 25 do
+				H.pause(1000)
+				if not m:alive() then break end
+				local d = dist3(m:position(), db.actor:position())
+				if d < closest then closest = d end
+				if counter.hits > hits0 or db.actor.health < 0.995 then attacked = true end
+				if attacked then break end
+			end
+			local hp = db.actor.health
+			if m:alive() then m:kill(db.actor) end
+			H.pause(800)
+			db.actor.health = 1
+			return attacked, string.format("%s: closest %.1f m (started %.1f), actor health %.2f after it attacked", sec, closest, d0, hp)
+		end)
+	end
+	-- ranged mutants and a few that need a target of their own
+	return C.done("chk_mutants")
+end
+
+local function stalkers_plan()
+	start_quiet()
+	H.gear_up()
+	H.arm()
+	local counter = hits_counter()
+	-- hostile stalkers shoot at the actor and move to cover
+	C.run("stalkers", "hostile-fire", function()
+		H.god(true) -- they shoot for real; the actor does not die before the check has looked
+		local a = spawn_at("sim_default_bandit_0", 18, 0.8)
+		local b = spawn_at("sim_default_bandit_1", 20, 1.4)
+		H.pause(3500)
+		local ids = {}
+		for _, se in ipairs({ a, b }) do
+			local o = se and level.object_by_id(se.id)
+			if o then
+				o:set_relation(game_object.enemy, db.actor)
+				ids[#ids + 1] = o
+			end
+		end
+		if #ids == 0 then return false, "no stalker came online" end
+		local mags0 = {}
+		for i, o in ipairs(ids) do
+			local w = o:active_item()
+			mags0[i] = w and w:get_ammo_in_magazine() or -1
+		end
+		local d0 = dist3(ids[1]:position(), db.actor:position())
+		local fired, moved = false, false
+		local hits0 = counter.hits
+		for k = 1, 30 do
+			H.pause(1000)
+			for i, o in ipairs(ids) do
+				if o:alive() then
+					local w = o:active_item()
+					if w and mags0[i] >= 0 and w:get_ammo_in_magazine() < mags0[i] then fired = true end
+				end
+			end
+			if math.abs(dist3(ids[1]:position(), db.actor:position()) - d0) > 4 then moved = true end
+			if fired and moved then break end
+		end
+		for _, o in ipairs(ids) do if o:alive() then o:kill(db.actor) end end
+		H.pause(800)
+		H.god(false)
+		return fired, string.format("two bandits %.0f m away after 3 s: shots fired %s, they moved %s, %d hits reported on the actor", d0, tostring(fired), tostring(moved), counter.hits - hits0)
+	end)
+
+	-- the actor shoots back: a stalker hit by the actor goes down
+	C.run("stalkers", "return-fire", function()
+		H.god(true)
+		local a = spawn_at("sim_default_bandit_2", 15, 0.4)
+		H.pause(3500)
+		local o = a and level.object_by_id(a.id)
+		if not o then return false, "no stalker came online" end
+		o:set_relation(game_object.enemy, db.actor)
+		local hp0 = o.health
+		local rifle = db.actor:object("wpn_ak74u")
+		if rifle then
+			db.actor:make_item_active(rifle)
+			H.pause(3500)
+		end
+		local w = db.actor:active_item()
+		local mag0 = w and w:get_ammo_in_magazine() or -1
+		for round = 1, 12 do
+			H.fire_burst(o, 1200)
+			H.pause(300)
+			if not o:alive() or o.health < hp0 - 0.05 then break end
+			if w and w:get_ammo_in_magazine() == 0 then
+				H.press(key_bindings.kWPN_RELOAD, 100)
+				H.pause(4000)
+			end
+		end
+		H.god(false)
+		local w1 = db.actor:active_item()
+		return not o:alive() or o.health < hp0, string.format("bandit health %.2f -> %.2f (alive %s), %s in hand, magazine %s -> %s, %.0f m apart", hp0, o.health, tostring(o:alive()), tostring(w1 and w1:section()), tostring(mag0), tostring(w1 and w1:get_ammo_in_magazine()), o:position():distance_to(db.actor:position()))
+	end)
+
+	-- two factions at war: the bandit and the stalker engage each other without the actor
+	C.run("stalkers", "faction-war", function()
+		H.god(true)
+		local a = spawn_at("sim_default_bandit_0", 25, 2.0)
+		local b = spawn_at("sim_default_stalker_0", 28, 2.0)
+		H.pause(3500)
+		local oa, ob = a and level.object_by_id(a.id), b and level.object_by_id(b.id)
+		if not (oa and ob) then return false, "stalkers did not come online" end
+		local seen = false
+		local t_end = time_global() + 40000
+		while time_global() < t_end do
+			H.pause(1000)
+			local be = oa:best_enemy()
+			-- the bandit has picked an enemy that is not the actor (the stalker, or another one of that faction around), or one has died
+			if (be and be:id() ~= db.actor:id()) or not oa:alive() or not ob:alive() then seen = true break end
+		end
+		local res = string.format("bandit alive %s, stalker alive %s, bandit enemy %s", tostring(oa:alive()), tostring(ob:alive()), tostring(oa:best_enemy() and oa:best_enemy():name()))
+		if oa:alive() then oa:kill(db.actor) end
+		if ob:alive() then ob:kill(db.actor) end
+		H.god(false)
+		return seen, res
+	end)
+	return C.done("chk_stalkers")
+end
+
 function plans(c, h)
 	C, H = c, h
-	return {}
+	local out = {}
+	out.chk_alife = { alife_plan }
+	out.chk_mutants = { mutants_plan }
+	out.chk_stalkers = { stalkers_plan }
+	return out
 end
