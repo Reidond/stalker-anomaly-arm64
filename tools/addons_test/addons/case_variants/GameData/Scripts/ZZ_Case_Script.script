@@ -1,0 +1,3 @@
+-- Test addon "case_variants": installed under GameData/Scripts, next to the gamedata/ of the game folder (a zip whose top folder is spelled
+-- GameData). On a case-sensitive volume these are two folders; the engine must still see this script.
+loaded = true

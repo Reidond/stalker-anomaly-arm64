@@ -1,0 +1,36 @@
+-- Test addon "script" (tools/addons_test): a new script with callbacks and a monkey-patch of a stock function.
+-- The file and its folder are spelled the way a Windows zip spells them (ZZ_Addon_Script.script in Scripts).
+-- axr_main runs on_game_start() of every script that has one.
+
+loaded = true
+start_called = false
+cb = { first_update = 0, update = 0 }
+
+local stock_trim = trim -- the stock function of _g.script, taken before the patch replaces it
+
+-- patched: "ZZ_..." strings come back as "ZZ_patched", everything else goes to the stock function
+local function patched_trim(s)
+	if type(s) == "string" and s:find("^ZZ_") then
+		return "ZZ_patched"
+	end
+	return stock_trim(s)
+end
+
+local function on_first_update()
+	cb.first_update = cb.first_update + 1
+	printf("%s", "ADDON_TEST cb_first_update PASS count=" .. cb.first_update)
+end
+
+local function on_update()
+	cb.update = cb.update + 1
+	if cb.update == 30 then
+		printf("%s", "ADDON_TEST cb_update PASS count=" .. cb.update)
+	end
+end
+
+function on_game_start()
+	start_called = true
+	_G.trim = patched_trim
+	RegisterScriptCallback("actor_on_first_update", on_first_update)
+	RegisterScriptCallback("actor_on_update", on_update)
+end

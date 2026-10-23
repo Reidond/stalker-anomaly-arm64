@@ -1,0 +1,3 @@
+-- addons_test: db\patches archive, replaces the Monolith overlay's scripts\ipad_debug.script (only run_string calls it)
+function dump_smarts() end
+function tp() end

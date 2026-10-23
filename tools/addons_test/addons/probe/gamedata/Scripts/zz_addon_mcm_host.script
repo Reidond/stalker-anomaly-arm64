@@ -1,0 +1,43 @@
+-- Stand-in for the MCM mod's page host (tools/addons_test): finds the *_mcm scripts, reads their pages and keeps the values
+-- in axr_options.ltx through the stock axr_main.config (ini_file_ex), as MCM does. The real MCM replaces this on a player's install.
+
+local SECTION_PREFIX = "mcm_"
+
+-- every page returned by on_mcm_load() of a *_mcm script, keyed by page id
+function pages()
+	local found = {}
+	local list = getFS():file_list_open_ex("$game_scripts$", bit_or(FS.FS_ListFiles, FS.FS_RootOnly), "*_mcm.script")
+	for i = 0, list:Size() - 1 do
+		local name = list:GetAt(i):NameShort()
+		name = name:sub(1, name:len() - 7)
+		local module = _G[name]
+		if module and module.on_mcm_load then
+			local page = module.on_mcm_load()
+			if page and page.id then
+				found[page.id] = page
+			end
+		end
+	end
+	return found
+end
+
+local function option(page_id, id)
+	local page = pages()[page_id]
+	if not page then return nil end
+	for _, o in ipairs(page.gr) do
+		if o.id == id then return o end
+	end
+end
+
+function get(page_id, id)
+	local o = option(page_id, id)
+	if not o then return nil end
+	local stored = axr_main.config:r_value(SECTION_PREFIX .. page_id, id, o.val == 1 and 1 or 2, nil)
+	if stored == nil then return o.def end
+	return stored
+end
+
+function set(page_id, id, value)
+	axr_main.config:w_value(SECTION_PREFIX .. page_id, id, value)
+	axr_main.config:save()
+end

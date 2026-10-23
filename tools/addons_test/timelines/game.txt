@@ -1,0 +1,7 @@
+# addons_test: boot, start a new game (the faction dialog is skipped: the player stands in fake_start), stand there for the callbacks.
+# The addon script's actor_on_first_update and actor_on_update(30) callbacks log ADDON_TEST cb_* lines.
+2 console r_screenshot_mode png
+14 console screenshot addons_menu
+20 console start server(all/single/alife/new) client(localhost)
+100 console screenshot addons_game
+110 quit
