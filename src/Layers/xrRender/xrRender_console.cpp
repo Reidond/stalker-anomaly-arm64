@@ -1404,7 +1404,7 @@ void xrRender_initconsole()
 
 	CMD4(CCC_Integer, "r__supersample", &ps_r__Supersample, 1, 8);
 
-	CMD4(CCC_RenderScale, "r__render_scale", &ps_r__render_scale, 0.5f, 1.0f);
+	CMD4(CCC_RenderScale, "r__render_scale", &ps_r__render_scale, 0.35f, 1.0f); // 0.35: the iPad profile renders about 1 Mpixel of a 5.6 Mpixel panel (SETTINGS.md)
 	CMD3(CCC_Token, "r__upscaler", &ps_r__upscaler, upscaler_token);
 	CMD4(CCC_Float, "r__upscale_sharpness", &ps_r__upscale_sharpness, 0.0f, 1.0f);
 
