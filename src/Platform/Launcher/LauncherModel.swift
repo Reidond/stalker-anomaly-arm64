@@ -494,7 +494,7 @@ final class LauncherModel: ObservableObject {
             return title == ImportCoordinator.installingTitle ? [] : [FocusItem(id: "import.cancel", isDefault: true, activate: { [weak self] in self?.imports.cancel() })]
         case .review(let plan):
             return [
-                FocusItem(id: "import.install", activate: { [weak self] in self?.imports.install(plan, choices: nil) }),
+                FocusItem(id: "import.install", activate: { [weak self] in self?.imports.continueImport(plan) }),
                 FocusItem(id: "import.cancel", isDefault: true, activate: { [weak self] in self?.imports.cancel() }),
             ]
         case .done(let mod):

@@ -144,7 +144,8 @@ struct ImportSheet: View {
                 }
                 .frame(maxWidth: 480)
                 VStack(spacing: 10) {
-                    SheetButton(title: "Add Anyway", systemImage: "square.and.arrow.down", style: .prominent) { imports.install(plan, choices: nil) }
+                    SheetButton(title: plan.fomod == nil ? "Add Anyway" : "Continue", systemImage: plan.fomod == nil ? "square.and.arrow.down" : "arrow.right",
+                                style: .prominent) { imports.continueImport(plan) }
                         .padFocus("import.install", radius: SheetButtonRadius.value, ring: .white)
                     SheetButton(title: "Cancel") { imports.cancel() }
                         .padFocus("import.cancel", radius: SheetButtonRadius.value)

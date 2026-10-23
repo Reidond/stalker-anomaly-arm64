@@ -68,17 +68,26 @@ final class ImportCoordinator: ObservableObject {
             guard let self, let importer = self.importer else { return }
             let plan = try await importer.inspect(url)
             try Task.checkCancellation()
-            if let installer = plan.fomod {
-                let session = FomodSession(installer: installer, environment: importer.environment)
-                session.onFinish = { [weak self] choices in self?.fomodSession = nil; self?.install(plan, choices: choices) }
-                session.onCancel = { [weak self] in self?.cancel() }
-                self.fomodSession = session
-                self.stage = .fomod(plan)
-            } else if !plan.warnings.isEmpty {
+            if !plan.warnings.isEmpty {
+                // the warnings come first, also for a mod with an installer: the wizard does not show them
                 self.stage = .review(plan)
             } else {
-                try await self.perform(plan, choices: nil)
+                try await self.proceed(plan)
             }
+        }
+    }
+
+    /// After the warnings (or without any): a FOMOD goes to its wizard, anything else is installed.
+    private func proceed(_ plan: ImportPlan) async throws {
+        guard let importer else { return }
+        if let installer = plan.fomod {
+            let session = FomodSession(installer: installer, environment: importer.environment)
+            session.onFinish = { [weak self] choices in self?.install(plan, choices: choices) }
+            session.onCancel = { [weak self] in self?.cancel() }
+            fomodSession = session
+            stage = .fomod(plan)
+        } else {
+            try await perform(plan, choices: nil)
         }
     }
 
@@ -100,8 +109,15 @@ final class ImportCoordinator: ObservableObject {
         }
     }
 
-    /// The review screen's Install button, or the wizard's Finish.
+    /// The review screen's button: on to the wizard for a FOMOD, install otherwise.
+    func continueImport(_ plan: ImportPlan) {
+        run { [weak self] in try await self?.proceed(plan) }
+    }
+
+    /// The wizard's Finish. The session is dropped here: from now on the pad belongs to the sheet's buttons again, whatever callback
+    /// the wizard view installed on it.
     func install(_ plan: ImportPlan, choices: FomodChoices?) {
+        fomodSession = nil
         run { [weak self] in try await self?.perform(plan, choices: choices) }
     }
 
