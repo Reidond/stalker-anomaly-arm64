@@ -196,27 +196,35 @@ Both ended with exit code 0: no crash, no memory warning, no lifecycle event, th
 | `--script <file>` | scripted run (INTEGRATION.md). New in the app: relative paths are looked up in `Documents/`, a trailing ` # comment` is ignored, `ballast <MB>` / `unballast`; the virtual pad, touch, lifecycle and audio-interruption commands are in CONTROLS.md "Test aids". `run_string` in a script needs `-dbg` (`ipad.sh script <file> -dbg`) |
 | `-dbg` | engine flag: enables the console's `run_string`, `run_script`, `jump_to_level`, `g_god`; `gamedata/scripts/ipad_debug.script` has `dump_smarts()` and `tp(x, y, z)` for test runs |
 | `--exit-after <s>`, `--show-launcher`, `--data-root` | as on the Mac |
+| environment `ANOMALY_CLEAR_SHADER_CACHE=1` | empties `Library/Caches/Anomaly/shaders` at start (every shader is translated again): a cold start for tests; pass it with `devicectl ... --environment-variables` (`ANOMALY_LAUNCH_ENV='{"ANOMALY_CLEAR_SHADER_CACHE":"1"}' tools/ios/ipad.sh script ...`) |
 
 Test scripts in `tools/ios/scripts/`: `new_game.txt` (menu, faction dialog, Start, the Cordon, a walk, a save: makes the `ipad_test` save),
-`load_game.txt`, `tour.txt` (four places of the Cordon), `res_sweep.sh`, `sweep_gpu.txt`, `memory_pressure.txt`. The shell log line every 10 s has
+`load_game.txt`, `tour.txt` (four places of the Cordon), `res_sweep.sh`, `sweep_gpu.txt`, `memory_pressure.txt`, `heap_runs.sh` (repeated cold start / play / quit
+runs with malloc debugging, counts aborts and hangs and times the quit; scenarios `menu`, `loading`, `play`, `churn`) and `bg_term.sh` (SIGTERM to the game while it is in
+the background; `ipad.sh pid|signal|front|install-app` are its helpers). The shell log line every 10 s has
 fps, CPU ms inside `Frame()`, GPU ms, footprint (peak), available memory and the thermal state. `soak.txt` and `soak2.txt` are the long runs (below).
 
 ## Known issues
 
-- **Intermittent abort in ShaderXlat** (renderer session). `malloc: pointer being freed was not allocated` in vkd3d's `preproc_free_macro` /
-  `preproc_yyparse` while a shader is translated at run time: seen once, non-fatal, at start-up, and twice as a `SIGABRT` (once at quit, once
-  mid-run), both times translating a `hud_font` shader requested by `CConsole::OnRender`. It never shows on the Mac. Shaders already in the cache
-  do not go through vkd3d, so it shows when new shaders are needed (the first run of a level, the console font). Reported to the M2 session.
+- **Intermittent heap abort** (`malloc: pointer being freed was not allocated`, about 4 in 90 runs before M5, in vkd3d's `preproc_free_macro`/`preproc_yyparse` while a shader is
+  translated, in `CloseLog` at a normal quit, once in a system framework): **causes found and fixed in M5, not reproduced either way.** vkd3d is the victim, not the culprit:
+  the threads that share the heap with it were not safe (the spawn prefetcher outliving its level and sharing the model pool and the file registry with the primary thread, the
+  freeze watchdog flushing the log into the file system being torn down, unlocked `LogFile`; SANITIZERS.md findings 29 to 37). Runs (`tools/ios/scripts/heap_runs.sh`, cold shader
+  cache every run, `MallocScribble`/`MallocPreScribble`/`MallocGuardEdges`/`MallocErrorAbort`/`MallocStackLogging`): before, 27 runs on the unfixed build, 0 aborts (8 menu, 8 quit during
+  the load, 8 load and play, plus 3 with `MallocCheckHeapStart=5000`/`Each=1000`); after, **40 runs, 0 aborts, 0 crashes, 0 hangs** (8 menu, 8 quit during the load, 8 load and play 150 s,
+  16 `churn`: teleports to four places 15 s apart and a quit 3 s after the last, with the prefetcher's queue full). Zero in 27 is what chance gives a third of the time at the old rate,
+  so the evidence for the fix is the code, the TSan runs and the Mac runs, and these as no regression. Quit time (the script's `quit` to `quit (ok)`), median (max): menu 0.12 s (0.13) before,
+  0.15 s (0.15) after; during the load 1.38 s (1.55), 1.21 s (1.48); from the level 1.23 s (1.34), 1.02 s (1.34); churn 1.35 s (1.58) after. If it comes back, `MallocStackLogging` with
+  `MallocErrorAbort` names the allocation; `lua_parallel_gc 0` is the next suspect (SANITIZERS.md open item 12).
+- **A SIGTERM to the game in the background takes 31 s (the system's grace period).** Measured (`bg_term.sh`: load a level, launch Settings over the game, SIGTERM): the shell log ends at
+  `DidEnterBackground`, the process does nothing for 90 s with the old build and the new one (5 of 5 runs), and only SIGKILL ends it: iOS suspends a backgrounded app and a suspended
+  process cannot answer. What the app can do, it does: while it is paused but still running, and when it wakes with the SIGTERM pending, it leaves at once (SANITIZERS.md finding 38). The
+  background save (`ipad_autosave`) is written at the transition, so a kill loses nothing.
 - The renderer's known defects (INTEGRATION.md): rain over interior geometry, the 34 missing `ssfx_*` shaders, no tessellation. One
   `pipeline creation failed (vs206 ps205): Fragment input user(locn2) mismatching` per load.
 - **Quick use does nothing in a scripted start** (Mac, M5): the Quick 1 wheel slot and F1 on the keyboard both reach `quick_use_1`, `CInventory__eat` called from Lua
   returns true, but the medkit is not used (count 3 stays 3, health stays). Not the pad; for the gameplay session.
 - Flashlight and night vision were only seen reaching their actions: the scripted start has neither item. Check them in a normal game.
-- Four `SIGABRT`s from libmalloc (`pointer being freed was not allocated`) in about 90 runs, at different places (vkd3d; `CloseLog` at shutdown, twice): a
-  double free or a foreign pointer somewhere, passed to the crash-sweep session. The latest, with the merged tree: `pick.txt`-style 100 s run, normal `quit`,
-  `anomaly: script asked to quit`, then `xr_engine::Shutdown` -> `xrCore::_destroy` -> `CLocatorAPI::_destroy` -> `CloseLog` -> `LogFile.clear()` frees a bad
-  block (`libsystem_malloc` abort). `clear()` walks every log line's string, so it trips over a heap corruption made anywhere earlier. Also worth a guard:
-  `AddOne` does `LogFile.erase(LogFile.end()-1)` for a repeated line, which is undefined if the `clear_log` console command emptied the vector first.
 
 ## Controller
 
