@@ -21,7 +21,17 @@ local pass_n, fail_n = 0, 0
 function install(phases, helpers)
 	H = helpers
 	C.H = helpers
-	for _, mod in ipairs({ "sweep_check_play", "sweep_check_world", "sweep_check_ui" }) do
+	-- every level change a script asks for is logged with its call stack (a plan that lands on the wrong level has to say who sent it)
+	local orig = _G.change_level_now
+	if orig and not C.hooked then
+		C.hooked = true
+		_G.change_level_now = function(pos, lvid, gvid, angle)
+			local ok, tb = pcall(function() return debug.traceback("change_level_now", 2) end)
+			H.say("change_level_now(gvid %s, lvid %s) from %s", tostring(gvid), tostring(lvid), tostring(ok and tb or "no traceback"))
+			return orig(pos, lvid, gvid, angle)
+		end
+	end
+	for _, mod in ipairs({ "sweep_check_play", "sweep_check_world", "sweep_check_ui", "sweep_check_more" }) do
 		local ok, m = pcall(function() return _G[mod] end)
 		if ok and m and m.plans then
 			for name, list in pairs(m.plans(C, H)) do

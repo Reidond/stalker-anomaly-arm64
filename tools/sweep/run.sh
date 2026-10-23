@@ -170,7 +170,7 @@ if [ "$plain" = 0 ]; then
     )
 fi
 
-rm -f "$appdata/sweep_state.txt" "$appdata"/chk_soak.txt "$appdata"/chk_snapshot.txt "$appdata"/chk_companion.txt # a plan starts at its first phase
+rm -f "$appdata/sweep_state.txt" "$appdata"/chk_soak.txt "$appdata"/chk_snapshot.txt "$appdata"/chk_companion.txt "$appdata"/chk_travel_retry.txt # a plan starts at its first phase
 rm -f "$log_dir"/xray_*.log "$shell_log_dir"/anomaly-crash.log "$log_dir"/*.crash.txt 2>/dev/null
 
 echo "plan $plan, out $out"

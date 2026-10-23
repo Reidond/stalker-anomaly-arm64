@@ -1,0 +1,105 @@
+--[[
+	Systems check, part 4: the PDA in the hand (the game's default), and script API robustness. See sweep_check.script.
+--]]
+
+local C, H
+
+local function give(...) return H.give(...) end
+
+local function start_quiet()
+	H.wait_for("actor", 240000, H.actor_ready)
+	H.enable_ui()
+	H.pause(6000)
+	H.god(false)
+end
+
+-- the PDA the way the game opens it: g_3d_pda is on by default, the PDA key (`active_jobs`, P) raises the device in the hand and its screen is the UI, drawn into
+-- the PDA's render target (the plain dialog of chk_pda is only the other mode)
+local function pda3d_plan()
+	start_quiet()
+	give("device_pda", 1)
+	H.pause(2000)
+	get_console():execute("g_3d_pda on")
+	C.check("pda-3d", "setting", get_console():get_bool("g_3d_pda"), "g_3d_pda " .. tostring(get_console():get_bool("g_3d_pda")))
+	local dev = db.actor:object("device_pda")
+	if dev and not db.actor:item_in_slot(8) then
+		db.actor:move_to_slot(dev, 8)
+		H.pause(1500)
+	end
+	local pda = db.actor:item_in_slot(8)
+	C.check("pda-3d", "device", pda ~= nil, "the PDA is in its slot: " .. tostring(pda and pda:section()))
+	-- raise it with the key
+	H.press(key_bindings.kACTIVE_JOBS, 120)
+	local up = H.wait_for("the PDA in the hand", 12000, function() return db.actor:active_slot() == 14 or ActorMenu.get_pda_menu():IsShown() end)
+	H.pause(3000)
+	C.check("pda-3d", "raised", up, string.format("active slot %s, pda menu shown %s", tostring(db.actor:active_slot()), tostring(ActorMenu.get_pda_menu():IsShown())))
+	C.run("pda-3d", "screenshot-map", function() return C.shot("chk_pda3d_map"), "screenshot chk_pda3d_map" end)
+	for _, tab in ipairs({ "eptTasks", "eptContacts", "eptRanking" }) do
+		C.run("pda-3d", "tab/" .. tab, function()
+			ActorMenu.get_pda_menu():SetActiveSubdialog(tab)
+			H.pause(2500)
+			C.shot("chk_pda3d_" .. tab)
+			return ActorMenu.get_pda_menu():GetActiveSection() == tab, "active section " .. tostring(ActorMenu.get_pda_menu():GetActiveSection())
+		end)
+	end
+	H.press(key_bindings.kACTIVE_JOBS, 120)
+	H.pause(4000)
+	C.check("pda-3d", "lowered", db.actor:active_slot() ~= 14 and not ActorMenu.get_pda_menu():IsShown(), string.format("active slot %s", tostring(db.actor:active_slot())))
+	return C.done("chk_pda3d")
+end
+
+-- script API robustness ---------------------------------------------------------------------------------------------------------------------------
+-- Calls the engine's exports with input a script can plausibly pass (a slot number out of range, nil for an object, a section that is not an
+-- upgrade). They read past an array, dereferenced null or crashed in the upgrade manager (SYSTEMS-CHECK.md); each must now just fail.
+local function script_api_plan()
+	start_quiet()
+	give("wpn_ak74", 1)
+	H.pause(2500)
+	local ak = db.actor:object("wpn_ak74")
+	C.run("script-api", "item_in_slot-out-of-range", function()
+		local a, b, c = db.actor:item_in_slot(16), db.actor:item_in_slot(200), db.actor:item_in_slot(65535)
+		return a == nil and b == nil and c == nil, "item_in_slot(16), (200), (65535) return nil"
+	end)
+	C.run("script-api", "move_to_slot-nil", function()
+		db.actor:move_to_slot(nil, 2)
+		H.pause(500)
+		return db.actor:alive(), "move_to_slot(nil, 2) returned"
+	end)
+	C.run("script-api", "install_upgrade-not-an-upgrade", function()
+		local r1 = ak:install_upgrade("up_gr_firstab_ak74") -- a group, not an upgrade
+		local r2 = ak:install_upgrade("wpn_ak74")           -- a section that is no upgrade at all
+		local r3 = ak:install_upgrade("no_such_section")
+		return r1 == false and r2 == false and r3 == false and not ak:has_upgrade("up_gr_firstab_ak74"), string.format("results %s %s %s", tostring(r1), tostring(r2), tostring(r3))
+	end)
+	return C.done("chk_script_api")
+end
+
+-- chk_jumps: where jump_to_level lands from each level (a probe for the level chain, not part of the core list)
+local JUMPS = { "l05_bar", "l06_rostok", "l07_military", "l08_yantar", "l03_agroprom", "l01_escape" }
+local function jumps_phase(idx)
+	return function()
+		start_quiet()
+		H.god(true)
+		local here = level.name()
+		local gv = db.actor:game_vertex_id()
+		local want = JUMPS[idx]
+		if idx > 1 then
+			C.check("jumps", string.format("step%d/%s", idx - 1, JUMPS[idx - 1]), here == JUMPS[idx - 1], string.format("jumped to %s, level now %s", JUMPS[idx - 1], here))
+		end
+		if not want then return C.done("chk_jumps") end
+		local gvl = game_graph():vertex(gv):level_id()
+		H.say("jumps: step %d from %s (game vertex %d, level id %d) to %s", idx, here, gv, gvl, want)
+		get_console():execute("jump_to_level " .. want)
+		return { next = true }
+	end
+end
+
+function plans(c, h)
+	C, H = c, h
+	local out = {}
+	out.chk_pda3d = { pda3d_plan }
+	out.chk_script_api = { script_api_plan }
+	out.chk_jumps = {}
+	for i = 1, #JUMPS + 1 do out.chk_jumps[i] = jumps_phase(i) end
+	return out
+end

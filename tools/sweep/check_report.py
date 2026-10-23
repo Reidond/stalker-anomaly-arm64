@@ -167,7 +167,8 @@ def main():
     for r, p, f, bad in plan_rows:
         foot = "-"
         if r["footprint"]:
-            foot = f"{max(v for _, v in r['footprint'])}" + (f", {r['slope']:+.1f}" if r["slope"] is not None else "")
+            # a slope means something only for a steady state (the soak); level loads and a first minute dominate the others
+            foot = f"{max(v for _, v in r['footprint'])}" + (f", {r['slope']:+.1f}" if r["slope"] is not None and r["plan"] == "chk_soak" else "")
         lines.append(f"| {r['plan']} | {p} pass / {f} fail | {r['asan']} | {r['ubsan']} | {r['crash']} | {len(r['lua_errors'])} | {r['seconds'] if r['seconds'] is not None else '-'} s | {foot} | {'**' + ', '.join(bad) + '**' if bad else 'ok'} |")
     lines.append("")
 

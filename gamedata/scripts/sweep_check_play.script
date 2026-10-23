@@ -20,19 +20,19 @@ local NEW = {
 -- faction, the money and the loadout and send the player to the start location (a level change out of fake_start).
 local ini_map = nil
 
-local function new_game_plan(faction, map, level, money, loadout)
+local function new_game_plan(faction, map, lvl, money, loadout)
 	local name = "chk_new_" .. faction
 	local function arrived()
 		ini_map = ini_map or ini_file("plugins\\new_game_start_locations.ltx")
-		if not H.wait_for("the " .. level, 420000, function() return H.level_is(level) and H.actor_ready() end) then
-			C.check("start", name .. "/arrive", false, "never reached " .. level .. ", level now " .. tostring(level.present() and level.name()))
+		if not H.wait_for("the " .. lvl, 420000, function() return H.level_is(lvl) and H.actor_ready() end) then
+			C.check("start", name .. "/arrive", false, "never reached " .. lvl .. ", level now " .. tostring(level.present() and level.name()))
 			return false
 		end
 		H.enable_ui()
 		H.pause(12000)
 		local x, y, z = ini_map:r_float_ex(map, "x"), ini_map:r_float_ex(map, "y"), ini_map:r_float_ex(map, "z")
 		local d = db.actor:position():distance_to(vector():set(x, y, z))
-		C.check("start", name .. "/arrive", true, string.format("%s at %s, %.0f m from the start point", level, map, d))
+		C.check("start", name .. "/arrive", true, string.format("%s at %s, %.0f m from the start point", lvl, map, d))
 		C.run("start", name .. "/position", function() return d < 120, string.format("%.0f m from %s", d, map) end)
 		C.run("start", name .. "/faction", function()
 			local comm = character_community(db.actor)
@@ -51,7 +51,7 @@ local function new_game_plan(faction, map, level, money, loadout)
 		end)
 		C.run("start", name .. "/hud", function()
 			-- the HUD indicators the survival scripts drive and the actor's weapon slot are up
-			return get_hud() ~= nil and level.present(), "level " .. level
+			return get_hud() ~= nil and level.present(), "level " .. lvl
 		end)
 		C.run("start", name .. "/time", function() return C.gtime() ~= nil, C.gtime() end)
 		C.shot(name)
@@ -214,7 +214,7 @@ local function inventory()
 	give("wpn_ak74", 1)
 	give("wpn_pm", 1)
 	give("medkit", 3)
-	give("stalker_outfit", 1)
+	give("army_outfit", 1) -- an outfit with a belt slot
 	give("vodka", 2)
 	H.pause(1500)
 
@@ -235,7 +235,7 @@ local function inventory()
 	H.pause(1000)
 	C.check("inventory", "slot-rifle", db.actor:item_in_slot(3) ~= nil and db.actor:item_in_slot(3):id() == ak:id(), "wpn_ak74 in the rifle slot")
 	C.check("inventory", "slot-pistol", db.actor:item_in_slot(2) ~= nil and db.actor:item_in_slot(2):id() == pm:id(), "wpn_pm in the pistol slot")
-	local outfit = obj_of("stalker_outfit")
+	local outfit = obj_of("army_outfit")
 	db.actor:move_to_slot(outfit, 7)
 	H.pause(1000)
 	C.check("inventory", "outfit", db.actor:item_in_slot(7) ~= nil and db.actor:item_in_slot(7):id() == outfit:id(), "outfit worn")
@@ -341,6 +341,16 @@ local function weapons()
 	local mag2 = ak:get_ammo_in_magazine()
 	C.check("weapons", "fire", mag2 < mag1 - 3, string.format("magazine %d -> %d in a 1.5 s burst", mag1, mag2))
 	C.check("weapons", "weapon-degradation", ak:condition() < cond0, string.format("condition %.5f -> %.5f", cond0, ak:condition()))
+
+	-- a partial magazine is topped up from the boxes: the rounds missing leave the spare ones
+	local total_before = ak:get_ammo_total()
+	H.press(key_bindings.kWPN_RELOAD, 100)
+	H.pause(6000)
+	local mag_after = ak:get_ammo_in_magazine()
+	-- get_ammo_total() counts the rounds of the magazine too, so what the boxes lost is the change of (total - magazine)
+	local boxes_before, boxes_after = total_before - mag2, ak:get_ammo_total() - mag_after
+	C.check("weapons", "reload-partial", mag_after == size and boxes_before - boxes_after == size - mag2, string.format("magazine %d -> %d, rounds in the boxes %d -> %d", mag2, mag_after, boxes_before, boxes_after))
+	mag1 = mag_after
 
 	-- run dry: the weapon stops, a reload fills it again
 	H.fire_burst(nil, 5000)

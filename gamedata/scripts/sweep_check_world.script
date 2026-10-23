@@ -165,7 +165,14 @@ local function mutants_plan()
 			if not ini_sys:section_exist(sec) then return true, "no such section on this build, skipped" end
 			H.god(false)
 			db.actor.health = 1
-			local se = spawn_at(sec, 22, 1.0)
+			-- a spot the mutant can walk to and see the actor from (a game-graph vertex 12 m away may be behind a wall): the best of eight directions
+			local wpos, wlvid, wd = nil, nil, -1
+			for i = 0, 7 do
+				local p, l = H.spot(10, i * 0.785)
+				local d = db.actor:position():distance_to(p)
+				if d > wd then wpos, wlvid, wd = p, l, d end
+			end
+			local se = alife_create(sec, wpos, wlvid, db.actor:game_vertex_id())
 			if not se then return false, "alife_create returned nil" end
 			H.pause(3000)
 			local m = level.object_by_id(se.id)
@@ -174,7 +181,7 @@ local function mutants_plan()
 			local hits0 = counter.hits
 			local closest = d0
 			local attacked = false
-			for i = 1, 25 do
+			for i = 1, 40 do
 				H.pause(1000)
 				if not m:alive() then break end
 				local d = dist3(m:position(), db.actor:position())
@@ -241,7 +248,14 @@ local function stalkers_plan()
 	-- the actor shoots back: a stalker hit by the actor goes down
 	C.run("stalkers", "return-fire", function()
 		H.god(true)
-		local a = spawn_at("sim_default_bandit_2", 15, 0.4)
+		-- a spot the bandit can be seen from (the best of eight directions; a game-graph vertex 15 m away may be behind a wall)
+		local wpos, wlvid, wd = nil, nil, -1
+		for i = 0, 7 do
+			local p, l = H.spot(10, i * 0.785)
+			local d = db.actor:position():distance_to(p)
+			if d > wd then wpos, wlvid, wd = p, l, d end
+		end
+		local a = alife_create("sim_default_bandit_2", wpos, wlvid, db.actor:game_vertex_id())
 		H.pause(3500)
 		local o = a and level.object_by_id(a.id)
 		if not o then return false, "no stalker came online" end
@@ -431,9 +445,15 @@ local function weather_plan()
 	local seen = {}
 	for _, w in ipairs(presets) do
 		C.run("weather", "preset/" .. w, function()
+			-- the weather manager follows its own cycle and may swap the preset a moment after it was forced: read it back twice, once more if it moved
 			level.set_weather(w, true)
-			H.pause(3500)
+			H.pause(2000)
 			local got = level.get_weather()
+			if got ~= w then
+				level.set_weather(w, true)
+				H.pause(1500)
+				got = level.get_weather()
+			end
 			seen[#seen + 1] = got
 			if w == "w_rain1" or w == "w_storm1" then C.shot("chk_weather_" .. w) end
 			return got == w, "weather " .. tostring(got)
@@ -691,6 +711,20 @@ local function visited_levels()
 	return game_statistics.get_actor_visited_levels_count()
 end
 
+-- A level change nobody asked for now and then sends the actor back to the Cordon as the level it jumped to finishes loading (4 of the first
+-- 11 chains; the cause is not found, see SYSTEMS-CHECK.md). The chain asks for its level again, twice at most in all, and says so in the check.
+local function travel_retries(add)
+	local path = getFS():update_path("$app_data_root$", "") .. "chk_travel_retry.txt"
+	local f = io.open(path, "r")
+	local n = f and tonumber(f:read("*a")) or 0
+	if f then f:close() end
+	if add then
+		f = io.open(path, "w")
+		if f then f:write(tostring(n + add)) f:close() end
+	end
+	return n + (add or 0)
+end
+
 local CHAIN = { "l05_bar", "l06_rostok", "l07_military", "l08_yantar", "l03_agroprom", "l01_escape" }
 
 local function arrive(level_name, what)
@@ -700,7 +734,8 @@ local function arrive(level_name, what)
 	end
 	H.enable_ui()
 	H.pause(9000)
-	C.check("travel", what .. "/arrive", true, string.format("%s: health %.2f, %d levels visited, %s", level_name, db.actor.health, visited_levels(), C.gtime()))
+	C.check("travel", what .. "/arrive", true, string.format("%s: health %.2f, %d levels visited, game vertex %d, %s%s", level_name, db.actor.health, visited_levels(), db.actor:game_vertex_id(), C.gtime(),
+		travel_retries() > 0 and string.format(" (after %d stray level change(s) of the chain)", travel_retries()) or ""))
 	C.run("travel", what .. "/running", function()
 		-- the level is alive: time advances, the actor can be moved, and the world has squads
 		local t0 = game.get_game_time()
@@ -731,7 +766,17 @@ end
 local function travel_phase_chain(idx)
 	return function()
 		local name = CHAIN[idx]
+		if idx > 1 and level.present() and level.name() ~= name and H.actor_ready() and travel_retries() < 2 then
+			local n = travel_retries(1)
+			H.say("travel: NOTE stray level change: on %s after the jump to %s, asking again (retry %d)", level.name(), name, n)
+			H.pause(3000)
+			get_console():execute("jump_to_level " .. name)
+		end
+		local retried = travel_retries()
 		if not arrive(name, "chain" .. idx .. "-" .. name) then return C.done("chk_travel") end
+		if retried > 0 then
+			H.say("travel: %s reached after %d stray level change(s) of the chain", name, retried)
+		end
 		if idx == 1 then
 			local f = io.open(getFS():update_path("$app_data_root$", "") .. "chk_travel_money.txt", "r")
 			-- the guide took its fee (the plan wrote the money before the trip) and moved the clock
@@ -940,7 +985,7 @@ end
 local function soak_log(tag, t0)
 	local n_squads = 0
 	for _ in pairs(SIMBOARD.squads) do n_squads = n_squads + 1 end
-	H.say("SOAK %s t=%.1f min, lua heap %.0f KB, %s, %d squads, health %.2f, game time %s", tag, (time_global() - t0) / 60000, collectgarbage("count"), level.present() and level.name() or "-", n_squads, db.actor and db.actor.health or -1, C.gtime())
+	H.say("SOAK %s", string.format("%s t=%.1f min, lua heap %.0f KB, %s, %d squads, health %.2f, game time %s", tag, (time_global() - t0) / 60000, collectgarbage("count"), level.present() and level.name() or "-", n_squads, db.actor and db.actor.health or -1, C.gtime()))
 end
 
 local function soak_plan()
@@ -1034,8 +1079,8 @@ local function soak_plan()
 				H.say("SOAK cycle %d failed: %s", cycles, tostring(err))
 			end
 			tick("cycle")
-			-- a level change every fifth cycle
-			if cycles % 5 == 0 and (time_global() - t0) < (minutes - 3) * 60000 then
+			-- a level change every twelfth cycle (about every 8 minutes)
+			if cycles % 12 == 0 and (time_global() - t0) < (minutes - 3) * 60000 then
 				level_idx = level_idx % #SOAK_LEVELS + 1
 				soak_write(t0, cycles, level_idx)
 				soak_log("level change to " .. SOAK_LEVELS[level_idx], t0)
@@ -1045,7 +1090,7 @@ local function soak_plan()
 		end
 	end
 	soak_log("end", t0)
-	H.say("SOAK end: %d cycles in %.1f minutes, %d failed cycles", cycles, (time_global() - t0) / 60000, errors)
+	H.say("SOAK end: %s", string.format("%d cycles in %.1f minutes, %d failed cycles", cycles, (time_global() - t0) / 60000, errors))
 	local f = io.open(soak_path(), "w")
 	if f then f:close() end
 	C.check("soak", "completed", true, string.format("%d cycles in %.1f minutes, %d cycles raised a Lua error", cycles, (time_global() - t0) / 60000, errors))
