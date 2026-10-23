@@ -263,8 +263,10 @@ Alt+F4 still defers `KERNEL:disconnect` and `KERNEL:quit`.
   `IR_GetMousePosReal`, `IR_GetMousePosIndependent` and the ImGui code work unchanged. `iSetMousePos(p)` replaces `SetCursorPos`.
 - **UI cursor:** `CUICursor` with `m_b_use_win_cursor == false` adds the deltas to a position in 1024x768 UI units. While
   `SetUiContext(true)`, `CInput` scales the deltas to UI units (1024 / window width), so the cursor follows the pointer one to one.
-- **Touch** (iPad; SDL turns touches and the Pencil into mouse events): in a dialog (`SetUiContext(true)`) a touch moves the cursor to the finger
-  and a tap is a left click; in the world touches are ignored, so a tap neither turns the view nor fires.
+- **Touch** (iPad; SDL turns touches and the Pencil into mouse events): in a dialog (`SetUiContext(true)`) a touch puts the UI cursor on the finger (a
+  jump through `pad_hooks.cursor_jump`: with no mouse the UI cursor and the last pointer position are two different places, so deltas left the cursor
+  away from the finger) and a tap is a left click; in the world touches are ignored, so a tap neither turns the view nor fires. A touch, a key or a
+  click also ends the pause for a missing controller (`pad_hooks.other_input`).
 
 ### Text input and the on-screen keyboard
 
@@ -287,8 +289,10 @@ Created with `CInput`: `pInput->Pad()` is the `gameinput::GameInput` (bindings, 
   and the vertical `3/4 * psMouseSensVerticalK` and the invert flag are undone, so the layer's degrees per second and invert option hold at any mouse sensitivity.
 - In a dialog (`SetUiContext(true)` also sets the layer's `Menu` context) the stick and touchpad move the cursor as `IR_OnMouseMove` in UI units, buttons are
   `MOUSE_1/2/3` and modifiers, and the right stick is the wheel (`notches * 120`).
-- `pad_hooks` carries what is not a key: `cursor_jump(ui_x, ui_y)` (D-pad widget jump), `ui_action(0|1)` (previous/next page), `connection(bool)` (pause with a
-  "reconnect the controller" message).
+- `pad_hooks` carries what is not a key: `cursor_jump(ui_x, ui_y)` (R3, D-pad widget jump, touch: puts the cursor there and sends the widgets a mouse move,
+  so hover and the main menu's button selection follow), `ui_action(0|1)` (L2 / R2: the previous / next tab of the first visible `CUITabControl` in the top
+  dialog, which is the PDA's), `connection(bool)` (the last controller gone pauses the game with "Game paused" and "Reconnect the controller to continue";
+  another one coming back, or a key, a click or a tap, ends it), `other_input()` (that key, click or tap).
 - `CInput::feedback(s1, s2, t)`, which `CHUDManager::HitMarked` already calls, starts a rumble hit scaled by `max(s1, s2)`.
 
 ## Hooks still needed in the engine and the game
@@ -302,14 +306,17 @@ The xrgame-rest session did the small ones, behind `XR_PLATFORM_APPLE` (helpers 
 |---|---|---|
 | 1 | key names | **done**: `initialize_bindings()` appends `EnginePadKeyTable(PlayStation)` to `keyboards[]` (spare slots after the terminator), labels from the table |
 | 2 | pad binding slot, `bind_pad`, Controls screen | **done except the Controls screen column**: `_binding::m_keyboard[3]`, `bind_pad`/`unbind_pad`, `default_controls` runs the default DualSense layout, every bind is mirrored into the layer's `BindingMap`, `bind_list` shows the gamepad key. Verified on the iPad with the script pad (`padon`, `padaxis ly -1` walks, `pad create` opens the inventory). **Open:** the Controls screen's Gamepad column |
-| 3 | UI context | **done**: `CUICursor::Show/Hide` call `SetUiContext`, `Feedback::SetMenu` and `Pad()->SetCursorPosition` (`xr_pad_ui_context`); `CGamePersistent` installs `pad_hooks.cursor_jump` (`SetUICursorPosition`) and `pad_hooks.connection` (pauses the game in a level while no pad is connected, resumes when one is back; no "reconnect the controller" message yet). **Open:** `pad_hooks.ui_action` (tabs), `INavigationProvider` |
+| 3 | UI context | **done**: `CUICursor::Show/Hide` call `SetUiContext`, `Feedback::SetMenu` and `Pad()->SetCursorPosition` (`xr_pad_ui_context`); `CGamePersistent` installs `pad_hooks.cursor_jump` (`SetUICursorPosition`) and `pad_hooks.connection` (pauses the game in a level while no pad is connected, resumes when one is back; the pause shows "Reconnect the controller to continue"). `pad_hooks.ui_action` (L2 / R2 step the tabs of the PDA; the options pages are two list boxes, not a tab strip, so L2 / R2 do nothing there: click them). **Open:** `INavigationProvider` |
 | 4 | look scale | **done**: `CActor::IR_OnMouseMove` passes its `scale` to `SetLookRadiansPerCount`. It runs on input, so the first stick motion after a zoom change uses the previous figure |
 | 5 | text fields and the on-screen keyboard | open (`CUICustomEdit` focus, `IR_OnTextInput` through `CDialogHolder`/`CLevel`/`CMainMenu`, `CConsole`) |
 | 6 | Win32 pointer calls | the shim's `SetCursorPos`/`ClientToScreen` keep `UICursor.cpp`/`Level_input.cpp` compiling; `m_b_use_win_cursor` is forced false on Apple (`CUICursor::InitInternal`) |
 | 7 | the window | engine-core's, nothing in xrGame |
 | 8 | feedback | **done:** `CActor::UpdateCL` -> `xr_pad_update_actor` (health, bleeding, radiation, aiming, weapon class by `ClassifyWeapon(section)`, automatic = fire mode other than 0/1, empty/jammed/reloading); `CActor::Hit` -> `OnHit` with the mapping in item 8 below and `power` clamped to 0..1; `CWeaponMagazined::OnShot`/`OnEmptyClick` -> `OnShot`/`OnDryFire`. **Open:** `SetBlowout` (script side), shots of weapons that are not `CWeaponMagazined` (missiles, knives). Only the controlled actor (`Level().CurrentControlEntity()`) feeds the layer |
 
-None of the feedback calls were exercised against the real engine yet (no running game); they compile for both platforms.
+The feedback calls were exercised against the real engine in M5 with the virtual pad (`pad_feedback_log 1`, below): shots, dry fire, a hit, low health and the menu
+reach the rumble, light bar and trigger calls with the parameters of the tables above (rumble `low 0.04 to 0.16, high 0.07 to 0.27` per rifle shot, `R2 weapon start
+0.40 end 0.62 strength 0.55` at rest, `vibration start 0.40 amplitude 0.55 frequency 0.55` while it fires, `L2 feedback start 0.25 strength 0.40` while aiming, both
+`off` on an empty magazine, light bar blue in a menu and a green pulse that follows health). How they feel is for a person.
 
 **1. Key names.** Append `EnginePadKeyTable(...)` to `keyboards[]` before its `{NULL, 0}` terminator
 (`xrGame/xr_level_controller.cpp`). `remap_keys()` fills `key_local_name` from `CInput::get_dik_name`; pad keys have no DIK name, so set it from the
@@ -373,6 +380,27 @@ itself, so `ShowCursor`/`ClipCursor` calls can stay.
 | `SetWeapon(class, automatic)`, `SetWeaponStatus` | Active item change; `IsMisfire()`, magazine count, reload state |
 | `SetAiming` | `CActor::IsZoomAimingMode()` |
 | `SetBlowout` | The emission is script driven (`surge_manager`); expose an engine export the script calls while the blowout runs |
+
+## Test aids
+
+For runs nobody holds a pad in (`--script`, INTEGRATION.md) and for logs of what the layer does:
+
+| Where | What |
+|---|---|
+| console `pad_feedback_log [0\|1]` | logs every change of what the pad reports (`GameInput: input pad buttons ... left ... right ... l2 r2`), every key the layer sends (`key down 1214 (gp_create) -> receiver <type>`; the receiver is `CLevel` in the game, `CUISequencer` while a start-of-game sequence takes the keys, `CMainMenu` in the menu), every rumble, light bar and trigger change with its parameters, and in the game which action a pad key reached (`pad key 1214 -> action inventory`) |
+| console `pad_info` | the connected controllers, their model and capabilities |
+| console `pad_cursor <x> <y>` | puts the UI cursor at a point of the 1024x768 UI space, with hover |
+| script `padon [1\|2]`, `padoff [n]`, `padsel <n>` | attach, detach (a pad powering off) and pick a virtual pad: 1 is a DualSense with a touchpad, 2 an Xbox Series pad; both log what the game sends them (`script pad n: rumble ...`, `trigger rumble`, `led`) |
+| script `pad <button> [ms]`, `paddown`, `padup`, `padaxis <axis> <v>`, `padtouch <x> <y>`, `padtouchup` | the virtual pad's buttons, sticks, triggers and touchpad finger |
+| script `touch <x> <y>` | a finger tap as SDL reports it on iPadOS (the touch pseudo-mouse) |
+| script `lifecycle background\|foreground\|lowmemory`, `audiointerrupt began\|ended` | the app events and the audio-session interruption iPadOS would send, pushed into the shell and the sound code (the OS does not suspend the app) |
+
+SDL drops joystick events while no window has the keyboard focus, which is always the case in an unattended Mac run: the script pad followed the script for a few
+frames and then stayed at whatever it showed last (the symptom was a cursor that ran to the screen edge and then ignored the stick, the D-pad and R3). The unattended
+mode sets `SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS`. The iPad run is in the foreground and is not affected.
+
+`tools/ios/scripts/pad_bindings.txt` (every default binding, with state lines) and `pad_ui.txt` (every UI screen, with screenshots) are the two runs; their results are
+in the checklist table of [IPAD.md](IPAD.md#m5-system-checks).
 
 ## Verification
 

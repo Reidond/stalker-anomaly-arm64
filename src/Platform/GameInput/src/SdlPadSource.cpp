@@ -256,6 +256,19 @@ PadSnapshot SdlPadSource::Poll()
         if (HasInput(*pad))
             last_input_ns_ = SDL_GetTicksNS();
     }
+    if (log_feedback_)
+    {
+        // what the pad reports, on change (sticks to 1/100): the first thing to look at when an input seems lost
+        const auto q = [](float v) { return int(std::lround(v * 100.0f)); };
+        const int digest[8] = {int(snapshot.buttons), q(snapshot.left.x), q(snapshot.left.y), q(snapshot.right.x), q(snapshot.right.y),
+            q(snapshot.l2), q(snapshot.r2), snapshot.connected ? 1 : 0};
+        if (std::memcmp(digest, last_logged_input_, sizeof(digest)) != 0)
+        {
+            std::memcpy(last_logged_input_, digest, sizeof(digest));
+            SDL_Log("GameInput: input %s buttons %06x left %.2f %.2f right %.2f %.2f l2 %.2f r2 %.2f", snapshot.connected ? "pad" : "no pad",
+                unsigned(snapshot.buttons), snapshot.left.x, snapshot.left.y, snapshot.right.x, snapshot.right.y, snapshot.l2, snapshot.r2);
+        }
+    }
     return snapshot;
 }
 
@@ -297,18 +310,31 @@ void SdlPadSource::SetRumble(const MotorState& m)
     const DeviceIdentity* dev = input_.devices().Active();
     // Duration is a safety net: the driver refreshes it while an effect plays.
     constexpr Uint32 kDurationMs = 250;
-    if (!SDL_RumbleGamepad(pad->handle, Motor(m.low), Motor(m.high), kDurationMs))
-        return;
-    if (dev && dev->caps.trigger_rumble)
-        SDL_RumbleGamepadTriggers(pad->handle, Motor(m.left_trigger), Motor(m.right_trigger), kDurationMs);
+    const bool ok = SDL_RumbleGamepad(pad->handle, Motor(m.low), Motor(m.high), kDurationMs);
+    bool triggers_ok = false;
+    if (ok && dev && dev->caps.trigger_rumble)
+        triggers_ok = SDL_RumbleGamepadTriggers(pad->handle, Motor(m.left_trigger), Motor(m.right_trigger), kDurationMs);
+    if (log_feedback_ && !(m == last_logged_motors_))
+    {
+        last_logged_motors_ = m;
+        SDL_Log("GameInput: rumble low %.2f high %.2f triggers %.2f %.2f (%u ms; motors %s, triggers %s)", m.low, m.high,
+            m.left_trigger, m.right_trigger, unsigned(kDurationMs), ok ? "ok" : "refused",
+            dev && dev->caps.trigger_rumble ? (triggers_ok ? "ok" : "refused") : "none");
+    }
 }
 
 void SdlPadSource::SetLed(Rgb color)
 {
     Pad* pad = ActivePad();
     const DeviceIdentity* dev = input_.devices().Active();
-    if (pad && dev && dev->caps.rgb_led)
-        SDL_SetGamepadLED(pad->handle, color.r, color.g, color.b);
+    const bool has_led = pad && dev && dev->caps.rgb_led;
+    const bool ok = has_led && SDL_SetGamepadLED(pad->handle, color.r, color.g, color.b);
+    if (log_feedback_ && pad && color != last_logged_led_)
+    {
+        last_logged_led_ = color;
+        SDL_Log("GameInput: light bar %u %u %u (%s)", unsigned(color.r), unsigned(color.g), unsigned(color.b),
+            has_led ? (ok ? "ok" : "refused") : "none");
+    }
 }
 
 void SdlPadSource::SetTriggers(const TriggerPair& triggers)
@@ -317,7 +343,8 @@ void SdlPadSource::SetTriggers(const TriggerPair& triggers)
     if (!dev || !dev->IsDualSense())
         return;
     const bool ok = DualSenseTriggers::Apply(active_player_index_, triggers);
-    SDL_Log("GameInput: triggers L=%s R=%s applied=%d", TriggerEffectName(triggers.left), TriggerEffectName(triggers.right), ok);
+    SDL_Log("GameInput: triggers L2 %s | R2 %s (applied=%d)", DescribeTriggerEffect(triggers.left).c_str(),
+        DescribeTriggerEffect(triggers.right).c_str(), ok);
 }
 
 void SdlPadSource::Silence()

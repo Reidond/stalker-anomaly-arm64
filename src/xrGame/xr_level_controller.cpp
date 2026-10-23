@@ -9,7 +9,23 @@
 #include <GameInput/Adapter.h>
 #include <GameInput/Bindings.h>
 #include <GameInput/GameInput.h>
+#include "UICursor.h"
+#include "ui_base.h"
+#include "UIDialogHolder.h"
 #include <sstream>
+extern CDialogHolder* CurrentDialogHolder();
+
+// The cursor was put somewhere (R3, a D-pad jump to a widget): the widgets under it must see a mouse move, or no hover and no tooltip follow
+// and a click lands on whatever the last real motion left selected.
+static void pad_cursor_moved_to(const Fvector2& pos)
+{
+	GetUICursor().SetUICursorPosition(pos);
+	if (pInput)
+		if (gameinput::GameInput* pad = pInput->Pad())
+			pad->SetCursorPosition(gameinput::Vec2(pos.x, pos.y)); // the layer integrates from here next (touch moved the cursor too)
+	if (CDialogHolder* holder = CurrentDialogHolder())
+		holder->IR_UIOnMouseMove(0, 0);
+}
 #endif
 
 _binding g_key_bindings [bindings_count];
@@ -776,6 +792,67 @@ public:
 	}
 };
 
+#ifdef XR_PLATFORM_APPLE
+// pad_feedback_log [0|1]: log every rumble and light bar change with its parameters; pad_info: list the controllers.
+class CCC_PadFeedbackLog : public IConsole_Command
+{
+public:
+	CCC_PadFeedbackLog(LPCSTR N) : IConsole_Command(N)
+	{
+		bEmptyArgsHandled = TRUE;
+	};
+
+	virtual void Execute(LPCSTR args)
+	{
+		if (!pInput)
+			return;
+		int on = pInput->PadFeedbackLog() ? 0 : 1;
+		if (args && *args)
+			on = atoi(args) != 0;
+		pInput->SetPadFeedbackLog(on != 0);
+		Msg("* pad_feedback_log %d", on);
+	}
+
+	virtual void Status(TStatus& S) { xr_strcpy(S, (pInput && pInput->PadFeedbackLog()) ? "1" : "0"); }
+};
+
+// pad_cursor <x> <y>: puts the UI cursor at a point of the 1024x768 UI space (a test aid: scripted runs click, drag and scroll from there with
+// the pad's own buttons; the stick and the D-pad move it too)
+class CCC_PadCursor : public IConsole_Command
+{
+public:
+	CCC_PadCursor(LPCSTR N) : IConsole_Command(N)
+	{
+		bEmptyArgsHandled = FALSE;
+	};
+
+	virtual void Execute(LPCSTR args)
+	{
+		float x = 0, y = 0;
+		if (sscanf(args, "%f %f", &x, &y) != 2 || !pInput)
+			return;
+		Fvector2 pos;
+		pos.set(x, y);
+		pad_cursor_moved_to(pos);
+	}
+};
+
+class CCC_PadInfo : public IConsole_Command
+{
+public:
+	CCC_PadInfo(LPCSTR N) : IConsole_Command(N)
+	{
+		bEmptyArgsHandled = TRUE;
+	};
+
+	virtual void Execute(LPCSTR args)
+	{
+		if (pInput)
+			pInput->LogPadInfo();
+	}
+};
+#endif
+
 class CCC_BindConsoleCmd : public IConsole_Command
 {
 public:
@@ -869,6 +946,9 @@ void CCC_RegisterInput()
 #ifdef XR_PLATFORM_APPLE
 	CMD2(CCC_Bind, "bind_pad", 2);
 	CMD2(CCC_UnBind, "unbind_pad", 2);
+	CMD1(CCC_PadFeedbackLog, "pad_feedback_log");
+	CMD1(CCC_PadInfo, "pad_info");
+	CMD1(CCC_PadCursor, "pad_cursor");
 #endif
 	CMD1(CCC_UnBindAll, "unbindall");
 	CMD1(CCC_DefControls, "default_controls");
@@ -894,6 +974,57 @@ void CCC_RegisterInput()
 #include "Inventory.h"
 #include "inventory_item.h"
 #include "ui/UIInventoryUtilities.h"
+#include "ui/UITabControl.h"
+#include "ui/UITabButton.h"
+#include "ui/UIDialogWnd.h"
+
+// L2 / R2 in a dialog: the previous / next tab of the first visible tab strip in it (the PDA's map, tasks, contacts ..., the options pages).
+static CUITabControl* pad_find_tab_strip(CUIWindow* w, int depth = 0)
+{
+	if (!w || depth > 16 || !w->IsShown())
+		return nullptr;
+	if (CUITabControl* strip = smart_cast<CUITabControl*>(w))
+		if (strip->GetTabsCount() > 1)
+			return strip;
+	for (CUIWindow* child : w->GetChildWndList())
+		if (CUITabControl* strip = pad_find_tab_strip(child, depth + 1))
+			return strip;
+	return nullptr;
+}
+
+static void pad_step_tab(int command)
+{
+	CDialogHolder* holder = CurrentDialogHolder();
+	CUIDialogWnd* top = holder ? holder->TopInputReceiver() : nullptr;
+	CUITabControl* strip = pad_find_tab_strip(top);
+	if (pInput && pInput->PadFeedbackLog())
+		Msg("* pad tab step %d: dialog %p, tab strip %p (%d tabs, active '%s')", command, (void*)top, (void*)strip,
+			strip ? int(strip->GetTabsCount()) : 0, strip ? strip->GetActiveId().c_str() : "");
+	if (!strip)
+		return;
+	TABS_VECTOR& tabs = *strip->GetButtonsVector();
+	const int count = int(tabs.size());
+	int current = -1;
+	for (int i = 0; i < count; ++i)
+		if (tabs[i]->m_btn_id == strip->GetActiveId())
+			current = i;
+	const int step = command == 0 ? -1 : 1;
+	for (int n = 1; n <= count; ++n)
+	{
+		const int next = (((current < 0 ? (step > 0 ? -1 : 0) : current) + step * n) % count + count) % count;
+		if (!tabs[next]->IsShown() || !tabs[next]->IsEnabled())
+			continue;
+		strip->SetActiveTab(tabs[next]->m_btn_id);
+		return;
+	}
+}
+
+static bool g_paused_by_pad = false;
+
+bool xr_pad_paused_by_disconnect()
+{
+	return g_paused_by_pad;
+}
 
 void xr_pad_install_hooks()
 {
@@ -903,12 +1034,23 @@ void xr_pad_install_hooks()
 	{
 		Fvector2 pos;
 		pos.set(ui_x, ui_y);
-		GetUICursor().SetUICursorPosition(pos);
+		if (pInput && pInput->PadFeedbackLog()) Msg("* pad ui: cursor jump to (%.0f %.0f)", ui_x, ui_y);
+		pad_cursor_moved_to(pos);
+	};
+	pInput->pad_hooks.ui_action = [](int command) { pad_step_tab(command); };
+	// A key, a click or a tap while the game is held for a missing controller: the player has the keyboard (or the screen) and no pad, let go.
+	pInput->pad_hooks.other_input = []()
+	{
+		if (g_paused_by_pad)
+		{
+			g_paused_by_pad = false;
+			Msg("* no controller, playing on with the keyboard or touch");
+			Device.Pause(FALSE, TRUE, TRUE, "gamepad_disconnected");
+		}
 	};
 	// The last controller was unplugged (or powered off): hold the game until one is back.
 	pInput->pad_hooks.connection = [](bool connected)
 	{
-		static bool paused_by_pad = false;
 		if (!connected)
 		{
 			// Another controller may still be connected (the registry has already promoted it): only the last one counts.
@@ -919,15 +1061,15 @@ void xr_pad_install_hooks()
 			if (g_pGameLevel && !Device.Paused())
 			{
 				Device.Pause(TRUE, TRUE, TRUE, "gamepad_disconnected");
-				paused_by_pad = true;
+				g_paused_by_pad = true;
 			}
 		}
 		else
 		{
 			Msg("* game controller connected");
-			if (paused_by_pad)
+			if (g_paused_by_pad)
 			{
-				paused_by_pad = false;
+				g_paused_by_pad = false;
 				Device.Pause(FALSE, TRUE, TRUE, "gamepad_disconnected");
 			}
 		}
@@ -938,6 +1080,7 @@ void xr_pad_ui_context(bool ui, const Fvector2& cursor)
 {
 	if (!pInput)
 		return;
+	if (pInput->PadFeedbackLog()) Msg("* pad ui: %s, cursor at (%.0f %.0f)", ui ? "dialog up, menu context" : "dialog closed, gameplay context", cursor.x, cursor.y);
 	pInput->SetUiContext(ui);
 	if (gameinput::GameInput* pad = pInput->Pad())
 	{
