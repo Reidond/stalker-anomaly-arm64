@@ -370,6 +370,52 @@ int write_isolation()
     return g_failures;
 }
 
+// mods_delete / mods_clear: only entries directly inside the mods root, symbolic links not followed
+int removal()
+{
+    Tree t = make_tree("remove");
+    make_common(t);
+    write_modlist(t, {{"a", true}, {"b", true}});
+    // something outside the mods root that a link inside a mod points to
+    const fs::path outside = t.root / "outside";
+    write_file(outside / "keep.txt", "must survive");
+    fs::create_directories(t.mods / "a/content");
+    fs::create_symlink(outside, t.mods / "a/content/link_to_outside");
+    fs::create_symlink(outside, t.mods / "link_entry");
+    const std::string root = t.mods.string();
+
+    for (const char* bad : {"", ".", "..", "../outside", "a/content", "/etc", "a\\b", "outside/"})
+    {
+        const auto r = AppleShell::RemoveModFolder(root, bad);
+        check(r.removed.empty() && !r.refused.empty(), std::string("refused: \"") + bad + "\"");
+    }
+    check(fs::exists(outside / "keep.txt") && fs::exists(t.mods / "a"), "nothing was touched by the refused ids");
+    auto r = AppleShell::RemoveModFolder(root, "nowhere");
+    check(r.removed.empty() && r.refused.empty(), "an id that does not exist removes nothing and is no error");
+
+    r = AppleShell::RemoveModFolder(root, "a");
+    check(r.removed.size() == 1 && !fs::exists(t.mods / "a"), "mod a is removed");
+    check(read_file(outside / "keep.txt") == "must survive", "the link inside mod a was removed as a link: its target is untouched");
+    check(fs::exists(t.mods / "b") && fs::exists(t.mods / "modlist.json"), "the other entries are still there");
+
+    r = AppleShell::RemoveModFolder(root, "link_entry");
+    check(r.removed.size() == 1 && !fs::is_symlink(t.mods / "link_entry") && fs::exists(outside / "keep.txt"), "a link entry is removed as a link");
+
+    r = AppleShell::ClearModsRoot(root);
+    check(r.refused.empty() && fs::is_directory(t.mods) && fs::is_empty(t.mods), "mods_clear leaves an empty mods root: " + std::to_string(r.removed.size()) + " entries removed");
+    check(fs::exists(t.game / "db/stock.db0") && fs::exists(outside / "keep.txt"), "the game folder and the outside folder are untouched");
+
+    // a mods root that is too close to the top, or not a folder
+    r = AppleShell::ClearModsRoot("/");
+    check(r.removed.empty() && !r.refused.empty(), "the file system root is refused");
+    r = AppleShell::ClearModsRoot("/tmp"); // two components after resolving (/private/tmp): refused before anything is listed
+    check(r.removed.empty() && !r.refused.empty(), "a shallow root (/tmp) is refused");
+    r = AppleShell::ClearModsRoot((t.root / "not_there").string());
+    check(r.removed.empty() && !r.refused.empty(), "a mods root that is not a folder is refused");
+    fs::remove_all(t.root);
+    return g_failures;
+}
+
 int mods_off()
 {
     Tree t = make_tree("off");
@@ -506,6 +552,7 @@ int main(int argc, char** argv)
         {"case", mixed_case},
         {"write_isolation", write_isolation},
         {"mods_off", mods_off},
+        {"removal", removal},
         {"bad_lists", bad_lists},
         {"bad_list_fs", bad_list_fs},
     };

@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <filesystem>
 #include <set>
 
 namespace AppleShell
@@ -278,5 +279,105 @@ std::vector<std::string> DescribeMods(const ModResolution& r)
     for (const std::string& n : r.notes)
         lines.push_back("mods: " + n);
     return lines;
+}
+} // namespace AppleShell
+
+namespace fs = std::filesystem;
+
+namespace
+{
+// The canonical mods root, or an empty path with the reason in `why`.
+fs::path CheckedRoot(const std::string& mods_root, std::string& why)
+{
+    std::error_code ec;
+    if (mods_root.empty())
+    {
+        why = "no mods root";
+        return {};
+    }
+    const fs::path root = fs::weakly_canonical(fs::path(mods_root), ec);
+    if (ec || !fs::is_directory(root, ec))
+    {
+        why = "the mods root is not a folder";
+        return {};
+    }
+    size_t parts = 0;
+    for (const fs::path& part : root)
+        if (!part.empty() && part != "/")
+            ++parts;
+    if (parts < 3)
+    {
+        why = "the mods root is too close to the top of the file system";
+        return {};
+    }
+    return root;
+}
+
+// `entry` is directly inside `root`: its parent resolves to the root itself. The entry's own last component is not resolved, so a
+// symbolic link is judged (and removed) as a link.
+bool DirectlyInside(const fs::path& root, const fs::path& entry)
+{
+    std::error_code ec;
+    const fs::path parent = fs::weakly_canonical(entry.parent_path(), ec);
+    return !ec && parent == root && entry.filename() != "." && entry.filename() != ".." && !entry.filename().empty();
+}
+
+void RemoveEntry(const fs::path& root, const fs::path& entry, AppleShell::ModsRemoval& out)
+{
+    std::error_code ec;
+    if (!DirectlyInside(root, entry))
+    {
+        out.refused.push_back(entry.string() + ": not directly inside the mods root");
+        return;
+    }
+    if (!fs::exists(fs::symlink_status(entry, ec)))
+        return;
+    // remove_all does not follow symbolic links: a link inside a mod is removed as a link
+    fs::remove_all(entry, ec);
+    if (ec)
+        out.refused.push_back(entry.string() + ": " + ec.message());
+    else
+        out.removed.push_back(entry.string());
+}
+} // namespace
+
+namespace AppleShell
+{
+ModsRemoval RemoveModFolder(const std::string& mods_root, const std::string& id)
+{
+    ModsRemoval out;
+    std::string why;
+    const fs::path root = CheckedRoot(mods_root, why);
+    if (root.empty())
+    {
+        out.refused.push_back(id + ": " + why);
+        return out;
+    }
+    if (id.empty() || id == "." || id == ".." || id.find_first_of("/\\") != std::string::npos)
+    {
+        out.refused.push_back("\"" + id + "\": not a plain folder name");
+        return out;
+    }
+    RemoveEntry(root, root / id, out);
+    return out;
+}
+
+ModsRemoval ClearModsRoot(const std::string& mods_root)
+{
+    ModsRemoval out;
+    std::string why;
+    const fs::path root = CheckedRoot(mods_root, why);
+    if (root.empty())
+    {
+        out.refused.push_back(mods_root + ": " + why);
+        return out;
+    }
+    std::error_code ec;
+    std::vector<fs::path> entries;
+    for (fs::directory_iterator it(root, ec), end; !ec && it != end; it.increment(ec))
+        entries.push_back(it->path());
+    for (const fs::path& entry : entries)
+        RemoveEntry(root, entry, out);
+    return out;
 }
 } // namespace AppleShell

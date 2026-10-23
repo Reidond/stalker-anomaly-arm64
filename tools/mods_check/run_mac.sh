@@ -147,6 +147,10 @@ cat > "$out/run.script" <<'EOF'
 9.2 console run_string if modtest_b then modtest_b.read_data_slash() else log("MODTEST io.open slash nothing: mod b missing") end
 10 quit
 EOF
+# MODTEST_CLEAR=1: the timeline also deletes mod a and then empties the mods root (the `mods_delete` / `mods_clear` steps), just before the quit
+if [ -n "${MODTEST_CLEAR:-}" ]; then
+    printf '9.6 mods_delete a\n9.8 mods_clear\n' >> "$out/run.script"
+fi
 
 # ---- the run ------------------------------------------------------------------------------------------------------------
 extra=()
@@ -163,6 +167,8 @@ echo "--- engine log (mods and MODTEST)"
 grep -a -i "\* ShaderXlat: [0-9]\|\* mod \|MODTEST\|using fs-ltx\|lua cache\|lua_cache\|script cache" "$engine_log" 2>/dev/null
 echo "--- files the game wrote into the scratch game folder"
 (cd "$scratch" && find gamedata -type f 2>/dev/null | grep -v modtest_probe.script)
+echo "--- shell log: mods_delete / mods_clear"
+grep -a "script: removed\|script: mods_" "$shell_log" 2>/dev/null
 echo "--- files in the mods folder that are not the generated ones"
 (cd "$mods" && find . -type f | sort | grep -v -e 'modtest\(_[ab]\)\?\.\(ltx\|script\)' -e mod.json -e modlist.json -e modtest_data.txt -e default_custom_data.ltx -e common.h)
 echo "run files: $out"

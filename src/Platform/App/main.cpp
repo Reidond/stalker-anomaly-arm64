@@ -46,6 +46,8 @@
 //   <t> ballast <MB>                allocate and touch that much memory (to provoke the memory warnings), in 64 MB chunks
 //   <t> unballast                   free it again
 //   <t> log <text...>               a line in the shell log
+//   <t> mods_delete <id>            remove <mods root>/<id> (only a plain folder name directly inside the mods root; symlinks are not followed)
+//   <t> mods_clear                  remove every entry of the mods root; put it last, the mounted mods are still in use by the engine
 //   <t> quit                        leave the app
 
 #define SDL_MAIN_USE_CALLBACKS 1
@@ -612,6 +614,19 @@ bool RunScript(App& app)
         }
         else if (step.command == "log")
             AppleShell::Log("anomaly: script: %s", step.args.c_str());
+        else if (step.command == "mods_delete" || step.command == "mods_clear")
+        {
+            // test runs that leave the mods folder as they found it (the iPad has no way to delete a file from outside): only entries directly
+            // inside the mods root are touched, see AppleShell::RemoveModFolder
+            const std::string& root = AppleShell::GetPaths().mods_root;
+            const AppleShell::ModsRemoval result =
+                step.command == "mods_clear" ? AppleShell::ClearModsRoot(root) : AppleShell::RemoveModFolder(root, step.args);
+            for (const std::string& path : result.removed)
+                AppleShell::Log("anomaly: script: removed %s", path.c_str());
+            for (const std::string& why : result.refused)
+                AppleShell::Log("anomaly: script: %s refused: %s", step.command.c_str(), why.c_str());
+            AppleShell::Log("anomaly: script: %s: %zu removed, %zu refused", step.command.c_str(), result.removed.size(), result.refused.size());
+        }
         else if (step.command == "quit")
             return false;
         else
