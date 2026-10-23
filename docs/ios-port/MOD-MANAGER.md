@@ -49,47 +49,47 @@ DownloadsView.releaseSharedState()   // before the engine starts
 
 ### The browser
 
-`DownloadsView` is a bar (back, forward, reload/stop, address field, Go, bookmark star, downloads toggle), a bar of
-bookmarks, the web page (WKWebView), and the downloads list (a side panel on wide screens, over the page on narrow ones).
+`DownloadsView` is stock SwiftUI, like the launcher: show it inside a `NavigationStack` (the launcher's Add Mod screen pushes it) and it adds its
+controls to the host's navigation bar.
+
+| | iPadOS | Mac (the launcher's plain window has no navigation bar) |
+|---|---|---|
+| address field (a link, a bare host or words) | middle of the navigation bar | in a bar above the page |
+| reload / stop, Go (while typing), Bookmarks menu, Downloads | right of the navigation bar | the same bar |
+| page back and forward | bottom bar | the same bar |
+| the page | under the bars (UIKit insets it by the bar's height; it scrolls under the glass) | below the bar |
+| downloads | an inspector: beside the page on a wide screen, a sheet on a narrow one | an inspector |
+| start page (before any page is open) | inset-grouped bookmarks and "Download a Link" | a grouped form |
+| bookmark editor | a sheet with an inset-grouped list (Edit to reorder and delete) | a sheet |
+| notices | a toast, as the launcher's | the same |
 
 - **Address field**: accepts a link, a bare host (`github.com/x` gets https; `localhost` and LAN addresses get http) or
   words (a DuckDuckGo search). Only http and https open; `javascript:`, `file:`, `data:`, `itms-apps:` and the like are
-  refused, in the field and in links on pages.
-- **Bookmarks**: two built in (ModDB's Anomaly addons, a GitHub search for Anomaly addons), plus the user's own: the star adds
-  or removes the current page, "Edit" renames, reorders, removes and adds by link. Kept in UserDefaults.
-- **Downloads list**: progress, Cancel, Retry (resumes), Allow (for a download a page tried without a tap), an x to remove the row.
-  "Clear finished" removes finished rows only; it never deletes a file.
-- **Paste a link**: the field at the top of the list. It downloads straight to the downloads folder with `LinkDownloader`.
-  If the link is a web page (the usual case with ModDB), the row says so and the page opens in the browser.
+  refused, in the field and in links on pages. The Go button appears only while the field is being edited.
+- **Bookmarks**: two built in (ModDB's Anomaly addons, a GitHub search for Anomaly addons), plus the user's own, from the Bookmarks menu: bookmark or
+  unbookmark the current page, "Edit Bookmarks..." (rename, reorder, remove, add by link). Kept in UserDefaults. The start page lists them all.
+- **Downloads** (the inspector): "Download a Link" (a field, Paste, Download), then the list: system progress bars, Cancel, Retry (resumes),
+  Allow (for a download a page tried without a tap), swipe or the context menu to remove. "Clear Finished" removes finished rows only; it never deletes
+  a file. A download that starts shows a toast, and the toolbar's Downloads button pulses with a count while any runs.
+- **Paste a link**: downloads straight to the downloads folder with `LinkDownloader`. If the link is a web page (the usual case with ModDB), the row says
+  so and the page opens in the browser.
 - **Touch, pointer, keyboard, controller**:
-  - every control is a real `Button` of at least 44 x 44 points with a hover highlight and a focus ring, so touch, a mouse or trackpad
-    (iPad pointer effects) and keyboard or controller focus all work. The system's focus engine moves between them.
-  - web pages have no focus ring, so a gamepad drives the page itself: left stick or D-pad scrolls, the right stick moves a
-    cursor (drawn while in use), A taps what is under it, L1 / B go back, R1 goes forward, R3 recentres the cursor. The
-    code only reads the pad (no handlers are installed), so it cannot take input from anything else. A hardware keyboard scrolls the page as usual, and has Cmd+L (address), Cmd+[ and Cmd+] (back, forward) and Cmd+R (reload).
-- Both layouts (wide and narrow) are in the PR as offscreen renders.
+  - the controls are the system's, so touch, a mouse or trackpad and the system's keyboard and controller focus work as in any iPadOS app.
+  - web pages have no focus ring, so a gamepad drives the page itself: left stick or D-pad scrolls, the right stick moves a cursor (drawn while
+    in use), A taps what is under it, L1 / B go back, R1 goes forward, R3 recentres the cursor. The code only reads the pad (no handlers are installed),
+    so it cannot take input from anything else. A hardware keyboard scrolls the page as usual, and has Cmd+L (address), Cmd+[ and Cmd+] (back, forward)
+    and Cmd+R (reload). The launcher's hint bar for the Browse screen could list these.
 
 ### Look
 
-Dark, Anomaly-themed, with Liquid Glass chrome floating over the page.
+The launcher's: the system's controls, semantic colours, Dynamic Type, light or dark as the device is set, and on iPadOS / macOS 26 and later the
+system's Liquid Glass bars and buttons, with nothing drawn by hand. The accent is the amber of the game's menus (`Color(0.93, 0.58, 0.08)`, the
+launcher's `Theme.accent`); radiation yellow-green appears once, on a finished download.
 
-- **Glass** (iOS 26 / macOS 26, which the devices run): the nav cluster, the address field, the bookmark and downloads buttons, the bookmark chips,
-  the downloads panel and the notices are `glassEffect` surfaces inside a `GlassEffectContainer`, so neighbours blend and the Go button morphs out of the
-  address field when you start typing. The page is laid out under the bar (`WKWebView.obscuredContentInsets`) and shows through it. Below iOS 26 /
-  macOS 26 the same shapes use `.ultraThinMaterial` with a hairline edge, with the page below the bar. With **Reduce Transparency** on, or
-  `prefersGlass == false`, every surface is opaque (`surface` / `surfaceRaised`) with a hairline edge.
-- **Theme**: `DownloadsTheme` (colours, panel radius, `prefersGlass`) comes from the environment. The default is `.anomaly`: warm blacks, rust
-  `#B4532A` for the one thing to press (Go, Retry, Allow), amber `#F0A830` for focus, progress, the star and badges, and radiation yellow-green
-  `#B7D43A` only for a finished download. The launcher supplies its own with `.downloadsTheme(_:)` on `DownloadsView` or any ancestor.
-- **Motion**: quick springs with no bounce (0.3 s for a panel or notice, 0.18 s for press and small swaps), exits shorter than enters, a slide of 8 to 24
-  points and never the full height, icons swap with scale 0.25 -> 1, opacity and blur 4 -> 0, press feedback 0.96 on the controls that are not system
-  glass (the system's interactive glass reacts to touch itself). Download progress follows the bytes with a short spring and a faint highlight drifts across
-  the fill (2.4 s a pass, 30 fps, only while it runs); an unknown size is a soft segment sliding to and fro. **Reduce Motion**: no slide, scale, drift or sliding
-  segment, only short fades. Focus moves instantly (it repeats all day with a controller).
-- **Controller / keyboard focus**: a 3 pt amber ring with a soft glow and a slight growth on every control and on the address field; the cursor for the page
-  is an amber ring with a dark core.
-- **Previews**: `mod_downloads_snapshot` renders the view offscreen. ImageRenderer has no backdrop to refract, so the glass in those renders is a
-  stand-in with the same shapes; the real glass is in the iPad screenshot in the PR.
+`DownloadsTheme(accent:signal:)` carries those two colours, `.anomaly` is the default, and `.downloadsTheme(_:)` on the view (or any ancestor) replaces
+them. Motion is the system's (list changes `.snappy`, toasts ease out as in the launcher, symbol replacement, a pulsing Downloads symbol, which
+Reduce Motion tones down), and Reduce Transparency is the system's too. `mod_downloads_snapshot <dir>` renders the view on the Mac with the real
+controls hosted in a window that is never shown (the launcher's snapshot tool does the same); the window is not key, so the bars look dimmed there.
 
 ### What is downloaded, and when
 
