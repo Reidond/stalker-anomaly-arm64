@@ -8,7 +8,10 @@ enum Theme {
 
 enum Format {
     static func bytes(_ value: Int64) -> String {
-        ByteCountFormatter.string(fromByteCount: max(value, 0), countStyle: .binary)
+        let formatter = ByteCountFormatter()
+        formatter.countStyle = .binary
+        formatter.allowsNonnumericFormatting = false
+        return formatter.string(fromByteCount: max(value, 0))
     }
 
     static func count(_ value: Int, _ noun: String) -> String {

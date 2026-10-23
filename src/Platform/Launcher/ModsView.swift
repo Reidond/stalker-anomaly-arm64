@@ -91,6 +91,7 @@ struct ModRow: View {
             }
             Toggle(mod.name, isOn: model.binding(for: mod)).labelsHidden().toggleStyle(.switch)
         }
+        .padding(.vertical, 4)
         .opacity(mod.enabled ? 1 : 0.6)
         .padFocus("mod:\(mod.id)")
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {

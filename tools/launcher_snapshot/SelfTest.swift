@@ -107,6 +107,8 @@ enum SelfTest {
 
         // an import with a warning: Cancel has the focus, Circle cancels, nothing is added
         let risky = root.appendingPathComponent("risky-mod")
+        try FileManager.default.createDirectory(at: risky.appendingPathComponent("gamedata/configs"), withIntermediateDirectories: true)
+        try Data("x".utf8).write(to: risky.appendingPathComponent("gamedata/configs/risky.ltx"))
         try FileManager.default.createDirectory(at: risky.appendingPathComponent("bin"), withIntermediateDirectories: true)
         try Data("x".utf8).write(to: risky.appendingPathComponent("bin/helper.dll"))
         let before = ids(model)

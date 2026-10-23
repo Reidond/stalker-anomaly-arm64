@@ -472,7 +472,9 @@ sit on top (the import sheet, the remove confirmation) take the focus until they
 The focus ring and the hint bar at the bottom (pad glyphs or key caps, for what the buttons do on this screen) appear when a pad or the
 keyboard is used and go away at the next touch or click, so the touch and mouse UI stays the plain system one. The list scrolls to the
 focused row, going back returns to the row that was open, and the stick repeats like the D-pad (after 0.35 s, then every 0.09 s). The system
-file picker and the in-app browser are other views: touch there, not the pad. [The FOMOD wizard takes the pad through its own session; see below.]
+file picker and the in-app browser are other views: touch there, not the pad. The FOMOD wizard is driven through its `FomodSession`: the launcher owns the
+session while a FOMOD is being answered, and D-pad / stick move the wizard's cursor, Cross picks the option or presses the footer button, Circle goes back
+(Cancel on the first step), R1 or Options go on (Next, Install on the last step).
 
 ### Handover to the engine
 
@@ -483,7 +485,8 @@ maps SDL gamepad events (and, on the iPad, key events) onto the launcher's butto
 
 When Play is pressed the launcher only sets its result. `SDL_AppIterate` sees it, calls `anomaly_launcher_close` (the hosting view
 controller or view is removed and the model released: timers and tasks stopped), destroys the window, and calls `StartEngine`, which
-creates the engine's own window exactly as in a start without the launcher. This happens from the SDL callback, not inside a SwiftUI
+creates the engine's own window exactly as in a start without the launcher. Before that the shell's `WriteFsGameLtx()` runs once more: it
+re-reads `modlist.json` and writes the enabled mods into the generated `fsgame.ltx`, which is what the engine mounts (see Mounting). This happens from the SDL callback, not inside a SwiftUI
 action, so the engine's start never runs inside a UIKit or AppKit event handler. Gamepads the launcher opened are closed first (and the
 background-events hint it set is reset); the game's input layer enumerates the connected pads itself.
 
@@ -505,7 +508,7 @@ The C interface (`src/Platform/Launcher/AnomalyLauncher.h`, implemented with `@_
 | `--script`, `--exit-after`, `--unattended`, `--no-launcher`, `ANOMALY_NO_LAUNCHER=1` | skipped: straight to the engine, mods as `modlist.json` has them (`--mods-off` mounts none); the sweep, harness and iPad scripts are unchanged |
 | `--show-launcher` | shown, whatever else is given |
 | `--launcher-script <file>` | shown, also on an unattended run (its window is then hidden), driven by the script |
-| game data missing, not unattended | shown (Home explains it), also with `--no-launcher` |
+| game data missing | an ordinary start shows the launcher (Home explains it); a run that skipped it (`--script`, `--exit-after`, `--unattended`, `--no-launcher`) has nobody to read it and fails with a message, as before |
 
 `--launcher-script` takes the pad commands of the engine script (`padon`, `pad <button> [ms]`, `paddown`, `padup`, `padaxis`, `padoff`),
 plus `snapshot <name>` (a PNG of the launcher into the shell directory), `log` and `quit`; the time is seconds since the launcher came up.
@@ -535,7 +538,7 @@ n ms.
 | | |
 |---|---|
 | `src/Platform/Launcher/*.swift` | `LauncherModel` (state, and the rows the pad can reach), `Focus` (pad layer), `HomeView`, `ModsView`, `DetailsView`, `AddModView`, `ImportOverlay` (the sheets) + `ImportCoordinator` (the flow), `ScreenChrome`, `Components`, `Theme`, `LauncherEntry` (C entry, hosting) |
-| `src/Platform/Launcher/Stubs.swift` | stand-ins for `ModManagerCore` / `ModDownloads` while they are not on `main` (each block compiles out when `canImport` finds the real module); deleted when they land |
+| `src/Platform/Launcher/Stubs.swift` | stand-in for `ModDownloads` (`DownloadsView`, `LinkDownloader`) while it is not on `main`; compiles out when `canImport` finds the real module, deleted when it lands |
 | `src/Platform/App/main.cpp` | opening, input mapping, script and handover (`OpenLauncher`, `LauncherEvent`, `RunLauncherScript`, `SDL_AppIterate`) |
 | `cmake/targets/launcher.cmake`, `src/Platform/Launcher/CMakeLists.txt` | `enable_language(Swift)`, the `anomaly_launcher` static library |
 | `tools/launcher_snapshot` | renders every screen offscreen; `--selftest` drives the pad logic; `--fixtures` makes a mods root of invented mods |
