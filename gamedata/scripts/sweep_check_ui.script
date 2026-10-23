@@ -318,6 +318,26 @@ local function menu_plan()
 			return tonumber(a) == spec.values[1] and tonumber(b) == spec.values[2], string.format("%s: set %s read %s, set %s read %s, restored %s", spec.id, tostring(spec.values[1]), tostring(a), tostring(spec.values[2]), tostring(b), tostring(ui_options.get(spec.id)))
 		end)
 	end
+	-- the options file: written in the app's appdata, the game folder's copy (the default) is left alone (it is shared by every game on
+	-- the Mac and read-only on the iPad; a new-game request another game wrote there once sent this one back to the start)
+	C.run("menu", "options-file-in-appdata", function()
+		local game_file = getFS():update_path("$game_config$", "") .. "axr_options.ltx"
+		local function slurp(path)
+			local f = io.open(path, "rb")
+			if not f then return nil end
+			local t = f:read("*a")
+			f:close()
+			return t
+		end
+		local before = slurp(game_file)
+		axr_main.config:w_value("sweep_check", "options_file", "1")
+		axr_main.config:save()
+		axr_main.config:w_value("sweep_check", "options_file")
+		axr_main.config:save()
+		local user_file = getFS():update_path("$app_data_root$", "") .. "axr_options.ltx"
+		local written = slurp(user_file)
+		return axr_main.config.fname == user_file and written ~= nil and slurp(game_file) == before, string.format("saved to %s (%d bytes); the game folder's copy %s", tostring(axr_main.config.fname), written and #written or -1, slurp(game_file) == before and "untouched" or "CHANGED")
+	end)
 	C.run("menu", "console-variable", function()
 		local c = get_console()
 		local before = c:get_float("snd_volume_music")
