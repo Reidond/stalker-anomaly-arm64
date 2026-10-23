@@ -54,6 +54,18 @@ public:
 #endif
 	};
 
+#ifdef XR_PLATFORM_APPLE
+	// What mounting one mod found (mount_mod below)
+	struct mount_stats
+	{
+		u32 archives; // archives found in db/
+		u32 files; // files registered from gamedata/
+		u32 folders;
+		u32 skipped; // top-level entries of the mod that are neither db nor gamedata
+		double ms;
+	};
+#endif
+
 	DEFINE_VECTOR(archive, archives_vec, archives_it);
 	archives_vec m_archives;
 	void LoadArchive(archive& A, LPCSTR entrypoint = NULL);
@@ -85,6 +97,10 @@ private:
 	u64 m_auth_code;
 
 	void Register(LPCSTR name, u32 vfs, u32 crc, u32 ptr, u32 size_real, u32 size_compressed, u32 modif);
+#ifdef XR_PLATFORM_APPLE
+	xr_vector<shared_str> m_mounted; // native paths of the files of mounted folders; file::ptr indexes it (file::vfs == 0xfffffffe)
+	void mount_walk(const std::string& native_dir, const std::string& virtual_dir, mount_stats& st);
+#endif
 	void ProcessArchive(LPCSTR path);
 	void ProcessOne(LPCSTR path, const _finddata_t& entry);
 	bool Recurse(LPCSTR path);
@@ -199,6 +215,17 @@ public:
 
 	bool load_all_unloaded_archives();
 	void unload_archive(archive& A);
+
+#ifdef XR_PLATFORM_APPLE
+	// Mods (docs/ios-port/MOD-MANAGER.md). A mod is a folder laid out like the game folder: its db/ archives are mounted like
+	// the ones in db/addons, and its gamedata/ files are registered as if they lay in the game's gamedata/ folder, but they stay
+	// where they are: nothing is copied or packed, the registry entry carries the real path (`mounted_path`) and an open goes there.
+	// Registering later wins, so mounting mods in load order gives the later mod its files, and the game folder's own loose
+	// gamedata/ (scanned after the mods) wins over all of them.
+	mount_stats mount_mod(LPCSTR mod_id, LPCSTR native_content_dir);
+	// The real (native) path a mounted file is read from; nullptr for other entries.
+	LPCSTR mounted_path(const file& desc) const;
+#endif
 
 	void auth_generate(xr_vector<shared_str>& ignore, xr_vector<shared_str>& important);
 	u64 auth_get();

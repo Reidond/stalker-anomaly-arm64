@@ -76,6 +76,8 @@ com.andriishafar.anomaly AnomalyDataRoot <path>`, the default `~/Documents/Anoma
 | `--foreground` | with `--script` or `--exit-after`: a normal, visible, focused run |
 | `--graphics-profile <id\|none>` | force a device graphics profile (e.g. `ipad-8gb`, `mac-pro`), or `none`: no profile, no locks, the full PC options menu ([SETTINGS.md](SETTINGS.md)) |
 | `--unlocked-graphics` | keep the profile as the starting values but let everything be changed (console, scripts, the full options menu); for testing and measuring |
+| `--mods-off` | mount no mods, whatever `modlist.json` says ([MOD-MANAGER.md](MOD-MANAGER.md), "Mounting") |
+| `--no-launcher` | do not show the launcher and use `modlist.json` as it is (`--script` and `--exit-after` imply it) |
 | `--show-launcher` | show the launcher (data status, how to copy data) even when the data is valid; it is shown by itself when the data is missing or incomplete |
 | anything else | the engine's command line, as on Windows (`-nosound`, `-nojit`, `-start ...`, ...), after `commandline.txt` (`~/Library/Application Support/Anomaly/commandline.txt`) |
 
@@ -141,6 +143,7 @@ Without it the game boots to the menu and then fails in scripts (`Failed to load
 | generated `fsgame.ltx` | `~/Library/Application Support/Anomaly/fsgame.ltx` |
 | shader cache | `~/Library/Caches/Anomaly/shaders/{xlat,r4}`: 8 MB after a few sessions; deleting it costs about 2 s at the next start (and ShaderXlat translates again at each level) |
 | overlay archive | `~/Library/Caches/Anomaly/overlay/` |
+| mods, `modlist.json` | `~/Library/Application Support/Anomaly/Mods/` (iPad: `Documents/Mods`; `ANOMALY_MODS_ROOT` overrides, `<ANOMALY_STATE_ROOT>/Mods` in a state-root run) |
 
 ### Unattended runs: `--script`
 

@@ -25,6 +25,7 @@ after `SDL_Init`.
 | `Paths::shell_dir` (shell log, crash file) | `Documents` | `~/Library/Logs/Anomaly` |
 | `Paths::crash_log` / `crash_log_previous` | `Documents/anomaly-crash.log` / `.prev.log` | `~/Library/Logs/Anomaly/…` |
 | `Paths::fsgame_ltx` (generated) | `Library/Application Support/Anomaly/fsgame.ltx` | same |
+| `Paths::mods_root` (`modlist.json`, `<id>/content/...`) | `Documents/Mods` | `~/Library/Application Support/Anomaly/Mods`; `ANOMALY_MODS_ROOT` replaces it, `<ANOMALY_STATE_ROOT>/Mods` in a state-root run |
 
 - `Documents` is visible in the Files app and Finder (`UIFileSharingEnabled`, `LSSupportsOpeningDocumentsInPlace`),
   which is how the game data gets in and how logs get out.
@@ -45,6 +46,9 @@ $app_data_root$  = true  | false | <appdata>
 $app_cache_root$ = false | false | <caches>
 $shader_cache$   = false | false | <shader_cache>
 ```
+
+After `db\addons` and before the game's own `gamedata` it carries one `$mod_<id>$ = true | false | <mods root>/<id>/content` line per enabled
+mod, in `modlist.json` order ([MOD-MANAGER.md](MOD-MANAGER.md), "Mounting"); `WriteFsGameLtx()` reads the list again every time it runs.
 
 Every other entry is unchanged and hangs off those roots. It is regenerated on every launch because the
 iOS container path changes when the app is reinstalled.
