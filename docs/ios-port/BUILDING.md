@@ -35,6 +35,33 @@ xcodebuild -project build/ios-arm64/AnomalyPort.xcodeproj -scheme platform_probe
 
 To check that everything compiles and links without signing, add `CODE_SIGNING_ALLOWED=NO`.
 
+## App icon
+
+The game apps (`anomaly` and `shell_lab`, everything configured with `anomaly_configure_game_app()`) carry an
+icon that CMake generates at configure time with `tools/make_app_icon.sh`, into `<build dir>/app_icon/`. The
+Anomaly logo is GSC artwork, so it is never committed:
+
+- With the game data present (`game/Anomaly`, or `-DANOMALY_GAME_DIR=<install>`), the icon is the logo embedded in
+  `AnomalyLauncher.exe` (`tools/app_icon/extract_launcher_icon.py` pulls the largest PNG from its icon resources)
+  composed by `tools/app_icon/compose_icon.swift` on a dark background with margins. The source is only 256 px, so
+  the badge fills about 60% of the 1024 px canvas instead of being blown up to the edges.
+- Without it, the icon is `platform/icon/fallback.png`, an original drawing (anomaly rings, no Anomaly artwork).
+  `swift tools/app_icon/compose_icon.swift fallback platform/icon/fallback.png` regenerates it.
+
+The configure step prints which one it used (`app icon: ...`). A configure that changes none of the inputs keeps
+the previous output, because the Swift step takes about ten seconds. A git worktree has no `game/` folder of its
+own, so pass `-DANOMALY_GAME_DIR` there or the build gets the fallback icon.
+
+- **iOS** (Xcode generator): an `Assets.xcassets` with one 1024 px `AppIcon` (iOS 17+), added as a bundle resource
+  with `ASSETCATALOG_COMPILER_APPICON_NAME=AppIcon`; `platform/ios/Info.plist.in` has `CFBundleIcons` and
+  `CFBundleIconName`. Check a build with `xcrun assetutil --info <app>/Assets.car`.
+- **macOS** (Ninja): `AppIcon.icns` made with `iconutil` (rounded 824 px body with a shadow, as the macOS icon grid
+  asks), copied to `Contents/Resources` and named by `CFBundleIconFile` in `platform/macos/Info.plist.in`.
+
+Run `tools/make_app_icon.sh <out-dir> [game-dir]` by hand to look at the result (`icon-1024.png`,
+`icon-mac-1024.png`). If the Mac bundle shows a generic icon after a rebuild, Finder and the Dock cache icons by
+path; `touch` the `.app` or run `killall Dock`.
+
 ## Platform probe
 
 `tools/platform_probe` is a small SDL3 app that checks the port's foundations on each device. It
