@@ -210,9 +210,9 @@ function talk(story)
 end
 
 -- plays a particle effect of particles.xr (`_samples_particles_\fire_01`, `explosions\explosion_dynamite`, ...) `dist` metres in front of the
--- player, `up` metres above his feet, for `seconds` (the effect loops until it is stopped)
+-- player, `up` metres above his feet. The effect loops until `particles_stop()`.
 local playing = {}
-function particle(name, dist, up, seconds)
+function particle(name, dist, up)
 	local cam = device().cam_dir
 	local p = db.actor:position()
 	local at = vector():set(p.x + cam.x * dist, p.y + (up or 0), p.z + cam.z * dist)
