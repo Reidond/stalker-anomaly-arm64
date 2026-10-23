@@ -1023,6 +1023,8 @@ local phases = {
 	},
 	-- quit from a state: reach it on sweep_base, then ask the engine to quit with the state still up
 	quit_level = { function() wait_for("actor", 240000, actor_ready); enable_ui(); pause(3000); return { quit = true } end },
+	-- stands in the level until the --script ends the run (quit_background_level: lifecycle background, then quit)
+	hold = { function() wait_for("actor", 240000, actor_ready); enable_ui(); pause(900000); return { quit = true } end },
 	quit_inventory = {
 		function()
 			wait_for("actor", 240000, actor_ready); enable_ui()
