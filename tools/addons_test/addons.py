@@ -48,7 +48,7 @@ SCENARIOS = {
     "removed": dict(mcm_expect=None, mcm_reset=1),
 }
 
-# 1024x1024 DXT5 stock atlases of textures\\ui (the main menu background is left alone: the texture addon owns it)
+# 1024x1024 DXT5 stock atlases of textures\\ui (the main menu background, ui_actor_main_menu, is left alone: the texture addon owns it)
 TEXPACK = ["ui_common", "ui_hud", "ui_ingame2_common", "ui_iconstotal", "ui_load", "ui_load_en", "ui_actor_options_background",
            "ui_actor_loadgame_screen", "ui_actor_dialog_screen", "ui_actor_pda", "ui_actor_radio", "ui_actor_sleep_screen",
            "ui_actor_widescreen_sidepanels", "ui_actor_widescreen_sidepanels_1", "ui_global_map", "ui_mod_minigames", "ui_mod_wnds_1",
@@ -201,7 +201,7 @@ def stage(scenario, out, game_dir, xrdb_unpack, mode="boot", nonce="0"):
     os.makedirs(gamedata)
 
     sizes = {
-        "main_menu_tex": stock.size("db/textures/textures_ui.db0", "textures/ui/ui_actor_main_menu2.dds"),
+        "main_menu_tex": stock.size("db/textures/textures_ui.db0", "textures/ui/ui_actor_main_menu.dds"),
         "distort_ps": stock.size("db/shaders.db0", "shaders/r3/distort.ps"),
         "ph_car": stock.size("db/configs/scripts.db0", "scripts/ph_car_original.scriptx"),
         "axr_main": os.path.getsize(os.path.join(REPO, "gamedata", "scripts", "axr_main.script")),
@@ -219,8 +219,8 @@ def stage(scenario, out, game_dir, xrdb_unpack, mode="boot", nonce="0"):
         copy_tree(os.path.join(ADDONS, "loose_priority", "gamedata"), gamedata)
 
     if cfg.get("texture"):
-        # the main menu background, in the spelling of a Windows texture pack, as a 1024x1024 DXT1 test card
-        sizes["main_menu_tex"] = write(os.path.join(gamedata, "Textures", "UI", "UI_Actor_Main_Menu2.DDS"), dxt1(1024, 1024, 64, ((255, 0, 255), (0, 255, 0))))
+        # the main menu background (2048x1024 DXT3 in the game, `ui\\ui_actor_main_menu` in ui_mm_main_16.xml), in the spelling of a Windows texture pack, as a DXT1 test card
+        sizes["main_menu_tex"] = write(os.path.join(gamedata, "Textures", "UI", "UI_Actor_Main_Menu.DDS"), dxt1(2048, 1024, 128, ((255, 0, 255), (0, 255, 0))))
         sizes["new_tex"] = write(os.path.join(gamedata, "Textures", "ui", "ui_zz_addon_new.dds"), dxt1(64, 64, 8, ((255, 128, 0), (0, 128, 255))))
 
     if cfg.get("texpack"):

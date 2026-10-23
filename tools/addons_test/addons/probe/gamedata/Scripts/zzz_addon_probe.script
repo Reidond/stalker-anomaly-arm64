@@ -73,7 +73,7 @@ function run()
 	check("cfg_text", want.config, function() return game.translate_string("zz_addon_title") == "ZZ Addon Title" end)
 
 	-- texture and shader addons: the registry entry is the loose file (its size is the generated one), removed: the stock size
-	size_check("tex_override", "$game_textures$", "ui\\ui_actor_main_menu2.dds", want.size.main_menu_tex, want.texture)
+	size_check("tex_override", "$game_textures$", "ui\\ui_actor_main_menu.dds", want.size.main_menu_tex, want.texture)
 	size_check("tex_new", "$game_textures$", "ui\\ui_zz_addon_new.dds", want.size.new_tex, true)
 	size_check("shader_override", "$game_shaders$", "r3\\distort.ps", want.size.distort_ps, want.shader)
 	size_check("shader_header", "$game_shaders$", "r3\\zz_addon_tint.h", want.size.tint_h, true)
