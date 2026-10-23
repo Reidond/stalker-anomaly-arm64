@@ -270,11 +270,10 @@ std::vector<std::string> DescribeMods(const ModResolution& r)
         std::string archives;
         for (const std::string& a : m.archives)
             archives += (archives.empty() ? "" : " ") + a;
-        char line[512];
-        snprintf(line, sizeof(line), "mod %zu/%zu %s: %s%s, gamedata %s, archives %zu%s%s", i + 1, r.mounts.size(), m.id.c_str(),
-                 m.file_count >= 0 ? std::to_string(m.file_count).c_str() : "?", " files (mod.json)", m.has_gamedata ? "yes" : "no",
-                 m.archives.size(), archives.empty() ? "" : ": ", archives.c_str());
-        lines.push_back(line);
+        const std::string files = m.file_count >= 0 ? std::to_string(m.file_count) + " files (mod.json)" : "file count unknown";
+        lines.push_back("mod " + std::to_string(i + 1) + "/" + std::to_string(r.mounts.size()) + " " + m.id + ": " + files + ", gamedata " +
+                        (m.has_gamedata ? "yes" : "no") + ", " + std::to_string(m.archives.size()) + " archives" +
+                        (archives.empty() ? "" : ": " + archives));
     }
     for (const std::string& n : r.notes)
         lines.push_back("mods: " + n);
