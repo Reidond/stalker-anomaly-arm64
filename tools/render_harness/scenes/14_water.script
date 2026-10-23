@@ -1,6 +1,6 @@
-# The pond east of the Rookie village (the Cordon's one water surface, 16 m wide), seen from 4 m west of its edge.
+# The pond east of the Rookie village (the Cordon's one water surface: a sheet 16 m wide over the lowest ground, at y -9.9), seen from its west end, looking east across it.
 1 console run_string xr_harness.env(12,0,"w_clear1")
-3 console run_string xr_harness.tp(-79,-6.9,-39,270)
+3 console run_string xr_harness.tp(-71,-8.7,-39.5,90)
 27 console run_string xr_harness.probe()
 28 console screenshot 14_water
 30 quit

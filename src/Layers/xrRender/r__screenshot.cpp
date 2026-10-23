@@ -82,7 +82,7 @@ void AppleLoadScreenshot(int stage, int max_stage)
 // rt_dump <target> <file> [stage] [mode] [lo hi]
 //   target: a render target name ($user$accum, $user$position, ...), `depth` (the scene depth-stencil), `smap` (the shadow map)
 //   stage:  where in the frame: gbuffer (after the G-buffer and wallmarks), rain_patch, rain_end (inside the wet-surface layer),
-//           lit (before the post-process), frame_end (default)
+//           lit (before the post-process), fakescope (the inputs of the scope pass), frame_end (default)
 //   mode:   c = RGB (default), s = signed RGB, r/g/b/a = one channel as grey, d = depth, st = stencil; lo hi = the range for grey
 // The image goes to $screenshots$\<file>.png (8 bit); the log line has the format, size, min, max and mean.
 namespace

@@ -189,6 +189,14 @@ Engine assumptions (cbuffer index equals slot, original HLSL names, HLSL packing
     `Context::zeroInitialise` clears every level and slice of a `DEFAULT` render target or depth buffer created without initial data.
     The fake scope's `$user$scopeRT` is only sampled (nothing in this engine draws into it) and read as magenta noise: the whole
     screen of every scoped weapon, aimed.
+19. **Metal's relaxed math, not fast math.** vkd3d-shader keeps HLSL booleans as `0xFFFFFFFF` in float registers
+    (`as_type<float>(c ? 0xFFFFFFFFu : 0u)`, a NaN pattern, tested later with `as_type<uint>`); fast math assumes there are no NaNs.
+    Every aimed scope (`fakescope.ps`) came out solid magenta and purple in a run of 12 scenes under a heavy machine load with fast
+    math (load average 400), never with safe or relaxed math (4 runs), and no longer with fast math once the load fell (6 runs), so
+    the cause is not pinned down. `MTLCompileOptions.mathMode` is `Relaxed` (macOS 15, iOS 18): the same speed-ups with infs and NaNs
+    kept (GPU time of the Cordon scene 3.2 to 3.8 ms against 3.2 to 4.2 ms with fast math, 4.5 to 4.7 ms with safe math);
+    `MTL_MATH=safe|relaxed|fast` in the environment overrides it, `DeviceDesc::fastMath = false` means safe. Before macOS 15 and iOS 18
+    there is no relaxed mode and the library is compiled with safe math.
 
 ## Integration steps for R4
 

@@ -32,7 +32,7 @@ function places()
 	end
 end
 
--- teleports the player; yaw in degrees (0 = +z, 90 = -x, 270 = +x: the engine turns the view anticlockwise seen from above)
+-- teleports the player; yaw in degrees (0 = +z, 90 = +x)
 function tp(x, y, z, yaw)
 	db.actor:set_actor_position(vector():set(x, y, z))
 	if yaw then
@@ -237,7 +237,20 @@ function blowout(night, from)
 	log("blowout %s from %s s", fx, tostring(from or 0))
 end
 
--- the night vision effect of a device section (device_torch_nv_1 .. 3), as the device script switches it
+-- a night vision device (device_torch_nv_1 .. 3) into the torch slot, as the player wears it: the first call creates it, the second slots it
+function nvg(section)
+	section = section or "device_torch_nv_2"
+	local d = db.actor:object(section)
+	if not d then
+		alife_create_item(section, db.actor)
+		log("nvg %s created, call again to slot it", section)
+		return
+	end
+	db.actor:move_to_slot(d, 10)
+	log("nvg %s in the torch slot", section)
+end
+
+-- the night vision effect and its goggle frame (the torch slot's device decides the frame texture), as the device script switches it
 function nightvision(on, section)
 	item_device.set_nightvision(section or "device_torch_nv_2", on ~= false)
 	log("nightvision %s %s", tostring(on ~= false), section or "device_torch_nv_2")

@@ -1178,10 +1178,16 @@ HRESULT Device::CreateInputLayout(const D3D11_INPUT_ELEMENT_DESC* elems, UINT n,
 id<MTLLibrary> Device::newLibraryFromMsl(NSString* source, NSError** err)
 {
     MTLCompileOptions* opts = [MTLCompileOptions new];
+    // vkd3d-shader keeps HLSL booleans as 0xFFFFFFFF in float registers (`as_type<float>(c ? 0xFFFFFFFFu : 0u)`, a NaN pattern). Metal's
+    // fast math assumes there are no NaNs and may drop or canonicalise that value: fakescope.ps, the pass of every aimed scope, drew
+    // magenta. So `fastMath` means the relaxed mode (the same speed-ups, infs and NaNs kept); MTL_MATH=safe|relaxed|fast overrides it.
+    const char* mode = getenv("MTL_MATH");
+    const bool safe = (mode && !strcmp(mode, "safe")) || (!mode && !desc.fastMath);
+    const bool fast = mode && !strcmp(mode, "fast");
     if (@available(macOS 15.0, iOS 18.0, *))
-        opts.mathMode = desc.fastMath ? MTLMathModeFast : MTLMathModeSafe;
+        opts.mathMode = safe ? MTLMathModeSafe : (fast ? MTLMathModeFast : MTLMathModeRelaxed);
     else
-        opts.fastMathEnabled = desc.fastMath;
+        opts.fastMathEnabled = false; // no relaxed mode before: safe is the only one that keeps NaNs
     opts.languageVersion = MTLLanguageVersion3_0;
     return [mtl newLibraryWithSource:source options:opts error:err];
 }

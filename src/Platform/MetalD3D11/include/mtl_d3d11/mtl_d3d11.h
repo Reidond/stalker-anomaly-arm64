@@ -27,7 +27,7 @@ struct DeviceDesc
     uint32_t framesInFlight = 3;        // command buffers the CPU may run ahead of the GPU
     uint32_t constantRingBytes = 8u << 20; // per-frame ring for DISCARD maps of small dynamic buffers
     uint32_t uploadRingBytes = 32u << 20;  // per-frame ring for UpdateSubresource / texture uploads
-    bool fastMath = true;                  // MTLCompileOptions.fastMathEnabled for MSL source payloads
+    bool fastMath = true;                  // MSL source payloads: Metal's relaxed math (fast, keeps NaNs: vkd3d keeps booleans as NaN bit patterns); false: safe math
 };
 
 HRESULT CreateDevice(const DeviceDesc* desc, ID3D11Device** ppDevice, ID3D11DeviceContext** ppImmediateContext);
