@@ -6,6 +6,8 @@
 #   scenarios  menu      cold start to the main menu, quit from the menu after 25 s
 #              loading   load ipad_test, quit 30 s in (during the load)
 #              play      load ipad_test, "press any key", walk a minute, quit from the level
+#              churn     load ipad_test, teleport to four places of the Cordon 15 s apart (objects go online and offline, the spawn
+#                        prefetcher works) and quit 3 s after the last teleport, with its queue full
 #              Each run uses a cold shader cache (ANOMALY_CLEAR_SHADER_CACHE=1) unless the scenario is suffixed with "+warm".
 #   -m         malloc debugging passed as environment variables (devicectl --environment-variables):
 #                none      plain
@@ -15,7 +17,7 @@
 #   Runs go round-robin through the scenarios. The default is 12 runs of menu,loading,play with -m none.
 #
 # For each run it writes <outdir>/run-NN-<scenario>/{console.txt,shell.log,crash.log,engine.log,script.txt} and one line to <outdir>/results.txt:
-#   run scenario cold|warm malloc result seconds
+#   run scenario cold|warm malloc result seconds quit <s>s   (quit: from "script asked to quit" to the shell's "quit (ok)")
 # result is ok (the shell logged "anomaly: quit (ok)" and left no crash log), abort (libmalloc abort in the console output or the crash log),
 # crash (another fatal signal), hang (timeout), or other. Needs the app installed and the iPad unlocked and the only user of it.
 here=${0:A:h}
@@ -24,7 +26,7 @@ runs=12; scenarios=(menu loading play); mode=none; out=ipad-heap-runs; limit=420
 while getopts "n:s:m:o:t:" opt; do
     case $opt in
         n) runs=$OPTARG ;; s) scenarios=(${(s:,:)OPTARG}) ;; m) mode=$OPTARG ;; o) out=$OPTARG ;; t) limit=$OPTARG ;;
-        *) sed -n 2,22p "$0"; exit 2 ;;
+        *) sed -n 2,26p "$0"; exit 2 ;;
     esac
 done
 mkdir -p "$out"
@@ -48,6 +50,10 @@ write_script() { # scenario file
         loading) printf '%s\n' '8 console start server(ipad_test/single/alife/load) client(localhost)' '38 quit' > $2 ;;
         play) printf '%s\n' '8 console start server(ipad_test/single/alife/load) client(localhost)' \
             '60 key Space' '90 key Space' '120 key Space' '150 key Space' '180 keydown W' '195 keyup W' '205 keydown A' '215 keyup A' '230 quit' > $2 ;;
+        churn) printf '%s\n' '8 console start server(ipad_test/single/alife/load) client(localhost)' \
+            '45 key Space' '60 key Space' '62 console run_string ipad_debug.tp(54.9, 3.5, 157.1)' \
+            '77 console run_string ipad_debug.tp(-14.5, 2.5, 274.7)' '92 console run_string ipad_debug.tp(-81.3, 1.5, 113.2)' \
+            '107 console run_string ipad_debug.tp(-215.0, -7.5, -40.6)' '110 quit' > $2 ;;
         *) echo "unknown scenario $1" >&2; return 1 ;;
     esac
 }
@@ -83,6 +89,9 @@ for ((i = 1; i <= runs; i++)); do
     elif grep -a -q "anomaly: quit (ok)" $d/shell.log $d/console.txt 2>/dev/null && grep -a -q "exit code 0" $d/console.txt; then result=ok
     fi
     (( total++ )); [[ $result != ok ]] && (( fails++ ))
-    echo "$i $spec $cold $mode $result ${secs}s" | tee -a $out/results.txt
+    qa=$(grep -a "script asked to quit" $d/shell.log 2>/dev/null | tail -1 | sed -E 's/^\[ *([0-9.]+)\].*/\1/')
+    qb=$(grep -a "anomaly: quit (" $d/shell.log 2>/dev/null | tail -1 | sed -E 's/^\[ *([0-9.]+)\].*/\1/')
+    qt=-; [[ -n $qa && -n $qb ]] && qt=$(awk -v a=$qa -v b=$qb 'BEGIN{printf "%.2f", b - a}')
+    echo "$i $spec $cold $mode $result ${secs}s quit ${qt}s" | tee -a $out/results.txt
 done
 echo "== $total runs, $fails not ok" | tee -a $out/results.txt
