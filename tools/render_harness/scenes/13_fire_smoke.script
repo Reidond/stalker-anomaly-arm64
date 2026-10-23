@@ -1,0 +1,11 @@
+# Fire and smoke particles: the Cordon's camp fire (left), and sample effects of particles.xr in front of the player: a fire, a smoke
+# with a distortion pass, and a radial explosion with distortion.
+1 console run_string xr_harness.env(12,0,"w_clear1")
+3 console run_string xr_harness.tp(-2.8,2.8,82.7,200)
+20 console run_string xr_harness.particle("_samples_particles_\\fire_01", 5, 0)
+20.2 console run_string xr_harness.particle("_samples_particles_\\smoke_02_with_distort", 9, 0)
+20.4 console run_string xr_harness.particle("_samples_particles_\\explode_radial_distort", 14, 0)
+24 console screenshot 13_fire_smoke
+27 console screenshot 13b_fire_smoke
+29 console run_string xr_harness.particles_stop()
+30 quit

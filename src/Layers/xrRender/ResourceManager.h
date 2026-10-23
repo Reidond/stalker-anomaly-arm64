@@ -159,7 +159,13 @@ public:
 	CRT* DebugFindRT(LPCSTR Name)
 	{
 		map_RTIt it = m_rtargets.find(Name);
-		return it == m_rtargets.end() ? nullptr : it->second;
+		if (it != m_rtargets.end())
+			return it->second;
+		// console arguments are lower-cased (`$user$scopeRT` arrives as `$user$scopert`)
+		for (it = m_rtargets.begin(); it != m_rtargets.end(); ++it)
+			if (!stricmp(it->first, Name))
+				return it->second;
+		return nullptr;
 	}
 
 	//	DX10 cut CRTC*							_CreateRTC			(LPCSTR Name, u32 size,	D3DFORMAT f);

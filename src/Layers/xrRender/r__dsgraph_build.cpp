@@ -53,7 +53,7 @@ void R_dsgraph_structure::r_dsgraph_insert_dynamic(dxRender_Visual* pVisual, Fve
 	// a) Allow to optimize RT order
 	// b) Should be rendered to special distort buffer in another pass
 	VERIFY(pVisual->shader._get());
-	ShaderElement* sh_d = &*pVisual->shader->E[4];
+	ShaderElement* sh_d = pVisual->shader->E[4]._get();
 	if (RImplementation.o.distortion && sh_d && sh_d->flags.bDistort && pmask[sh_d->flags.iPriority / 2])
 	{
 		mapSorted_T& test = RI.val_bHUD ? mapHUDDistort : mapDistort;
@@ -135,7 +135,7 @@ void R_dsgraph_structure::r_dsgraph_insert_dynamic(dxRender_Visual* pVisual, Fve
 				N->val.pObject = RI.val_pObject;
 				N->val.pVisual = pVisual;
 				N->val.Matrix = *RI.val_pTransform;
-				N->val.se = &*pVisual->shader->E[4]; // 4=L_special
+				N->val.se = pVisual->shader->E[4]._get(); // 4=L_special
 			}
 #endif // RENDER!=R_R1
 			mapSorted_Node* N = RI.val_bCamAttached ? mapCamAttachedSorted.insertInAnyWay(distSQ) : mapHUDSorted.insertInAnyWay(distSQ);
@@ -175,7 +175,7 @@ void R_dsgraph_structure::r_dsgraph_insert_dynamic(dxRender_Visual* pVisual, Fve
 				N->val.pObject = RI.val_pObject;
 				N->val.pVisual = pVisual;
 				N->val.Matrix = *RI.val_pTransform;
-				N->val.se = &*pVisual->shader->E[4]; // 4=L_special
+				N->val.se = pVisual->shader->E[4]._get(); // 4=L_special
 			}
 #endif	//	RENDER!=R_R1
 			return;
@@ -213,7 +213,7 @@ void R_dsgraph_structure::r_dsgraph_insert_dynamic(dxRender_Visual* pVisual, Fve
 		N->val.pObject = RI.val_pObject;
 		N->val.pVisual = pVisual;
 		N->val.Matrix = *RI.val_pTransform;
-		N->val.se = &*pVisual->shader->E[4]; // 4=L_special
+		N->val.se = pVisual->shader->E[4]._get(); // 4=L_special
 	}
 	if (sh->flags.bWmark && pmask_wmark)
 	{
@@ -348,7 +348,7 @@ void R_dsgraph_structure::r_dsgraph_insert_static(dxRender_Visual* pVisual)
 	// a) Allow to optimize RT order
 	// b) Should be rendered to special distort buffer in another pass
 	VERIFY(pVisual->shader._get());
-	ShaderElement* sh_d = &*pVisual->shader->E[4];
+	ShaderElement* sh_d = pVisual->shader->E[4]._get();
 	if (RImplementation.o.distortion && sh_d && sh_d->flags.bDistort && pmask[sh_d->flags.iPriority / 2])
 	{
 		mapSorted_Node* N = mapDistort.insertInAnyWay(distSQ);
@@ -356,7 +356,7 @@ void R_dsgraph_structure::r_dsgraph_insert_static(dxRender_Visual* pVisual)
 		N->val.pObject = NULL;
 		N->val.pVisual = pVisual;
 		N->val.Matrix = Fidentity;
-		N->val.se = &*pVisual->shader->E[4]; // 4=L_special
+		N->val.se = pVisual->shader->E[4]._get(); // 4=L_special
 	}
 
 	// Select shader
@@ -402,7 +402,7 @@ void R_dsgraph_structure::r_dsgraph_insert_static(dxRender_Visual* pVisual)
 		N->val.pObject = NULL;
 		N->val.pVisual = pVisual;
 		N->val.Matrix = Fidentity;
-		N->val.se = &*pVisual->shader->E[4]; // 4=L_special
+		N->val.se = pVisual->shader->E[4]._get(); // 4=L_special
 	}
 	if (sh->flags.bWmark && pmask_wmark)
 	{
@@ -647,7 +647,8 @@ IC float GetDistFromCamera(const Fvector& from_position)
 	return adjusted_distane;
 }
 
-IC bool IsValuableToRender(dxRender_Visual* pVisual, bool isStatic, bool sm, Fmatrix& transform_matrix)
+// transform_matrix is the visual's world transform: null for static geometry (RI.val_pTransform), only read for dynamic
+IC bool IsValuableToRender(dxRender_Visual* pVisual, bool isStatic, bool sm, const Fmatrix* transform_matrix)
 {
 	if ((isStatic && opt_static >= 1) || (!isStatic && opt_dynamic >= 1))
 	{
@@ -661,7 +662,8 @@ IC bool IsValuableToRender(dxRender_Visual* pVisual, bool isStatic, bool sm, Fma
 			// dynamic geometry position needs to be transformed by transform matrix, to get world coordinates, dont forget ;)
 		{
 			Fvector pos;
-			transform_matrix.transform_tiny(pos, pVisual->vis.sphere.P);
+			VERIFY(transform_matrix);
+			transform_matrix->transform_tiny(pos, pVisual->vis.sphere.P);
 
 			adjusted_distane = GetDistFromCamera(pos);
 		}
@@ -826,7 +828,7 @@ void CRender::add_leafs_Dynamic(dxRender_Visual* pVisual)
 	if (phase != PHASE_NORMAL && !!flags.test(IRenderVisualFlags::eNoShadow))
 		return;
 
-	if (!!!flags.test(IRenderVisualFlags::eIgnoreOptimization) && !IsValuableToRender(pVisual, false, phase == 1, *val_pTransform))
+	if (!!!flags.test(IRenderVisualFlags::eIgnoreOptimization) && !IsValuableToRender(pVisual, false, phase == 1, val_pTransform))
 		return;
 
 	// Visual is 100% visible - simply add it
@@ -911,7 +913,7 @@ void CRender::add_leafs_Static(dxRender_Visual* pVisual)
 	if (phase != PHASE_NORMAL && !!flags.test(IRenderVisualFlags::eNoShadow))
 		return;
 
-	if (!!!flags.test(IRenderVisualFlags::eIgnoreOptimization) && !IsValuableToRender(pVisual, true, phase == 1, *val_pTransform))
+	if (!!!flags.test(IRenderVisualFlags::eIgnoreOptimization) && !IsValuableToRender(pVisual, true, phase == 1, val_pTransform))
 		return;
 
 	// Visual is 100% visible - simply add it
@@ -1009,7 +1011,7 @@ BOOL CRender::add_Dynamic(dxRender_Visual* pVisual, u32 planes)
 	if (phase != PHASE_NORMAL && !!flags.test(IRenderVisualFlags::eNoShadow))
 		return FALSE;
 
-	if (!!!flags.test(IRenderVisualFlags::eIgnoreOptimization) && !IsValuableToRender(pVisual, false, phase == 1, *val_pTransform))
+	if (!!!flags.test(IRenderVisualFlags::eIgnoreOptimization) && !IsValuableToRender(pVisual, false, phase == 1, val_pTransform))
 		return FALSE;
 
 	// Check frustum visibility and calculate distance to visual's center
@@ -1131,7 +1133,7 @@ void CRender::add_Static(dxRender_Visual* pVisual, u32 planes)
 	if (phase != PHASE_NORMAL && !!flags.test(IRenderVisualFlags::eNoShadow))
 		return;
 
-	if (!!!flags.test(IRenderVisualFlags::eIgnoreOptimization) && !IsValuableToRender(pVisual, true, phase == 1, *val_pTransform))
+	if (!!!flags.test(IRenderVisualFlags::eIgnoreOptimization) && !IsValuableToRender(pVisual, true, phase == 1, val_pTransform))
 		return;
 
 	// Check frustum visibility and calculate distance to visual's center

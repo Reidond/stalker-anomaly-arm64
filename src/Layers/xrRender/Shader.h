@@ -140,7 +140,6 @@ public:
 	ShaderElement();
 	~ShaderElement();
 	BOOL equal(ShaderElement& S);
-	BOOL equal(ShaderElement* S);
 };
 
 typedef resptr_core<ShaderElement, resptr_base<ShaderElement>> ref_selement;

@@ -240,12 +240,17 @@ Compiled out instead of suppressed: `vptr`, `function` and `alignment` (see Buil
    spinning for minutes in the game-over save) was **not reproduced**: 12 quits from the Cordon, Garbage and the menu and the 9 `quit_*` plans, all clean. The probable cause
    is finding 23 (log dedupe `erase(end() - 1)` on an empty `LogFile`; it corrupts the vector, and a line logged twice at quit is enough), and finding 24 makes the handler
    write the log first and end the process after 20 s. If it comes back, run with `SWEEP_ASAN_EXTRA=quarantine_size_mb=3072` and read the first report.
-3. **Renderer** (not ours, reported to M2): null `ShaderElement` through the `this == 0` idiom (`Shader.cpp:146-161` `ShaderElement::equal`/`Shader::equal`,
-   `xr_resource.h:131`, `r__dsgraph_build.cpp:56`, `:914`, `:1134` reference to a null `Fmatrix`): benign while `-fno-delete-null-pointer-checks` is on, reported once per
-   run at start and in the dynamic-visual path; the `sigaltstack` replacement in `FrontendVkd3d.cpp` (`struct AltStack`), the same bug as finding 11, fatal under ASan if the thread exits;
-   the `alignment` reports (off by default, see Build): `FSkinned.cpp:553` on a misaligned `vertBoned2W`, `resptr_core<SPass>` and `xr_vector<_REG_INFO>` inside packed file data.
-4. **NaN into `iFloor`** while a model loads (`FSkinned.cpp:39` `q_N(float)` from `vertHW_1W::set` from `CSkeletonX_ext::_Load_hw`): a NaN normal in some `.ogf`. `iFloor` now gives 0
-   (x64's bit trick gave garbage); UBSan reports it (`float-cast-overflow`). Which model has it is not known.
+3. ~~Renderer: null `ShaderElement` through the `this == 0` idiom, the `sigaltstack` replacement~~ **Fixed** (the M5 renderer pass). `ShaderElement::equal(ShaderElement*)` tested `this`
+   against null (only xrGame is built with `-fno-delete-null-pointer-checks`, so clang could fold it and two shaders without a technique compared unequal): `Shader::equal` decides the null
+   cases on the pointers; `&*pVisual->shader->E[4]` is `E[4]._get()`; `IsValuableToRender` takes the world matrix by pointer and reads it only for dynamic geometry (static callers pass null).
+   The crash guard's `AltStack` (`FrontendVkd3d.cpp`) left a freed stack installed on Darwin (`sigaltstack(SS_DISABLE)` with a size of 0 fails with `ENOMEM`) and, under a sanitizer, would have
+   handed the runtime a block it unmaps at thread exit: it now disables with the real size, frees only a stack that is its own and gone, and installs nothing under a sanitizer;
+   `shaderxlat_selftest` runs translations (and a faulting one) on threads that exit, under ASan+UBSan. Smoke under ASan+UBSan: no report from `Shader.cpp`, `r__dsgraph_build.cpp` or `FrontendVkd3d.cpp`.
+   The `alignment` reports (off by default, see Build) stay: `FSkinned.cpp:553` on a misaligned `vertBoned2W`, `resptr_core<SPass>` and `xr_vector<_REG_INFO>` inside packed file data.
+4. ~~NaN into `iFloor` while a model loads (`FSkinned.cpp:39` `q_N`)~~ **Fixed**. It is not a NaN normal: 779 of 25.5 million skinned vertices in 139 stock models carry a binormal of
+   (inf, inf, inf) and 2,756 vertices in 39 models (weapons) an infinite texture coordinate (`tools/xrdb_unpack/ogf_scan` over the four mesh archives: 10,461 skinned vertex chunks, 25.5 million vertices; the 1,068 `.ogf` in the level archives have no skinned chunk); `normalize_safe` turns an infinite vector into NaN
+   (inf * 0). `FSkinned.cpp` replaces a non-finite component with 0 before it is normalised and quantised, and `q_N` maps NaN to the middle of the range. Smoke under ASan+UBSan: no `FSkinned` report.
+   A new one found by the same run, **fixed**: NaN into `iFloor`/`iCeil` in the occlusion rasteriser (`occRasterizer::test` from `CHOM::visible`, once per run at start): a box that projects to NaN is now visible.
 5. **`CTimer::GetElapsed_ticks`** (`xrCore/FTimer.h:81`): the `u64` delta wraps when the ALife update thread reads the counter behind `m_real_ticks`, and the wrapped value converted to `double`
    and back is out of range (`float-cast-overflow`). Harmless in effect (about one tick). Suppressed; the fix is an xrCore header edit that rebuilds everything.
 6. **The iPad's intermittent heap corruption** ("pointer being freed was not allocated" in vkd3d `preproc_free_macro`/`preproc_yyparse`, in `CloseLog`): **not caught on the Mac.**

@@ -1,0 +1,48 @@
+# Water on other levels, found from the levels' water meshes and AI maps (the Cordon's one sheet lies under the ground): Zaton's bay
+# (effects\water: surface, shore blend, rain on it, wading in it), Agroprom's swamp (effects\waterryaska) and the Dark Valley's pond
+# (effects\waterstuden). The player is put on the shore and turned to the water (xr_harness.tp); the shot comes 16 s later, when the
+# weather and the streaming have settled.
+1 console jump_to_level zaton
+3 waitlevel 400 zaton
+5 key Left Shift
+7 key Left Shift
+9 key Left Shift
+11 key Left Shift
+13 key Left Shift
+15 key Left Shift
+17 console run_string xr_harness.env(12,0,"w_clear1")
+19 console run_string xr_harness.tp(-485,-6.6,150,90)
+35 console run_string xr_harness.probe()
+36 console screenshot 14_water_zaton
+39 console run_string xr_harness.tp(-474,-6.0,150,90)
+49 console run_string xr_harness.probe()
+50 console screenshot 14_water_zaton_wade
+53 console run_string xr_harness.env(9,0,"w_rain3")
+67 console run_string xr_harness.tp(-485,-6.6,150,90)
+75 console run_string xr_harness.probe()
+76 console screenshot 14_water_zaton_rain
+79 console jump_to_level l03_agroprom
+81 waitlevel 400 l03_agroprom
+83 key Left Shift
+85 key Left Shift
+87 key Left Shift
+89 key Left Shift
+91 key Left Shift
+93 key Left Shift
+95 console run_string xr_harness.env(12,0,"w_clear1")
+97 console run_string xr_harness.tp(-195,2.0,90,0)
+113 console run_string xr_harness.probe()
+114 console screenshot 14_water_agroprom
+117 console jump_to_level l04_darkvalley
+119 waitlevel 400 l04_darkvalley
+121 key Left Shift
+123 key Left Shift
+125 key Left Shift
+127 key Left Shift
+129 key Left Shift
+131 key Left Shift
+133 console run_string xr_harness.env(12,0,"w_clear1")
+135 console run_string xr_harness.tp(-85,-6.0,-15,90)
+151 console run_string xr_harness.probe()
+152 console screenshot 14_water_darkvalley
+155 quit

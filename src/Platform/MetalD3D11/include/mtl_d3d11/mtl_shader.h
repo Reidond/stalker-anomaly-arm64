@@ -156,6 +156,10 @@ struct InterpolantPair
 // Returns the pixel shader's source with each given input declared with the vertex shader's type; the original name is a local
 // of the original type: narrowed by a swizzle, or widened with zeros. Pairs of a different base type are left alone.
 std::string AdaptFragmentInputs(const std::string& msl, const std::vector<InterpolantPair>& pairs);
+// What links a pixel shader to a vertex shader: the pixel inputs the vertex outputs never write (`missing`, zero-filled with
+// PatchFragmentInputs) and those it writes with another type (`mismatched`, AdaptFragmentInputs). Locations are matched.
+void CompareInterpolants(const std::vector<Interpolant>& vertexOutputs, const std::vector<Interpolant>& pixelInputs,
+                         std::vector<Interpolant>* missing, std::vector<InterpolantPair>* mismatched);
 
 // Hook for D3DCompile(): called with the HLSL R4 wants compiled; must return a container.
 struct CompileRequest
