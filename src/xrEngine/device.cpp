@@ -393,12 +393,15 @@ float GetMonitorRefresh()
 extern int ps_framelimiter;
 extern u32 g_screenmode;
 
-CTimer FreezeTimer;
 // The freeze watchdog flushes the (buffered) log when the primary thread has not come round for a while, so the log shows where a
 // hang is. It is stopped by RunEnd() before the core and the log are torn down: it used to run for the life of the process and flush
 // into a file system that Core._destroy() was freeing.
 static std::atomic<bool> mt_freeze_stop{false};
 static std::atomic<bool> mt_freeze_running{false};
+// what the primary thread tells the watchdog (written once per on_idle, read from the watchdog's thread): when it last came round, and
+// whether a level is being loaded (loading steps are allowed to take longer)
+static std::atomic<u64> mt_freeze_tick{0};
+static std::atomic<bool> mt_freeze_loading{false};
 
 void mt_FreezeThread(void *ptr) {
 	float freezetime = 0.f;
@@ -408,7 +411,7 @@ void mt_FreezeThread(void *ptr) {
 	{
 		PROF_EVENT();
 
-		if (g_loading_events.size())
+		if (mt_freeze_loading.load(std::memory_order_relaxed))
 			freezetime = 25000.0f;
 		else
 			freezetime = 5000.0f;
@@ -416,7 +419,8 @@ void mt_FreezeThread(void *ptr) {
 		repeatcheck = 500.f;
 
 		START_PROFILE("Check timer");
-		if (FreezeTimer.GetElapsed_sec()*1000.f > freezetime)
+		const u64 last_tick = mt_freeze_tick.load(std::memory_order_relaxed);
+		if (float(double(CPU::QPC() - last_tick) / double(CPU::qpc_freq)) * 1000.f > freezetime)
 		{
 			FlushLog();
 			repeatcheck = 5000.f;
@@ -432,7 +436,8 @@ void mt_FreezeThread(void *ptr) {
 
 void CRenderDevice::on_idle()
 {
-	FreezeTimer.Start();
+	mt_freeze_tick.store(CPU::QPC(), std::memory_order_relaxed);
+	mt_freeze_loading.store(!g_loading_events.empty(), std::memory_order_relaxed);
 
 	if (!b_is_Ready)
 	{

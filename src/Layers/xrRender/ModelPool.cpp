@@ -27,8 +27,16 @@
 	#include "IGame_Persistent.h"
 #endif
 
+// The pool (Models, Registry, Pool) is used by the primary thread and by the spawn prefetcher (CLevel::ProcessPrefetchEvents ->
+// models_PrefetchOne -> Prefetch_One), which load and release models while the primary thread does the same for the objects it
+// spawns. The containers are plain std containers: an unlocked insert racing a find or an erase corrupts the tree or the vector
+// and the heap with it. One recursive lock for the pool (the methods call each other); there is one pool per renderer.
+static xrCriticalSection g_model_pool_lock;
+#define MODEL_POOL_LOCK xrCriticalSectionGuard model_pool_guard(g_model_pool_lock)
+
 dxRender_Visual* CModelPool::Instance_Create(u32 type)
 {
+	MODEL_POOL_LOCK;
 	dxRender_Visual* V = NULL;
 
 	// Check types
@@ -83,6 +91,7 @@ dxRender_Visual* CModelPool::Instance_Create(u32 type)
 
 dxRender_Visual* CModelPool::Instance_Duplicate(dxRender_Visual* V)
 {
+	MODEL_POOL_LOCK;
 	R_ASSERT(V);
 	dxRender_Visual* N = Instance_Create(V->Type);
 	N->Copy(V);
@@ -99,6 +108,7 @@ dxRender_Visual* CModelPool::Instance_Duplicate(dxRender_Visual* V)
 
 dxRender_Visual* CModelPool::Instance_Load(const char* N, BOOL allow_register, bool assert)
 {
+	MODEL_POOL_LOCK;
 	dxRender_Visual* V;
 	string_path fn;
 	string_path name;
@@ -150,6 +160,7 @@ dxRender_Visual* CModelPool::Instance_Load(const char* N, BOOL allow_register, b
 
 dxRender_Visual* CModelPool::Instance_Load(LPCSTR name, IReader* data, BOOL allow_register)
 {
+	MODEL_POOL_LOCK;
 	dxRender_Visual* V;
 
 	ogf_header H;
@@ -164,6 +175,7 @@ dxRender_Visual* CModelPool::Instance_Load(LPCSTR name, IReader* data, BOOL allo
 
 void CModelPool::Instance_Register(LPCSTR N, dxRender_Visual* V)
 {
+	MODEL_POOL_LOCK;
 	// Registration
 	ModelDef M;
 	M.name = N;
@@ -174,6 +186,7 @@ void CModelPool::Instance_Register(LPCSTR N, dxRender_Visual* V)
 
 void CModelPool::Destroy()
 {
+	MODEL_POOL_LOCK;
 	// Pool
 	Pool.clear();
 
@@ -219,6 +232,7 @@ CModelPool::~CModelPool()
 
 dxRender_Visual* CModelPool::Instance_Find(LPCSTR N)
 {
+	MODEL_POOL_LOCK;
 	dxRender_Visual* Model = 0;
 	xr_vector<ModelDef>::iterator I;
 	for (I = Models.begin(); I != Models.end(); I++)
@@ -234,6 +248,7 @@ dxRender_Visual* CModelPool::Instance_Find(LPCSTR N)
 
 dxRender_Visual* CModelPool::Create(const char* name, IReader* data, bool assert)
 {
+	MODEL_POOL_LOCK;
 #ifdef _EDITOR
 	if (!name||!name[0])	return 0;
 #endif
@@ -283,6 +298,7 @@ dxRender_Visual* CModelPool::Create(const char* name, IReader* data, bool assert
 
 dxRender_Visual* CModelPool::CreateChild(LPCSTR name, IReader* data)
 {
+	MODEL_POOL_LOCK;
 	string256 low_name;
 	VERIFY(xr_strlen(name)<256);
 	xr_strcpy(low_name, name);
@@ -306,6 +322,7 @@ extern BOOL ENGINE_API g_bRendering;
 
 void CModelPool::DeleteInternal(dxRender_Visual* & V, BOOL bDiscard)
 {
+	MODEL_POOL_LOCK;
 	VERIFY(!g_bRendering);
 	if (!V) return;
 	V->Depart();
@@ -340,6 +357,7 @@ void CModelPool::DeleteInternal(dxRender_Visual* & V, BOOL bDiscard)
 
 void CModelPool::Delete(dxRender_Visual* & V, BOOL bDiscard)
 {
+	MODEL_POOL_LOCK;
 	if (NULL == V) return;
 	if (g_bRendering)
 	{
@@ -355,6 +373,7 @@ void CModelPool::Delete(dxRender_Visual* & V, BOOL bDiscard)
 
 void CModelPool::DeleteQueue()
 {
+	MODEL_POOL_LOCK;
 	for (u32 it = 0; it < ModelsToDelete.size(); it++)
 		DeleteInternal(ModelsToDelete[it]);
 	ModelsToDelete.clear();
@@ -362,6 +381,7 @@ void CModelPool::DeleteQueue()
 
 void CModelPool::Discard(dxRender_Visual* & V, BOOL b_complete)
 {
+	MODEL_POOL_LOCK;
 	//
 	REGISTRY_IT it = Registry.find(V);
 	if (it != Registry.end())
@@ -411,6 +431,7 @@ void CModelPool::Discard(dxRender_Visual* & V, BOOL b_complete)
 
 void CModelPool::Prefetch()
 {
+	MODEL_POOL_LOCK;
 	Logging(FALSE);
 	// prefetch visuals
 	string256 section;
@@ -427,6 +448,7 @@ void CModelPool::Prefetch()
 
 void CModelPool::Prefetch_One(LPCSTR N, bool assert)
 {
+	MODEL_POOL_LOCK;
 	dxRender_Visual* V = Create(N, 0, assert);
 	if (V)
 		Delete(V,FALSE);
@@ -434,6 +456,7 @@ void CModelPool::Prefetch_One(LPCSTR N, bool assert)
 
 bool CModelPool::Exists(LPCSTR N)
 {
+	MODEL_POOL_LOCK;
 	string_path low_name;
 	VERIFY(xr_strlen(N) < sizeof(low_name));
 	xr_strcpy(low_name, N);
@@ -463,6 +486,7 @@ bool CModelPool::Exists(LPCSTR N)
 
 dxRender_Visual* CModelPool::CreatePE(PS::CPEDef* source)
 {
+	MODEL_POOL_LOCK;
 	PS::CParticleEffect* V = (PS::CParticleEffect*)Instance_Create(MT_PARTICLE_EFFECT);
 	V->Compile(source);
 	return V;
@@ -470,6 +494,7 @@ dxRender_Visual* CModelPool::CreatePE(PS::CPEDef* source)
 
 dxRender_Visual* CModelPool::CreatePG(PS::CPGDef* source)
 {
+	MODEL_POOL_LOCK;
 	PS::CParticleGroup* V = (PS::CParticleGroup*)Instance_Create(MT_PARTICLE_GROUP);
 	V->Compile(source);
 	return V;
@@ -477,6 +502,7 @@ dxRender_Visual* CModelPool::CreatePG(PS::CPGDef* source)
 
 void CModelPool::ClearPool(BOOL b_complete)
 {
+	MODEL_POOL_LOCK;
 	POOL_IT _I = Pool.begin();
 	POOL_IT _E = Pool.end();
 	for (; _I != _E; _I++)
@@ -488,6 +514,7 @@ void CModelPool::ClearPool(BOOL b_complete)
 
 void CModelPool::dump()
 {
+	MODEL_POOL_LOCK;
 	Log("--- model pool --- begin:");
 	u32 sz = 0;
 	u32 k = 0;
@@ -524,6 +551,7 @@ void CModelPool::dump()
 
 void CModelPool::memory_stats(u32& vb_mem_video, u32& vb_mem_system, u32& ib_mem_video, u32& ib_mem_system)
 {
+	MODEL_POOL_LOCK;
 	vb_mem_video = 0;
 	vb_mem_system = 0;
 	ib_mem_video = 0;
