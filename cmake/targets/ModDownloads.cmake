@@ -21,6 +21,15 @@ add_library(ModDownloads STATIC ${anomaly_moddownloads_sources})
 moddownloads_swift_target(ModDownloads)
 # whole-module: the driver's -incremental mode (the Debug default) intermittently fails to link with `cannotResolveTempPath`
 set_target_properties(ModDownloads PROPERTIES Swift_LANGUAGE_VERSION 6 Swift_COMPILATION_MODE wholemodule XCODE_ATTRIBUTE_SWIFT_VERSION 6.0)
+# CMake does not pass the deployment target to swiftc with the Ninja generator, which would then build the module for the SDK's newest OS and
+# refuse to be imported by anything built for macOS 14 (the Xcode generator passes it itself, and a second -target there only draws a warning).
+if(NOT CMAKE_GENERATOR STREQUAL "Xcode")
+    if(ANOMALY_IOS)
+        target_compile_options(ModDownloads PRIVATE "SHELL:-target arm64-apple-ios${CMAKE_OSX_DEPLOYMENT_TARGET}")
+    else()
+        target_compile_options(ModDownloads PRIVATE "SHELL:-target arm64-apple-macosx${CMAKE_OSX_DEPLOYMENT_TARGET}")
+    endif()
+endif()
 target_link_libraries(ModDownloads PUBLIC "-framework WebKit" "-framework SwiftUI" "-framework Foundation")
 # the tools below use `@testable import ModDownloads`; the iPad lab builds the Debug configuration
 if(ANOMALY_IOS)
