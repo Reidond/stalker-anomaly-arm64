@@ -260,11 +260,11 @@ Re-run `tools/sweep/run.sh smoke` after a change in the gameplay or engine code.
 ## Known issues by module
 
 - **Renderer R4 / Metal shim (M2).**
-  - The weather layer (rain) is drawn over interior geometry, and some UI and HUD windows show dark rectangles (screenshots in
-    the PR). The scene is lit and textured, the sky and the HUD draw.
+  - (Fixed since: the weather layer drawn over interior geometry and the dark rectangles in the UI, RENDER-QA.md.)
   - 34 optional post-process shaders are in no archive and fall back to `stub_default` (`ssfx_*`, `heatvision`,
     `deffer_terrain_low_flat`): SSR, SSS, bloom, TAA, volumetrics, water effects are absent.
-  - `pixel shader N reads 1 interpolant(s) vertex shader M does not write ... zero-filled` is logged once.
+  - (Fixed since: `pixel shader N reads 1 interpolant(s) vertex shader M does not write ... zero-filled`. Vertex/pixel pairs that
+    pack a register differently are adapted by the shim and not logged, METAL-SHIM.md item 13.)
   - Tessellation, 3D fluid (volumetric smoke) are switched off (no hull/domain/geometry stages).
   - `screenshot` and `r4_...` console paths were not exercised.
 - **ShaderXlat.** A cold cache costs about 2 s at the menu (138 shaders, 1.3 s of translation); a level asks for about 165

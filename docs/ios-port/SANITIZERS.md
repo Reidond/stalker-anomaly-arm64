@@ -315,12 +315,17 @@ Compiled out instead of suppressed: `vptr`, `function` and `alignment` (see Buil
    and is gone. The earlier suspects, findings 23 and 24, stay fixed. Not reproduced before this on the Mac (about 100 quits), so the evidence for the first is the code and the
    thread's TSan reports, not a crash; after: 30 plain quits and the 9 `quit_*` plans under TSan, none hung. If it comes back: `SWEEP_LLDB=1 tools/sweep/run.sh` and
    `sample <pid>` on the stuck process show where it is.
-3. **Renderer** (not ours, reported to M2): null `ShaderElement` through the `this == 0` idiom (`Shader.cpp:146-161` `ShaderElement::equal`/`Shader::equal`,
-   `xr_resource.h:131`, `r__dsgraph_build.cpp:56`, `:914`, `:1134` reference to a null `Fmatrix`): benign while `-fno-delete-null-pointer-checks` is on, reported once per
-   run at start and in the dynamic-visual path; the `sigaltstack` replacement in `FrontendVkd3d.cpp` (`struct AltStack`), the same bug as finding 11, fatal under ASan if the thread exits;
-   the `alignment` reports (off by default, see Build): `FSkinned.cpp:553` on a misaligned `vertBoned2W`, `resptr_core<SPass>` and `xr_vector<_REG_INFO>` inside packed file data.
-4. **NaN into `iFloor`** while a model loads (`FSkinned.cpp:39` `q_N(float)` from `vertHW_1W::set` from `CSkeletonX_ext::_Load_hw`): a NaN normal in some `.ogf`. `iFloor` now gives 0
-   (x64's bit trick gave garbage); UBSan reports it (`float-cast-overflow`). Which model has it is not known.
+3. ~~Renderer: null `ShaderElement` through the `this == 0` idiom, the `sigaltstack` replacement~~ **Fixed** (the M5 renderer pass). `ShaderElement::equal(ShaderElement*)` tested `this`
+   against null (only xrGame is built with `-fno-delete-null-pointer-checks`, so clang could fold it and two shaders without a technique compared unequal): `Shader::equal` decides the null
+   cases on the pointers; `&*pVisual->shader->E[4]` is `E[4]._get()`; `IsValuableToRender` takes the world matrix by pointer and reads it only for dynamic geometry (static callers pass null).
+   The crash guard's `AltStack` (`FrontendVkd3d.cpp`) left a freed stack installed on Darwin (`sigaltstack(SS_DISABLE)` with a size of 0 fails with `ENOMEM`) and, under a sanitizer, would have
+   handed the runtime a block it unmaps at thread exit: it now disables with the real size, frees only a stack that is its own and gone, and installs nothing under a sanitizer;
+   `shaderxlat_selftest` runs translations (and a faulting one) on threads that exit, under ASan+UBSan. Smoke under ASan+UBSan: no report from `Shader.cpp`, `r__dsgraph_build.cpp` or `FrontendVkd3d.cpp`.
+   The `alignment` reports (off by default, see Build) stay: `FSkinned.cpp:553` on a misaligned `vertBoned2W`, `resptr_core<SPass>` and `xr_vector<_REG_INFO>` inside packed file data.
+4. ~~NaN into `iFloor` while a model loads (`FSkinned.cpp:39` `q_N`)~~ **Fixed**. It is not a NaN normal: 779 of 25.5 million skinned vertices in 139 stock models carry a binormal of
+   (inf, inf, inf) and 2,756 vertices in 39 models (weapons) an infinite texture coordinate (`tools/xrdb_unpack/ogf_scan` over the four mesh archives: 10,461 skinned vertex chunks, 25.5 million vertices; the 1,068 `.ogf` in the level archives have no skinned chunk); `normalize_safe` turns an infinite vector into NaN
+   (inf * 0). `FSkinned.cpp` replaces a non-finite component with 0 before it is normalised and quantised, and `q_N` maps NaN to the middle of the range. Smoke under ASan+UBSan: no `FSkinned` report.
+   A new one found by the same run, **fixed**: NaN into `iFloor`/`iCeil` in the occlusion rasteriser (`occRasterizer::test` from `CHOM::visible`, once per run at start): a box that projects to NaN is now visible.
 5. **`CTimer::GetElapsed_ticks`** (`xrCore/FTimer.h:81`): the `u64` delta wraps when the ALife update thread reads the counter behind `m_real_ticks`, and the wrapped value converted to `double`
    and back is out of range (`float-cast-overflow`). Harmless in effect (about one tick). Suppressed; the fix is an xrCore header edit that rebuilds everything.
 6. **The iPad's intermittent heap corruption** ("pointer being freed was not allocated" in vkd3d `preproc_free_macro`/`preproc_yyparse`, in `CloseLog`, once in a system
@@ -330,7 +335,7 @@ Compiled out instead of suppressed: `vptr`, `function` and `alignment` (see Buil
    resized and erased by two threads), the freeze watchdog's log flush against the file system's teardown (32), unlocked `LogFile` (32, 33). Any of them corrupts the heap; vkd3d's
    macro table and the log's strings, which are freed in bulk, are where libmalloc notices. On the iPad (cold shader cache, a slower primary thread, so more spawn events in
    flight and longer stale-timer intervals) they have the room to; on the Mac's warm cache they rarely do. The baseline did not reproduce it either: see IPAD.md for the runs
-   before and after. If it still happens: `lua_parallel_gc 0` first (item 12), then `MallocStackLogging` with `MallocErrorAbort` and read the allocation stack of the block.
+   before and after. The renderer pass (item 3) fixed one more thing in that area: the crash guard's alternate signal stack was left installed, freed, on thread exit. If it still happens: `lua_parallel_gc 0` first (item 12), then `MallocStackLogging` with `MallocErrorAbort` and read the allocation stack of the block.
 7. **`stop_hud_motion`** in the engine log of every `smoke` is exported and runs; the line `![player_hud::StopScriptAnim()] invalid script_anim_part 255` is the engine's own diagnostic
    when a script stops a hud animation that is not playing (`print_bone_warnings`), same on the PC. M2 reported the export as missing: it is not.
 8. ~~Opening the trade window from a script~~ **Not an engine bug.** `db.actor:start_trade(trader)` has the roles reversed (`trader:start_trade(db.actor)` is the call), and Anomaly's

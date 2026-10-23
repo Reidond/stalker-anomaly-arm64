@@ -1,0 +1,7 @@
+# The talk window with the Cordon's trader, in his bunker.
+1 console run_string xr_harness.env(12,0,"w_clear1")
+3 console run_string xr_harness.tp_story("esc_m_trader", 90)
+20 console run_string xr_harness.talk("esc_m_trader")
+30 console screenshot 09_dialog
+32 key Escape
+34 quit

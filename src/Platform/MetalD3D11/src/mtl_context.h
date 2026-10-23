@@ -155,6 +155,8 @@ public:
 
     // ---- shim internals ------------------------------------------------------------------------------
     void uploadTexture(TextureCore* t, uint32_t mip, uint32_t slice, const void* data, size_t rowPitch, size_t slicePitch);
+    // D3D11 returns render targets and depth buffers zeroed; a new Metal private texture holds whatever the memory did
+    void zeroInitialise(TextureCore* t);
     // Swap chain support
     id<MTLCommandBuffer> commandBuffer();
     uint64_t serial() const { return serial_; }

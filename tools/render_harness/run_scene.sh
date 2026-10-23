@@ -13,7 +13,7 @@
 #
 # Environment: HARNESS_COLD_SHADERS=1 (empty shader cache), HARNESS_ENV="VAR=value ..." (passed to the app), HARNESS_ARGS="..." (more
 # app arguments; `-p preset` already adds `--graphics-profile none`),
-# HARNESS_STATE=<dir> (use that state root instead of a fresh one), HARNESS_FOOTPRINT=1 (writes footprint.txt: `footprint` of the app at about 40 s; tools/render_harness/perf_report.sh reads it).
+# HARNESS_CONSOLE="cmd;cmd" (console commands before the level loads), HARNESS_STATE=<dir> (use that state root instead of a fresh one), HARNESS_FOOTPRINT=1 (writes footprint.txt: `footprint` of the app at about 40 s; tools/render_harness/perf_report.sh reads it).
 set -euo pipefail
 
 root=$(cd "$(dirname "$0")/../.." && pwd)
@@ -80,6 +80,11 @@ for scene in "${scenes[@]}"; do
         # the scene's times count from the level being ready: shift them past the load script's waitlevel step
         { cat "$root/tools/render_harness/scenes/_load.script"
           awk '/^[ \t]*#/ || NF == 0 { print; next } { $1 = $1 + 16; print }' "$src"; } > "$script"
+    fi
+
+    # HARNESS_CONSOLE="cmd1;cmd2": console commands run before the level loads (gfx_mode performance, r__upscaler metalfx with --unlocked-graphics)
+    if [ -n "${HARNESS_CONSOLE:-}" ]; then
+        { echo "$HARNESS_CONSOLE" | tr ';' '\n' | awk 'NF { printf "0.%d console %s\n", 5 + NR, $0 }'; cat "$script"; } > "$script.tmp" && mv "$script.tmp" "$script"
     fi
 
     args=(--data-root "$data" --script "$script" --exit-after "$limit" -dbg)

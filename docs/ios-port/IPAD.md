@@ -220,11 +220,19 @@ fps, CPU ms inside `Frame()`, GPU ms, footprint (peak), available memory and the
   `DidEnterBackground`, the process does nothing for 90 s with the old build and the new one (5 of 5 runs), and only SIGKILL ends it: iOS suspends a backgrounded app and a suspended
   process cannot answer. What the app can do, it does: while it is paused but still running, and when it wakes with the SIGTERM pending, it leaves at once (SANITIZERS.md finding 38). The
   background save (`ipad_autosave`) is written at the transition, so a kill loses nothing.
-- The renderer's known defects (INTEGRATION.md): rain over interior geometry, the 34 missing `ssfx_*` shaders, no tessellation. One
-  `pipeline creation failed (vs206 ps205): Fragment input user(locn2) mismatching` per load.
+- The renderer's known defects (INTEGRATION.md): the 34 missing `ssfx_*` shaders, no tessellation. (The rain over interiors and the
+  `pipeline creation failed (vs206 ps205): Fragment input user(locn2) mismatching` once per load are fixed: the pixel function of the
+  water distortion pass is adapted to the vertex shader's packing, `fc780483`, which this run predates.)
 - **Quick use does nothing in a scripted start** (Mac, M5): the Quick 1 wheel slot and F1 on the keyboard both reach `quick_use_1`, `CInventory__eat` called from Lua
   returns true, but the medkit is not used (count 3 stays 3, health stays). Not the pad; for the gameplay session.
 - Flashlight and night vision were only seen reaching their actions: the scripted start has neither item. Check them in a normal game.
+- `sound: OpenAL: Can't create source. Error: Out of Memory.` once at start-up with 256 targets (the engine continues); `bin/alsoft.ini` is not on the
+  iPad (the push script skips `bin/`), so OpenAL Soft runs on its defaults.
+- Runtime changes of `vid_mode` through the console work, but the engine saves the last one at exit, and it becomes the next start's size.
+- The main menu's "Exit to Windows" quits the app.
+- The Load game list was not screenshotted again after the colour fix (it uses the same Lua colours as the inventory list, which was). In a script the virtual
+  pad's analog stick moves the cursor sprite but the menu does not see a hover or a click from it; the D-pad nudge (96 UI units a step) does click.
+- The save screenshot (`.dds`) next to a save is black (the Load game preview shows black or noise).
 
 ## Controller
 

@@ -224,6 +224,10 @@ IC BOOL test_Level(occD* depth, int dim, float _x0, float _y0, float _x1, float 
 
 BOOL occRasterizer::test(float _x0, float _y0, float _x1, float _y1, float _z)
 {
+	// a box that projects to NaN or infinity (a degenerate transform in the first frames) cannot be proved hidden; the conversions
+	// below are undefined for it (x64 gave INT_MIN, arm64 gives 0)
+	if (!std::isfinite(_x0) || !std::isfinite(_y0) || !std::isfinite(_x1) || !std::isfinite(_y1) || !std::isfinite(_z))
+		return TRUE;
 	occD z = df_2_s32up(_z) + 1;
 	return test_Level(get_depth_level(0), occ_dim_0, _x0, _y0, _x1, _y1, z);
 	/*

@@ -169,6 +169,25 @@ bool vectorType(const std::string& t, std::string* base, int* width)
 }
 } // namespace
 
+void CompareInterpolants(const std::vector<Interpolant>& vertexOutputs, const std::vector<Interpolant>& pixelInputs,
+                         std::vector<Interpolant>* missing, std::vector<InterpolantPair>* mismatched)
+{
+    for (const Interpolant& in : pixelInputs)
+    {
+        const Interpolant* written = nullptr;
+        for (const Interpolant& out : vertexOutputs)
+            if (out.location == in.location)
+            {
+                written = &out;
+                break;
+            }
+        if (!written)
+            missing->push_back(in);
+        else if (written->type != in.type)
+            mismatched->push_back({in, *written});
+    }
+}
+
 std::string AdaptFragmentInputs(const std::string& msl, const std::vector<InterpolantPair>& pairs)
 {
     size_t open, close;

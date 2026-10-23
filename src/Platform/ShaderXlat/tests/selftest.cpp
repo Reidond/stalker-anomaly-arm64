@@ -5,6 +5,7 @@
 #include <cstdio>
 #include <filesystem>
 #include <map>
+#include <thread>
 
 using namespace shaderxlat;
 
@@ -149,6 +150,18 @@ int main()
     Result crash = translate("float4 main() : SV_Target { float x = 0; for (int i = 0; i < NOPE; ++i) x += NOPE; return x; }", "crash.ps",
                              macros, o, nullptr);
     CHECK(!crash.ok);
+
+    // ---- threads that use the crash guard and exit (one at a time: concurrent translation is not what this checks): the guard's
+    // per-thread alternate signal stack goes away with the thread. Handing the sanitizer runtime a stack it does not own is fatal at
+    // thread exit under ASan, and Darwin refuses to disable a stack when the size is left at zero, which freed an installed stack.
+    for (int t = 0; t < 6; ++t)
+        std::thread([&, t] {
+            Result a = translate("float4 main() : SV_Target { return float4(1, 2, 3, 4); }", "thread.ps", macros, o, nullptr);
+            CHECK(a.ok);
+            if (t % 2 == 0) // a fault on the thread: the handler must run on its alternate stack and return from it
+                CHECK(!translate("float4 main() : SV_Target { float x = 0; for (int i = 0; i < NOPE; ++i) x += NOPE; return x; }", "crash.ps",
+                                 macros, o, nullptr).ok);
+        }).join();
 
     // ---- cache
     const std::string dir = (std::filesystem::temp_directory_path() / "shaderxlat_selftest_cache").string();

@@ -1,0 +1,6 @@
+# An emission at night.
+1 console run_string xr_harness.env(0,30,"w_clear2")
+3 console run_string xr_harness.tp(-215,-8.5,-40.6,0)
+20 console run_string xr_harness.blowout(true, 1190)
+27 console screenshot 12_emission_night
+29 quit

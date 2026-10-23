@@ -1,0 +1,11 @@
+# Looking through a scope: a Dragunov with its 1P29 built on, drawn (key 2) and aimed (the zoom action).
+1 console run_string xr_harness.env(12,0,"w_clear1")
+3 console run_string xr_harness.tp(-2.8,2.8,82.7,200)
+8 console run_string xr_harness.weapon("wpn_svd_1p29")
+10 console run_string xr_harness.weapon("wpn_svd_1p29")
+12 key 2
+20 console screenshot 15_scope_hip
+21 console run_string xr_harness.zoom(true)
+26 console screenshot 15_scope
+27 console run_string xr_harness.zoom(false)
+29 quit
