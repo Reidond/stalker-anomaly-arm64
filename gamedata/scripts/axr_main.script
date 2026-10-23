@@ -14,6 +14,30 @@
 -- axr_options.ini
 config = ini_file_ex("axr_options.ltx",true)
 
+-- Apple (the Mac, the iPad): the options file the game writes lives in the app's appdata, next to the saves, not in the game folder. That
+-- one is read-only on the iPad, and on the Mac it is shared by every game that runs: the new-game values one game writes for its first
+-- update (character_creation) reached the first update of another and sent that player to the start of a new game. The copy in the game's
+-- config folder is only the default until the first save; the file in appdata wins once it exists.
+if jit and jit.os == "OSX" then
+	local fname = "axr_options.ltx"
+	local user = getFS():update_path('$app_data_root$', '')..fname
+	config.fname = user -- where save() writes
+	if config.ini ~= config then
+		local f = io.open(user, "rb")
+		if f then
+			local text = f:read("*a")
+			f:close()
+			if text and #text > 0 then
+				local ini = create_ini_file(text)
+				ini:set_override_names(true)
+				ini:set_readonly(false)
+				ini:save_at_end(false)
+				config.ini = ini
+			end
+		end
+	end
+end
+
 -- load default rspec when axr_options created first time
 if not (config:section_exist("temp")) then
 	get_console():execute("cfg_load " .. getFS():update_path('$game_config$', '').."rspec_default.ltx")
