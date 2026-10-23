@@ -3,6 +3,7 @@
 #
 #   tools/ios/ipad.sh build [config]          xcodebuild the anomaly scheme (default config: RelWithDebInfo), signed; XCODEBUILD_JOBS=n caps the jobs
 #   tools/ios/ipad.sh install                 install the built app over com.andriishafar.anomaly (Documents stay)
+#   tools/ios/ipad.sh install-app <anomaly.app>   install an app bundle built earlier (a saved copy of a build)
 #   tools/ios/ipad.sh run [app args...]       launch with --console (Ctrl-C detaches; the app keeps running)
 #   tools/ios/ipad.sh start [app args...]     launch without attaching the console
 #   tools/ios/ipad.sh script <file> [args]    copy a --script timeline to Documents/ and launch with it
@@ -66,6 +67,9 @@ case $cmd in
         app=$(app_for ${ANOMALY_CONFIG:-RelWithDebInfo})
         [[ -d $app ]] || die "no $app (run: tools/ios/ipad.sh build)"
         dc device install app --device "$device" "$app"
+        ;;
+    install-app)
+        dc device install app --device "$device" "${1:?path to an anomaly.app}"
         ;;
     run)
         dc device process launch --device "$device" --terminate-existing --console "${launch_env[@]}" "$bundle" "$@"
