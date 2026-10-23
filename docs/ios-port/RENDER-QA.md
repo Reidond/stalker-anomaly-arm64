@@ -37,7 +37,6 @@ Environment: `HARNESS_COLD_SHADERS=1` (empty shader cache), `HARNESS_ENV="VAR=va
 | `10_resize` | `vid_mode` / `rs_screenmode` changes at run time (device reset) |
 | `11_emission`, `12_emission_night` | the blowout's sky and light by day (red sky, and the white flash) and at night |
 | `13_fire_smoke` | the camp fire's flame and smoke, sample fire / smoke-with-distortion / radial-distortion effects of `particles.xr` |
-| `14_water` | the Cordon's pond from the bank |
 | `15_scope` | a Dragunov with its 1P29: the weapon and hands at the hip, then aimed through the scope |
 | `16_nightvision` | night vision on, at night in the Rookie village |
 

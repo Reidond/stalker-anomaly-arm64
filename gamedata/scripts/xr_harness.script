@@ -268,6 +268,21 @@ function weapon(section, slot)
 	log("weapon %s in slot %d", section, slot or 2)
 end
 
+-- the walkable ground height of the AI map around (x, z), one line per x: where the player may stand near a point of interest
+function ground(x, z, step, n)
+	for i = -n, n do
+		local line = {}
+		for j = -n, n do
+			local px, pz = x + i * step, z + j * step
+			local vid = level.vertex_id(vector():set(px, db.actor:position().y, pz))
+			local ok = vid and vid < 4000000000
+			local pos = ok and level.vertex_position(vid)
+			line[#line + 1] = ok and string.format("%.1f", pos.y) or "  - "
+		end
+		log("ground x=%.0f (z from %.0f by %d): %s", x + i * step, z - n * step, step, table.concat(line, " "))
+	end
+end
+
 -- what the player holds: the active item and the weapon slots
 function hands()
 	local a = db.actor:active_item()
