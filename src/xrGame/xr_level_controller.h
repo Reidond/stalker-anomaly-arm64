@@ -180,6 +180,7 @@ extern void CCC_RegisterInput();
 class CActor;
 class CWeapon;
 void xr_pad_install_hooks(); // once, at game start: pInput->pad_hooks (cursor jump, controller connection)
+bool xr_pad_paused_by_disconnect(); // the game is held because the last controller went away (HUD shows what to do)
 void xr_pad_ui_context(bool ui, const Fvector2& cursor); // a dialog needing the cursor opened (true) or closed (false)
 void xr_pad_update_actor(CActor* actor); // every frame for the controlled actor: health, bleeding, radiation, weapon state
 void xr_pad_on_hit(int hit_type, float power); // CActor::Hit for the controlled actor (ALife::EHitType, health lost)

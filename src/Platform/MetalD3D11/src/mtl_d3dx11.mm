@@ -509,6 +509,111 @@ bool EncodeCapture(const CaptureResult& image, int format, std::vector<uint8_t>*
 
 namespace
 {
+uint16_t pack565(int r, int g, int b) { return uint16_t(((r * 31 + 127) / 255) << 11 | ((g * 63 + 127) / 255) << 5 | ((b * 31 + 127) / 255)); }
+
+void unpack565(uint16_t c, int rgb[3])
+{
+    const int r = c >> 11, g = (c >> 5) & 63, b = c & 31;
+    rgb[0] = (r << 3) | (r >> 2);
+    rgb[1] = (g << 2) | (g >> 4);
+    rgb[2] = (b << 3) | (b >> 2);
+}
+
+// One 4x4 block of RGBA8 to BC1: the colour box's corners (pulled in by 1/16) as the two endpoints, every texel to its nearest of the
+// four colours between them. Not a best-fit compressor; it is for a 128x128 savegame thumbnail.
+void encodeBC1Block(const uint8_t* rgba, size_t stride, uint8_t out[8])
+{
+    int lo[3] = {255, 255, 255}, hi[3] = {0, 0, 0};
+    for (int y = 0; y < 4; ++y)
+        for (int x = 0; x < 4; ++x)
+            for (int c = 0; c < 3; ++c)
+            {
+                const int v = rgba[y * stride + x * 4 + c];
+                lo[c] = std::min(lo[c], v);
+                hi[c] = std::max(hi[c], v);
+            }
+    for (int c = 0; c < 3; ++c)
+    {
+        const int inset = (hi[c] - lo[c]) >> 4;
+        lo[c] += inset;
+        hi[c] -= inset;
+    }
+    uint16_t c0 = pack565(hi[0], hi[1], hi[2]), c1 = pack565(lo[0], lo[1], lo[2]);
+    if (c0 < c1)
+        std::swap(c0, c1);
+    uint32_t indices = 0;
+    if (c0 != c1) // equal endpoints: every index 0 (and c0 <= c1 would mean the 3-colour mode)
+    {
+        int palette[4][3];
+        unpack565(c0, palette[0]);
+        unpack565(c1, palette[1]);
+        for (int c = 0; c < 3; ++c)
+        {
+            palette[2][c] = (2 * palette[0][c] + palette[1][c]) / 3;
+            palette[3][c] = (palette[0][c] + 2 * palette[1][c]) / 3;
+        }
+        for (int i = 0; i < 16; ++i)
+        {
+            const uint8_t* p = rgba + (i / 4) * stride + (i % 4) * 4;
+            int best = 0, best_d = 1 << 30;
+            for (int k = 0; k < 4; ++k)
+            {
+                const int dr = p[0] - palette[k][0], dg = p[1] - palette[k][1], db = p[2] - palette[k][2];
+                const int d = dr * dr + dg * dg + db * db;
+                if (d < best_d)
+                {
+                    best_d = d;
+                    best = k;
+                }
+            }
+            indices |= uint32_t(best) << (2 * i);
+        }
+    }
+    std::memcpy(out, &c0, 2);
+    std::memcpy(out + 2, &c1, 2);
+    std::memcpy(out + 4, &indices, 4);
+}
+} // namespace
+
+namespace mtl_d3d11
+{
+// What D3DX11LoadTextureFromTexture into a BC1 texture and D3DX11SaveTextureToMemory(DDS) produce on Windows, from a captured frame: the whole
+// frame squeezed to size x size (savegame thumbnails are square), BC1 compressed, in a DX10-header DDS the loader of this shim reads.
+bool EncodeThumbnailDDS(const CaptureResult& image, uint32_t size, std::vector<uint8_t>* out)
+{
+    if (!out || size < 4 || size % 4 || image.width == 0 || image.height == 0 ||
+        image.rgba.size() != size_t(image.width) * image.height * 4)
+        return false;
+    const std::vector<uint8_t> small = resizeRGBA8(image.rgba, image.width, image.height, size, size);
+    const FormatInfo& fi = GetFormatInfo(DXGI_FORMAT_BC1_UNORM);
+    DDSHeader h{};
+    h.size = sizeof(DDSHeader);
+    h.flags = 0x1 | 0x2 | 0x4 | 0x1000 | 0x8;
+    h.height = size;
+    h.width = size;
+    h.pitchOrLinearSize = UINT(RowPitch(fi, size));
+    h.mipCount = 1;
+    h.pf.size = sizeof(DDSPixelFormat);
+    h.pf.flags = DDPF_FOURCC;
+    h.pf.fourCC = fourCC('D', 'X', '1', '0');
+    h.caps = 0x1000;
+    DDSHeaderDX10 ext{uint32_t(DXGI_FORMAT_BC1_UNORM), 3, 0, 1, 0};
+    out->assign(4 + sizeof(h) + sizeof(ext), 0);
+    std::memcpy(out->data(), &kDDSMagic, 4);
+    std::memcpy(out->data() + 4, &h, sizeof(h));
+    std::memcpy(out->data() + 4 + sizeof(h), &ext, sizeof(ext));
+    const size_t header = out->size();
+    out->resize(header + size_t(size / 4) * (size / 4) * 8);
+    for (uint32_t by = 0; by < size / 4; ++by)
+        for (uint32_t bx = 0; bx < size / 4; ++bx)
+            encodeBC1Block(&small[(size_t(by) * 4 * size + size_t(bx) * 4) * 4], size_t(size) * 4,
+                           out->data() + header + (size_t(by) * (size / 4) + bx) * 8);
+    return true;
+}
+} // namespace mtl_d3d11
+
+namespace
+{
 class MemBlob final : public ComObject<ID3D10Blob>
 {
 public:

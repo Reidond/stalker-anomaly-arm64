@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="windows-1251"?>
+
+<string_table>
+	<string id="st_pad_reconnect">
+		<text>Reconnect the controller to continue</text>
+	</string>
+
+	<string id="ui_mm_exit_game">
+		<text>Exit game</text>
+	</string>
+</string_table>

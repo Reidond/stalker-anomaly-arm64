@@ -1,0 +1,80 @@
+# Stands in the world for 5 minutes and logs a STATE / VIEW line every 5 s, for tools/ios/lifecycle_check.sh, which backgrounds the app, wakes it,
+# sends a memory warning and kills it behind the scenes from the Mac. The shell log has the lifecycle events, the background save and the frame rate.
+3 console r_screenshot_mode png
+6 console start server(ipad_test/single/alife/load) client(localhost)
+8 waitlevel 300 l01_escape
+10 key Space
+13 key Space
+16 padon
+18 pad cross 400
+22 pad cross 400
+26 console g_god on
+27 console run_string ipad_debug.tp(54.9, 3.5, 157.1)
+30 log LIFE ready
+35 console run_string ipad_debug.state("tick 35")
+40 console run_string ipad_debug.state("tick 40")
+45 console run_string ipad_debug.state("tick 45")
+50 console run_string ipad_debug.state("tick 50")
+55 console run_string ipad_debug.state("tick 55")
+60 console run_string ipad_debug.state("tick 60")
+65 console run_string ipad_debug.state("tick 65")
+70 console run_string ipad_debug.state("tick 70")
+75 console run_string ipad_debug.state("tick 75")
+80 console run_string ipad_debug.state("tick 80")
+85 console run_string ipad_debug.state("tick 85")
+90 console run_string ipad_debug.state("tick 90")
+95 console run_string ipad_debug.state("tick 95")
+100 console run_string ipad_debug.state("tick 100")
+105 console run_string ipad_debug.state("tick 105")
+110 console run_string ipad_debug.state("tick 110")
+115 console run_string ipad_debug.state("tick 115")
+120 console run_string ipad_debug.state("tick 120")
+125 console run_string ipad_debug.state("tick 125")
+130 console run_string ipad_debug.state("tick 130")
+135 console run_string ipad_debug.state("tick 135")
+140 console run_string ipad_debug.state("tick 140")
+142 log LIFE simulated UIKit memory warning
+142.1 lifecycle lowmemory
+145 console run_string ipad_debug.state("tick 145")
+150 console run_string ipad_debug.state("tick 150")
+150 log LIFE real memory pressure: 3.2 GB of ballast for 10 s
+150.1 ballast 3200
+155 console run_string ipad_debug.state("tick 155")
+160 console run_string ipad_debug.state("tick 160")
+161 unballast
+165 console run_string ipad_debug.state("tick 165")
+170 console run_string ipad_debug.state("tick 170")
+175 console run_string ipad_debug.state("tick 175")
+180 console run_string ipad_debug.state("tick 180")
+185 console run_string ipad_debug.state("tick 185")
+190 console run_string ipad_debug.state("tick 190")
+195 console run_string ipad_debug.state("tick 195")
+200 console run_string ipad_debug.state("tick 200")
+205 console run_string ipad_debug.state("tick 205")
+210 console run_string ipad_debug.state("tick 210")
+215 console run_string ipad_debug.state("tick 215")
+220 console run_string ipad_debug.state("tick 220")
+225 console run_string ipad_debug.state("tick 225")
+230 console run_string ipad_debug.state("tick 230")
+235 console run_string ipad_debug.state("tick 235")
+240 console run_string ipad_debug.state("tick 240")
+245 console run_string ipad_debug.state("tick 245")
+250 console run_string ipad_debug.state("tick 250")
+255 console run_string ipad_debug.state("tick 255")
+260 console run_string ipad_debug.state("tick 260")
+265 console run_string ipad_debug.state("tick 265")
+270 console run_string ipad_debug.state("tick 270")
+275 console run_string ipad_debug.state("tick 275")
+280 console run_string ipad_debug.state("tick 280")
+285 console run_string ipad_debug.state("tick 285")
+290 console run_string ipad_debug.state("tick 290")
+295 console run_string ipad_debug.state("tick 295")
+300 console run_string ipad_debug.state("tick 300")
+305 console run_string ipad_debug.state("tick 305")
+310 console run_string ipad_debug.state("tick 310")
+315 console run_string ipad_debug.state("tick 315")
+320 console run_string ipad_debug.state("tick 320")
+325 console run_string ipad_debug.state("tick 325")
+330 console run_string ipad_debug.state("tick 330")
+335 log LIFE done
+340 quit

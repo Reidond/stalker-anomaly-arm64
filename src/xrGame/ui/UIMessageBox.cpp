@@ -328,6 +328,28 @@ void CUIMessageBox::OnYesOk()
 	};
 }
 
+#ifdef XR_PLATFORM_APPLE
+bool CUIMessageBox::OnEscape()
+{
+	switch (m_eMessageBoxStyle)
+	{
+	case MESSAGEBOX_YES_NO_CANCEL:
+		GetMessageTarget()->SendMessage(m_UIButtonCancel, MESSAGE_BOX_CANCEL_CLICKED);
+		GetMessageTarget()->SendMessage(this, MESSAGE_BOX_CANCEL_CLICKED);
+		return true;
+	case MESSAGEBOX_YES_NO:
+	case MESSAGEBOX_YES_NO_COPY:
+	case MESSAGEBOX_QUIT_GAME:
+	case MESSAGEBOX_QUIT_WINDOWS:
+		GetMessageTarget()->SendMessage(m_UIButtonNo, MESSAGE_BOX_NO_CLICKED);
+		GetMessageTarget()->SendMessage(this, MESSAGE_BOX_NO_CLICKED);
+		return true;
+	default:
+		return false;
+	}
+}
+#endif
+
 void CUIMessageBox::SendMessage(CUIWindow* pWnd, s16 msg, void* pData)
 {
 	if (msg == BUTTON_CLICKED)

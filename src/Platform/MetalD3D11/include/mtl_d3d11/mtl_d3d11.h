@@ -74,6 +74,8 @@ bool PollCapture(IDXGISwapChain1* pSwapChain, CaptureResult* out);
 
 // Encodes a capture as JPEG (format 0) or PNG (format 1) with ImageIO.
 bool EncodeCapture(const CaptureResult& image, int format, std::vector<uint8_t>* out);
+// A capture as a savegame thumbnail: the whole frame squeezed to `size` x `size` (a multiple of 4), BC1 compressed, in a DDS file image.
+bool EncodeThumbnailDDS(const CaptureResult& image, uint32_t size, std::vector<uint8_t>* out);
 
 // Debug aid: the contents of mip 0 / slice 0 of a (non-multisampled) texture as an 8-bit image, to look at intermediate
 // render targets: float colour, signed normals, depth, stencil. Flushes the context first. Colour: RGB as they are;
