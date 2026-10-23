@@ -8,6 +8,9 @@
 
 #pragma once
 
+#include <deque>
+#include <unordered_set>
+
 #include "random32.h"
 #include "alife_space.h"
 #include "game_graph_space.h"
@@ -60,6 +63,13 @@ protected:
 	bool m_can_register_objects;
 	// temp
 	ALife::SCHEDULE_P_VECTOR m_tpaCombatGroups[2];
+
+private:
+	// bookkeeping of defer_destroy, which the const ai().alife() has to be able to call
+	mutable std::deque<CSE_Abstract*> m_deferred_destroy;
+	mutable std::unordered_set<CSE_Abstract*> m_deferred_destroy_set;
+	mutable xrCriticalSection m_deferred_destroy_lock;
+	void flush_deferred_destroy();
 
 protected:
 	IC CALifeSimulatorHeader& header();
@@ -121,6 +131,13 @@ public:
 	void append_item_vector(ALife::OBJECT_VECTOR& tObjectVector, ALife::ITEM_P_VECTOR& tItemList);
 	shared_str level_name() const;
 	void on_death(CSE_Abstract* killed, CSE_Abstract* killer);
+
+	// Parks `object` instead of destroying it. Scripts keep the server entities they got from the simulator and read them after the
+	// simulator has dropped them: `alife():register(se_obj)` replaces the object it is given and the script goes on reading the old
+	// one; axr_companions keeps squads in a table and reads them after release() freed them. Nothing can tell when the last Lua
+	// reference is gone, so a parked entity lives as long as the simulator, and with it the Lua state that could hold it
+	// (unload()), at most deferred_destroy_cap of them (the oldest goes first). Callable from the ALife update thread.
+	void defer_destroy(CSE_Abstract* object) const;
 
 public:
 	ALife::ITEM_P_VECTOR m_temp_item_vector;
