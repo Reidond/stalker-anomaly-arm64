@@ -267,9 +267,10 @@ Limits of these numbers: the places are quiet ones (nobody fights; the player is
 ## Checks
 
 - `ctest -R lua_cache_test`: 153 checks (stale source, addon override and its removal, corrupt and foreign entries, error messages, unusable directory, warm and purge, hash, two threads, the read-ahead).
-- Lua behaviour unchanged: `tools/sweep/run.sh smoke` on the ASan+UBSan build, four completed runs of the shipped configuration or its predecessors (cache on, read-ahead off; 263 to 286 s), each
-  `DONE plan smoke` with 0 ASan reports and the UBSan reports of the renderer that [SANITIZERS.md](SANITIZERS.md) lists (null `ShaderElement` and `Fmatrix` references, NaN into `iFloor`), no crash
-  files. One run in eight hit the `reprocess_spawn` use-after-free of SANITIZERS.md open item 1. Three of the nine runs stalled after the level change to Garbage (see above); the sweep does
-  that on other branches too.
+- Lua behaviour unchanged: `tools/sweep/run.sh smoke` on the ASan+UBSan build, nine runs over the course of the work: five completed (`DONE plan smoke`, 263 to 386 s: two with the final
+  configuration, two with the read-ahead on, one with the first version of the cache), three stalled after the level change to Garbage (see above) and one was cut short after
+  reaching its third phase (cache off). Every completed run has 0 ASan reports, the UBSan reports of the renderer that [SANITIZERS.md](SANITIZERS.md) lists (null `ShaderElement` and `Fmatrix`
+  references, NaN into `iFloor`) and no crash files; one of the stalled runs also hit the `reprocess_spawn` use-after-free of SANITIZERS.md open item 1. The sweep stalls
+  on other branches too (see above).
 - The scripts that were in the archives and the overlay run from the cache as from the text: a level load with the cache warm loads 473 of 476 files from it, and the sweep plays through.
 - Windows: nothing of this is compiled there; the hooks in shared files are no-ops (`script_perf.h` stubs) or generic (`luabind::set_call_hooks`).
