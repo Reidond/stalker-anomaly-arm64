@@ -106,28 +106,74 @@ unusable directories; warm and purge; the hash; two threads storing and loading 
 
 ## Measurements: the Mac (MacBook Pro 14", M2 Pro)
 
-Unattended runs of `tools/render_harness/lua_measure.sh` on the `h_cordon` save (`RelWithDebInfo`): 34 s per place after 10 s of settling, three sets of runs
-(Quality and Performance, the JIT on) and two with the JIT off (`-nojit`: the interpreter, which is what the iPad runs). **The Mac was not quiet**: the port's
-other sessions were building and running games on it, load average 70 to 500 and one to four other `anomaly` processes during every run. So the frame times
-and rates in those runs belong to that load (a Quality "village" window ran at 15 fps once), not to the machine, and the "share of the frame" with them. The
-Lua time of a frame is less affected, and the table gives the thread's CPU time, not the wall time. The iPad is a quiet device: its numbers follow below.
+Unattended runs of `tools/render_harness/lua_measure.sh` on the `h_cordon` save (`RelWithDebInfo`): 34 s per place after 10 s of settling, five sets with the JIT
+on and four with it off (`-nojit`: the interpreter, which is what the iPad runs). **The Mac was not quiet** for most of them: the port's other sessions were building
+and running games on it (load average 12 to 500, one to four other `anomaly` processes). The frame times and rates of a set belong to the load of that moment (a
+Quality window ran at 15 fps once), not to the machine; the Lua time of a frame is less affected, and the tables give the thread's CPU time, not the wall time. The
+last set (`lua-mac5`, load 17 to 54, two other games) is the cleanest and is the one shown in full; the ranges are over all sets. The iPad is a quiet device: its
+numbers follow below.
 
-Lua per frame on the main thread, CPU ms, range over the sets of runs (the wall time is 2 to 7 % higher):
+Cleanest set, JIT on (Quality capped at 60 fps, Performance at 120 on this display):
+
+| Place | frame ms | Lua ms (CPU) | Lua p50 / p95 / max | share of the frame | binders | other | calls into Lua / frame |
+|---|---:|---:|---|---:|---:|---:|---:|
+| Quality, Cordon field | 17.3 | 2.09 | 1.9 / 4.1 / 69 | 12 % | 1.49 | 0.60 | 90 |
+| Quality, Rookie village | 17.4 | 2.16 | 1.9 / 4.1 / 26 | 12 % | 1.43 | 0.69 | 100 |
+| Quality, Bar | 16.7 | 1.72 | 1.4 / 4.1 / 17 | 10 % | 0.86 | 0.80 | 108 |
+| Performance, Cordon field | 12.3 | 1.79 | 1.5 / 3.8 / 43 | 15 % | 1.30 | 0.50 | 69 |
+| Performance, Rookie village | 9.3 | 1.44 | 1.1 / 3.5 / 25 | 16 % | 0.96 | 0.45 | 73 |
+| Performance, Bar | 9.3 | 1.21 | 0.8 / 3.4 / 17 | 13 % | 0.64 | 0.55 | 71 |
+
+Lua per frame on the main thread, CPU ms, range over the sets of runs:
 
 | | Quality field | Quality village | Quality Bar | Performance field | Performance village | Performance Bar |
 |---|---:|---:|---:|---:|---:|---:|
-| JIT on | 2.3 to 3.2 | 2.0 to 3.7 | 1.5 to 1.7 | 1.8 to 2.3 | 1.8 to 2.9 | 1.5 |
-| JIT off (interpreter) | 2.5 to 3.1 | 2.0 to 2.1 | 2.0 | 2.2 to 2.4 | 1.5 to 2.1 | 0.8 to 1.2 |
+| JIT on | 2.1 to 3.2 | 2.0 to 3.7 | 1.5 to 1.7 | 1.8 to 2.6 | 1.4 to 2.9 | 1.2 to 2.2 |
+| JIT off (interpreter) | 2.1 to 3.1 | 2.0 to 2.3 | 1.5 to 2.0 | 2.2 to 3.1 | 1.6 to 2.1 | 0.8 to 1.6 |
 
 - **Lua is 0.8 to 3.7 ms of a frame, the same with or without the JIT.** The interpreter is not slower here because the time is not in interpreted bytecode: the
-  profile below puts about half of it in engine functions that the scripts call, a quarter in the garbage collector's work inside allocations, and a fifth in
+  profile below puts about half of it in the engine functions that the scripts call, a quarter in the garbage collector's work inside allocations and a fifth in
   bytecode.
-- The binders (`bind_stalker`, `bind_monster`, `generic_object_binder`, ... `update`) are about two thirds of it: 0.6 to 2.3 ms. Every per-object and per-frame
-  callback (`actor_on_update`, `npc_on_update`, `squad_on_update`, `npc_on_hear_callback`, ... through `SendScriptCallback`) runs inside them; the heaviest is
-  `actor_on_update` at 0.4 to 0.6 ms, then `npc_on_hear_callback` (0.25 ms and 37 calls per frame in the Bar), `squad_on_update` (0.07 to 0.12) and `npc_on_update` (0.05).
-- The script threads (`CScriptProcess`) are empty in Anomaly 1.5.3 (0.000 ms). The `set_callback` object callbacks (hit, death, ...) cost 0.01 to 0.09 ms between
-  events. The A-Life update does not touch the main thread: its Lua runs on the worker thread (`mtALife`), 0.2 to 0.8 ms per frame there.
-- **The collector runs on a second thread**: `mtLUA_GC` does its steps there in parallel with the renderer (`Device.seqParallel`), 1.4 to 6.6 ms per frame, and
-  nothing waits for it. The collector's work inside allocations stays on the main thread and is part of the Lua time above.
-- Frames with a long Lua part exist: p95 is 3.6 to 7.4 ms, the maximum 15 to 108 ms (a frame that loads or spawns many objects). The p95 is under a third of a
-  Quality frame (33 ms) and under half of a Performance one (16.7 ms).
+- The binders (`bind_stalker`, `bind_monster`, `generic_object_binder`, ... `update`) are about two thirds of it, 0.6 to 2.3 ms. The per-object and per-frame callbacks
+  (`actor_on_update`, `npc_on_update`, `squad_on_update`, `npc_on_hear_callback`, ... through `SendScriptCallback`) run inside them; the heaviest is `actor_on_update`
+  at 0.4 to 0.6 ms, then `npc_on_hear_callback` (0.25 ms and 37 calls per frame in the Bar), `squad_on_update` (0.07 to 0.12) and `npc_on_update` (0.05).
+- The script threads (`CScriptProcess`) are empty in Anomaly 1.5.3 (0.000 ms). The `set_callback` object callbacks (hit, death, ...) cost 0.01 to 0.09 ms between events.
+  Lua that runs on other threads (the A-Life update runs on a worker, `mtALife`) is 0.2 to 0.6 ms per frame.
+- **The collector runs on a second thread**: `mtLUA_GC` does its steps there, in parallel with the renderer (`Device.seqParallel`), 1.4 to 7.6 ms per frame, and nothing
+  waits for it. The collector's work inside allocations stays on the main thread and is part of the Lua time above.
+- Frames with a long Lua part exist: p95 is 3.4 to 7.4 ms and the maximum 15 to 108 ms (a frame that loads or spawns many objects).
+
+### Where the Lua time goes (the interpreter profile)
+
+`lua_measure.sh -P -j -S 60`, Quality, JIT off, 2762 to 4427 samples (1 ms) per place:
+
+| VM state | Cordon field | Village | Bar |
+|---|---:|---:|---:|
+| bytecode in the interpreter | 20.7 % | 20.2 % | 21.8 % |
+| C functions called from scripts (engine exports, `string.*`, `table.*`) | 52.2 % | 53.5 % | 52.0 % |
+| garbage collector (steps inside allocations) | 27.0 % | 26.3 % | 26.1 % |
+
+The profile is flat. The heaviest functions (self time as a share of the Lua time; engine calls included): `bind_campfire` `actor_on_update` 6 to 7 %,
+`simulation_objects.get_server_entity` 3 to 6.5 % (one C call, `alife_object`), `anomaly_restrictor_update` 4.6 to 5.7 %, `actor_effects.HUD_fog` 2.9 to 4.5 %,
+`xr_motivator:hear_callback` 3.6 to 5.9 %, `time_global` 1.5 to 3 %, `_g.script` `// called from engine!` wrappers 2.7 %; the cumulative `SendScriptCallback` is 31 to 34 %,
+`actor_binder:update` 22 to 25 %, `motivator_binder:update` 22 %, `generic_object_binder:update` 9 to 10 %, `state_manager:update` 11 to 13 %, `sim_squad_scripted:update` 6 to 7 %.
+No function is above 7 %, and half of the time is already inside C. (An earlier profile with LuaJIT's own SIGPROF clock was wrong: macOS ticks it every 10 ms of
+the whole process's CPU time, and a tick that lands while the engine runs C++ is booked to the next Lua function. The sampler now runs on a thread that signals only
+while the main thread is inside a call into Lua.)
+
+### Level loads and the bytecode cache on the Mac
+
+The h_cordon save loads 476 scripts (6.58 MB of text) at the level load: from the archives (`file read`), compiled (`compile / cache`) and run (main chunks). Four launches
+per cache state, the quietest set (load 12 to 15, two other games); the load time is from the `start` command to `level ready`:
+
+| Cache | seconds to level ready | Lua part of the load ms | file read | compile / cache | run main chunks |
+|---|---:|---:|---:|---:|---:|
+| off (`-no_lua_cache`) | 5.8 to 8.3 | 462 to 568 | 10 to 14 | 94 to 107 | 353 to 449 |
+| cold (empty: compile and store 407 entries) | 6.4 to 7.4 | 640 to 698 | 12 to 19 | 249 to 301 | 371 to 405 |
+| warm | 5.2 to 7.9 | 419 to 559 | 9 to 18 | 74 to 111 | 336 to 440 |
+
+- **The cache does not shorten the load on the Mac.** Compiling 6.58 MB takes LuaJIT about 100 ms (66 MB/s); loading the bytecode is 10 to 15 ms of that, but reading 474 small
+  files costs 59 to 91 ms there (an endpoint-security agent on this Mac makes every `open` slow: 130 to 190 µs a file), so a warm load is 74 to 111 ms against 94 to 107 from
+  the text. Standalone (`lua_cache_test --bench`, the same scripts, files in the page cache) the same work is 36 to 50 ms against 100 to 135. The level load itself is 5 to 8 s
+  and the scripts are 0.45 to 0.57 s of it; **running the main chunks (350 to 450 ms) is the Lua cost of a load, not compiling.**
+- A cold start costs 0.15 to 0.2 s more once (the entries are written); `lua_cache warm` does that in one go.
