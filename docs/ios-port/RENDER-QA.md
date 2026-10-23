@@ -73,6 +73,36 @@ Checked and fine in the scenes: sky, fog, sun and spot-light shadows, particles 
 the PDA map, text in all fonts, the main menu, the loading screen. Not exercised: SMAA/other AA modes, HDR10, the 3D PDA, weapon
 HUD models (the scenes carry no weapon in hand), MP maps.
 
+### Visual pass (M5)
+
+Every scene above, in four configurations, looked at one by one: `mac-pro` Quality (native 1.0) and Performance (MetalFX 0.7), and the
+iPad's `ipad-8gb` profile on the Mac (unlocked) in Quality (0.6) and Performance (0.42) with `r__upscaler metalfx`. 76 runs with the final
+build: no crash, no shader-linkage line, no `pipeline creation failed` (`HARNESS_CONSOLE`, tools/render_harness/run_scene.sh).
+There is no PC reference at hand; the pictures were judged against what Anomaly 1.5.3 looks like.
+
+| Scene | Verdict |
+|---|---|
+| Main menu, loading screen, the 17-stage load bar | right (the bar fills stage by stage) |
+| Cordon by day, in rain, at night with the torch, the trader's bunker, the hut in heavy rain | right; the rain does not draw indoors; sun and torch shadows, camp fire and its smoke, wet ground, fog |
+| Inventory, PDA (tasks and map), the trader's talk window | right: icons, colours, fonts, portrait slot (the player's is the stock `NO DATA` picture) |
+| Far terrain (four views from 35 m up) | right: terrain beyond 240 m, sky, fog, the railway bridge |
+| Emission by day (red sky, the flash) and at night | right |
+| Fire, smoke and distortion particles, explosion | right (blend modes, soft particles, the distortion pass) |
+| Weapon in hands (rifle and hands, knife) | right |
+| Scope, aimed | **fixed**: solid magenta and purple (above); the lens shows the zoomed scene with the reticle |
+| Night vision | right with the device in the torch slot (the goggle frame and the cyan grade) |
+
+What is not right or not checked:
+
+* **Water.** The Cordon's only water sheet (`effects\water`, 16 m wide at y -9.9) lies under the ground, so nothing shows; the
+  `water_regular` and `waterd` draws are in every outdoor trace and build without errors. The Garbage's and Yantar's lakes could not be
+  framed from a script in the time available (a forest in the way; the lake's AI map is not where the visual is), so no picture of open
+  water was checked. Soft water, the shore blend and `waterd`'s distortion stay unverified by eye.
+* **Blood splashes** on the camera and the walls in some Cordon shots (the start of the harness save has a skirmish; the hit effect plays
+  although the harness zeroes the damage). Not a renderer fault.
+* A crash in `CPHCommander::update` (`CLevel::OnFrame`) after a teleport, 2 of 80 runs: the known heap-corruption class (stability session).
+* Not checked: SMAA and the other AA modes, HDR10, the 3D PDA, heat vision (its shader is not in the data), the `ssfx_*` features (not in the data).
+
 ### Open
 
 * **Heap corruption in `preproc_free_macro`** reported from the iPad (about 4 in 25 runs): not reproduced on the Mac. About 7,000
