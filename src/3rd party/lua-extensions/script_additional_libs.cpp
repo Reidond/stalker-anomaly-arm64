@@ -396,23 +396,42 @@ int open_table(lua_State *L)
 // Scripts hand the engine's virtual paths ('\\' separators, roots from getFS():update_path) to io.open and friends.
 // The engine installs xr_native_path here; lfs.c (lfs.dir, lfs.mkdir, ...) uses the same hook.
 extern "C" const char *(*lfs_native_path_hook)(const char *);
+// For the calls that only read (io.lines, loadfile, dofile, io.open in "r" mode): also finds a file a mod provides, which lies in the
+// mod's folder and not at the virtual path. Writes never use it, so nothing is ever written into a mod.
+static const char *(*lfs_read_path_hook)(const char *) = NULL;
 
 void lua_ext_set_native_path_hook(const char *(*hook)(const char *))
 {
     lfs_native_path_hook = hook;
 }
 
-// Upvalue 1: the wrapped function, 2: how many leading arguments are paths.
+void lua_ext_set_read_path_hook(const char *(*hook)(const char *))
+{
+    lfs_read_path_hook = hook;
+}
+
+// How a wrapped function uses its path arguments
+enum { PATH_WRITE = 0, PATH_READ = 1, PATH_OPEN = 2 /* io.open: read when the mode (argument 2) is "r" / "rb" */ };
+
+// Upvalue 1: the wrapped function, 2: how many leading arguments are paths, 3: PATH_*.
 static int native_path_call(lua_State *L)
 {
     if (lfs_native_path_hook)
     {
         int paths = (int) lua_tointeger(L, lua_upvalueindex(2));
+        const int use = (int) lua_tointeger(L, lua_upvalueindex(3));
+        bool reads = use == PATH_READ;
+        if (use == PATH_OPEN)
+        {
+            const char *mode = lua_type(L, 2) == LUA_TSTRING ? lua_tostring(L, 2) : "r";
+            reads = mode[0] == 'r' && !strchr(mode, '+');
+        }
+        const char *(*hook)(const char *) = (reads && lfs_read_path_hook) ? lfs_read_path_hook : lfs_native_path_hook;
         for (int i = 1; i <= paths && i <= lua_gettop(L); ++i)
         {
             if (lua_type(L, i) == LUA_TSTRING)
             {
-                lua_pushstring(L, lfs_native_path_hook(lua_tostring(L, i)));
+                lua_pushstring(L, hook(lua_tostring(L, i)));
                 lua_replace(L, i);
             }
         }
@@ -423,7 +442,7 @@ static int native_path_call(lua_State *L)
     return lua_gettop(L);
 }
 
-static void wrap_path_function(lua_State *L, const char *lib, const char *name, int paths)
+static void wrap_path_function(lua_State *L, const char *lib, const char *name, int paths, int use)
 {
     if (lib)
         lua_getglobal(L, lib);
@@ -435,7 +454,8 @@ static void wrap_path_function(lua_State *L, const char *lib, const char *name, 
         if (lua_isfunction(L, -1))
         {
             lua_pushinteger(L, paths);
-            lua_pushcclosure(L, native_path_call, 2);
+            lua_pushinteger(L, use);
+            lua_pushcclosure(L, native_path_call, 3);
             lua_setfield(L, -2, name);
         }
         else
@@ -446,12 +466,12 @@ static void wrap_path_function(lua_State *L, const char *lib, const char *name, 
 
 static void open_native_paths(lua_State *L)
 {
-    wrap_path_function(L, "io", "open", 1);
-    wrap_path_function(L, "io", "lines", 1);
-    wrap_path_function(L, "os", "remove", 1);
-    wrap_path_function(L, "os", "rename", 2);
-    wrap_path_function(L, NULL, "loadfile", 1);
-    wrap_path_function(L, NULL, "dofile", 1);
+    wrap_path_function(L, "io", "open", 1, PATH_OPEN);
+    wrap_path_function(L, "io", "lines", 1, PATH_READ);
+    wrap_path_function(L, "os", "remove", 1, PATH_WRITE);
+    wrap_path_function(L, "os", "rename", 2, PATH_WRITE);
+    wrap_path_function(L, NULL, "loadfile", 1, PATH_READ);
+    wrap_path_function(L, NULL, "dofile", 1, PATH_READ);
 }
 /******************** NATIVE PATHS END ********************/
 #endif

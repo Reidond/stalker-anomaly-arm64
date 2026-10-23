@@ -52,6 +52,7 @@ if(NOT ANOMALY_IOS)
     add_subdirectory(tools/ode_smoke)
     add_subdirectory(tools/luabind_smoke)
     add_subdirectory(tools/lua_cache_test)
+    add_subdirectory(tools/mods_mount_test)
 endif()
 add_subdirectory(tools/xrcore_smoke)
 

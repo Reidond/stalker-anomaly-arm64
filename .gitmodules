@@ -38,3 +38,11 @@
 	path = external/sse2neon
 	url = https://github.com/DLTcollab/sse2neon.git
 	shallow = true
+[submodule "external/libarchive"]
+	path = external/libarchive
+	url = https://github.com/libarchive/libarchive.git
+	shallow = true
+[submodule "external/xz"]
+	path = external/xz
+	url = https://github.com/tukaani-project/xz.git
+	shallow = true
