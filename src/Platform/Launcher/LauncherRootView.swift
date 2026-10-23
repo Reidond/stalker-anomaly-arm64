@@ -1,4 +1,5 @@
-// The launcher's root: the current screen, the hint bar, the cards on top of it, and the wiring of focus, file picker and toasts.
+// The launcher's root: a NavigationStack over home, the hint bar for pad and keyboard, the sheets, and the wiring of the file
+// picker and toasts.
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -6,40 +7,48 @@ struct LauncherRootView: View {
     @ObservedObject var model: LauncherModel
 
     var body: some View {
-        ZStack {
-            LauncherBackground()
-            VStack(spacing: 0) {
-                screen
-                    .id(model.screen)
-                    .transition(.opacity)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                HintBar(hints: hints)
-            }
-            .allowsHitTesting(!model.modalActive)
-
-            ImportOverlay(imports: model.imports)
-            if let id = model.removalCandidate { RemoveConfirmation(id: id) }
-
-            if let toast = model.toast {
-                VStack {
-                    Spacer()
-                    ToastView(toast: toast).padding(.bottom, 64)
+        NavigationStack(path: $model.path) {
+            HomeView()
+                .navigationDestination(for: Screen.self) { screen in
+                    switch screen {
+                    case .home: HomeView()
+                    case .mods: ModsView()
+                    case .details(let id): DetailsView(id: id)
+                    case .add: AddModView()
+                    case .browse: BrowseView()
+                    }
                 }
-                .transition(.move(edge: .bottom).combined(with: .opacity))
-                .allowsHitTesting(false)
-            }
-            if model.launching {
-                Color.black.opacity(0.55).ignoresSafeArea()
-                    .overlay(ProgressView().controlSize(.large).tint(Theme.accent))
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) { HintBar(hints: hints) }
+        .overlay(alignment: .bottom) {
+            if let toast = model.toast {
+                ToastView(toast: toast)
+                    .padding(.bottom, 72)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .allowsHitTesting(false)
             }
         }
-        .coordinateSpace(name: "launcher")
-        .onPreferenceChange(FocusFramesKey.self) { frames in model.focus.update(frames: frames) }
-        .environmentObject(model)
-        .environmentObject(model.focus)
-        .animation(.easeOut(duration: 0.2), value: model.imports.isActive)
-        .animation(.easeOut(duration: 0.2), value: model.removalCandidate)
-        .animation(.easeOut(duration: 0.2), value: model.toast)
+        .overlay {
+            if model.launching {
+                ZStack {
+                    Color.black.opacity(0.25)
+                    ProgressView().controlSize(.large).padding(24).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                }
+                .ignoresSafeArea()
+            }
+        }
+        .sheet(isPresented: Binding(get: { model.imports.isActive }, set: { if !$0 { model.imports.back() } })) {
+            ImportSheet(imports: model.imports)
+                .environmentObject(model)
+                .environmentObject(model.focus)
+        }
+        .sheet(isPresented: Binding(get: { model.removalCandidate != nil }, set: { if !$0 { model.removalCandidate = nil } })) {
+            if let id = model.removalCandidate {
+                RemoveSheet(id: id)
+                    .environmentObject(model)
+                    .environmentObject(model.focus)
+            }
+        }
         .fileImporter(isPresented: $model.showFilePicker, allowedContentTypes: ModFileTypes.importable, allowsMultipleSelection: false) { result in
             switch result {
             case .success(let urls):
@@ -48,19 +57,13 @@ struct LauncherRootView: View {
                 model.show("Could not open the file: \(error.localizedDescription)", error: true)
             }
         }
-        .preferredColorScheme(.dark)
+        .environmentObject(model)
+        .environmentObject(model.focus)
+        .animation(.easeOut(duration: 0.2), value: model.toast)
+        .animation(.easeOut(duration: 0.2), value: model.focus.device)
+        // a touch or a click is the pointer again: the pad's focus ring and the hints go away
+        .simultaneousGesture(TapGesture().onEnded { model.focus.device = .pointer })
         .tint(Theme.accent)
-    }
-
-    @ViewBuilder
-    private var screen: some View {
-        switch model.screen {
-        case .home: HomeView()
-        case .mods: ModsView()
-        case .details(let id): DetailsView(id: id)
-        case .add: AddModView()
-        case .browse: BrowseView()
-        }
     }
 
     private var hints: [Hint] {
@@ -72,8 +75,8 @@ struct LauncherRootView: View {
             return [Hint(glyph: .dpad, key: "↑↓", text: "Move"), Hint(glyph: .cross, key: "↩", text: "Select"),
                     Hint(glyph: .options, key: "P", text: "Play")]
         case .mods:
-            return [Hint(glyph: .dpad, key: "↑↓", text: "Move"), Hint(glyph: .cross, key: "↩", text: "Switch on/off"),
-                    Hint(glyph: .triangle, key: "I", text: "Details"), Hint(glyph: .square, key: "⌥↑↓", text: "Hold and ↑↓: reorder"),
+            return [Hint(glyph: .dpad, key: "↑↓", text: "Move"), Hint(glyph: .cross, key: "↩", text: "Switch On/Off"),
+                    Hint(glyph: .triangle, key: "I", text: "Details"), Hint(glyph: .square, key: "⌥↑↓", text: "Hold + D-pad: Reorder"),
                     Hint(glyph: .circle, key: "esc", text: "Back")]
         case .browse:
             return [Hint(glyph: .circle, key: "esc", text: "Back")]

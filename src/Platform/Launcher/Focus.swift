@@ -1,6 +1,6 @@
-// Console-style focus: one focused item at a time, moved by the D-pad, the stick or the arrow keys, activated with Cross / Return.
-// Every focusable view reports its frame; the store picks the nearest item in the direction pressed. Touch and mouse go
-// straight to the views and only set the focus on the way.
+// Pad and keyboard navigation on top of the stock SwiftUI controls. The model says which rows can be reached on the current screen
+// (FocusItem, in reading order); D-pad up/down moves along them, Cross runs the row's action, Triangle its secondary one. The
+// views only draw the focus (a ring on the row) and scroll to it; touch and the mouse go to the controls as usual.
 import SwiftUI
 
 enum Direction { case up, down, left, right }
@@ -10,120 +10,69 @@ enum PadButton: Int32 {
     case up = 0, down, left, right
     case confirm       // Cross, Return
     case back          // Circle, Escape
-    case square        // reorder (hold) / secondary
+    case square        // reorder (hold)
     case triangle      // details
     case options       // Options / Start: Play
     case leftShoulder, rightShoulder
     case create        // Create / Share: unused
 }
 
-enum InputDevice { case touch, pad, keyboard }
+/// Which device was used last: the focus ring and the hint bar only show for the pad and the keyboard.
+enum InputDevice { case pointer, pad, keyboard }
 
-/// What a focusable view does when it is activated (Cross / Return) or its secondary action is asked for (Triangle). A new box
-/// is made every time the view's body runs, so the store never calls a closure that captured old state.
-final class FocusActions: Equatable {
-    let enabled: Bool
-    let activate: () -> Void
-    let secondary: (() -> Void)?
-
-    init(enabled: Bool, activate: @escaping () -> Void, secondary: (() -> Void)?) {
-        self.enabled = enabled
-        self.activate = activate
-        self.secondary = secondary
-    }
-
-    static func == (lhs: FocusActions, rhs: FocusActions) -> Bool { lhs === rhs }
-}
-
-/// What a focusable view reports up the tree: its frame in the launcher's coordinate space, the scope it belongs to and its actions.
-struct FocusFrame: Equatable {
-    var rect: CGRect
-    var scope: String
-    var isDefault: Bool
-    var actions: FocusActions
-}
-
-struct FocusFramesKey: PreferenceKey {
-    static var defaultValue: [String: FocusFrame] = [:]
-    static func reduce(value: inout [String: FocusFrame], nextValue: () -> [String: FocusFrame]) {
-        value.merge(nextValue()) { $1 }
-    }
+struct FocusItem {
+    let id: String
+    var enabled = true
+    var isDefault = false
+    var activate: () -> Void
+    var secondary: (() -> Void)?
 }
 
 @MainActor
 final class FocusStore: ObservableObject {
     @Published private(set) var focusedID: String?
-    @Published var device: InputDevice = .touch
+    @Published var device: InputDevice = .pointer
     /// Buttons that are down right now (Square held = reorder mode).
     @Published private(set) var held: Set<PadButton> = []
 
-    var activeScope = "main" {
-        didSet {
-            guard activeScope != oldValue else { return }
-            if let current = focusedID { scopeMemory[oldValue] = current }
-            if let remembered = scopeMemory[activeScope], frames[remembered]?.scope == activeScope {
-                focusedID = remembered
-            } else {
-                refocusIfNeeded(force: true)
-            }
-        }
-    }
-    /// The snapshot tool renders once, without a run loop to wait on: it applies frame updates at once.
-    var synchronousUpdates = false
-    /// Asked first for every directional press; true when it used the press (reordering).
+    private(set) var items: [FocusItem] = []
+    private var context = ""
+    private var memory: [String: String] = [:]
+    private var repeatTask: Task<Void, Never>?
+    private var repeating: Direction?
+
+    /// Asked first for every up/down press; true when it used the press (reordering).
     var directionInterceptor: ((Direction, _ reorder: Bool) -> Bool)?
     var backHandler: (() -> Void)?
     var optionsHandler: (() -> Void)?
-    /// A focus wish that waits for the item to exist (coming back from a sub-screen).
-    var pendingFocus: String?
 
-    private(set) var frames: [String: FocusFrame] = [:]
-    private var scopeMemory: [String: String] = [:]
-    private var repeatTask: Task<Void, Never>?
-    private var repeating: (Direction, Int)?
+    // MARK: items
 
-    // MARK: frames
-
-    /// Called from a preference change, i.e. while views are being updated: the focus (published state) changes right after.
-    func update(frames new: [String: FocusFrame]) {
-        frames = new
-        if synchronousUpdates {
-            refocusIfNeeded(force: false)
+    /// The reachable rows of the screen now showing. `context` names the screen: coming back to one, the focus returns to the row it
+    /// had when it was left. `prefer` wins when it is among the items (a row that moved keeps the focus).
+    func setItems(_ new: [FocusItem], context newContext: String, prefer: String? = nil) {
+        if newContext != context {
+            if let current = focusedID { memory[context] = current }
+            context = newContext
+            focusedID = nil
+        }
+        items = new
+        if let prefer, new.contains(where: { $0.id == prefer }) {
+            focusedID = prefer
+        } else if let current = focusedID, new.contains(where: { $0.id == current }) {
+            return
+        } else if let remembered = memory[newContext], new.contains(where: { $0.id == remembered }) {
+            focusedID = remembered
         } else {
-            Task { @MainActor [weak self] in self?.refocusIfNeeded(force: false) }
+            focusedID = (new.first { $0.isDefault && $0.enabled } ?? new.first { $0.enabled })?.id
         }
-    }
-
-    private func refocusIfNeeded(force: Bool) {
-        let candidates = frames.filter { $0.value.scope == activeScope }
-        if let pending = pendingFocus, candidates[pending] != nil {
-            focusedID = pending
-            pendingFocus = nil
-            return
-        }
-        if !force, let current = focusedID, candidates[current] != nil { return }
-        if candidates.isEmpty {
-            if force { focusedID = nil }
-            return
-        }
-        let preferred = candidates.filter { $0.value.isDefault }
-        let pool = preferred.isEmpty ? candidates : preferred
-        focusedID = pool.min { a, b in
-            let (ra, rb) = (a.value.rect, b.value.rect)
-            return abs(ra.minY - rb.minY) > 8 ? ra.minY < rb.minY : ra.minX < rb.minX
-        }?.key
-    }
-
-    /// For the snapshot tool: the focus a pad would have after the screen came up.
-    func focusDefault(scope: String) {
-        activeScope = scope
-        refocusIfNeeded(force: true)
     }
 
     func focus(_ id: String) {
-        guard focusedID != id else { return }
-        focusedID = id
+        if items.contains(where: { $0.id == id }) { focusedID = id }
     }
+
+    func isFocused(_ id: String) -> Bool { device != .pointer && focusedID == id }
 
     // MARK: input
 
@@ -136,9 +85,9 @@ final class FocusStore: ObservableObject {
         case .left: move(.left)
         case .right: move(.right)
         case .confirm:
-            if let actions = focusedID.flatMap({ frames[$0]?.actions }), actions.enabled { actions.activate() }
+            if let item = items.first(where: { $0.id == focusedID }), item.enabled { item.activate() }
         case .triangle:
-            if let secondary = focusedID.flatMap({ frames[$0]?.actions.secondary }) { secondary() }
+            items.first(where: { $0.id == focusedID })?.secondary?()
         case .back: backHandler?()
         case .options: optionsHandler?()
         default: break
@@ -147,7 +96,6 @@ final class FocusStore: ObservableObject {
 
     func release(_ button: PadButton) {
         held.remove(button)
-        if let (direction, _) = repeating, button == Self.button(for: direction) { stopRepeat() }
     }
 
     func releaseAll() {
@@ -155,14 +103,14 @@ final class FocusStore: ObservableObject {
         stopRepeat()
     }
 
-    /// Direction with auto-repeat while it stays pressed: the first repeat after 0.35 s, then every 0.09 s.
+    /// A direction with auto-repeat while it stays pressed: the first repeat after 0.35 s, then every 0.09 s.
     func direction(_ direction: Direction, pressed: Bool, from source: InputDevice = .pad) {
         if pressed {
-            guard repeating?.0 != direction else { return }
+            guard repeating != direction else { return }
             stopRepeat()
             device = source
             move(direction)
-            repeating = (direction, 0)
+            repeating = direction
             repeatTask = Task { [weak self] in
                 try? await Task.sleep(nanoseconds: 350_000_000)
                 while !Task.isCancelled {
@@ -171,7 +119,7 @@ final class FocusStore: ObservableObject {
                     try? await Task.sleep(nanoseconds: 90_000_000)
                 }
             }
-        } else if repeating?.0 == direction {
+        } else if repeating == direction {
             stopRepeat()
         }
     }
@@ -182,95 +130,44 @@ final class FocusStore: ObservableObject {
         repeating = nil
     }
 
-    private static func button(for direction: Direction) -> PadButton {
-        switch direction {
-        case .up: .up
-        case .down: .down
-        case .left: .left
-        case .right: .right
-        }
-    }
-
+    /// Up and down walk the rows in order; left and right have nothing to do on a list.
     func move(_ direction: Direction, reorder: Bool? = nil) {
         if directionInterceptor?(direction, reorder ?? held.contains(.square)) == true { return }
-        guard let current = focusedID, let from = frames[current]?.rect else {
-            refocusIfNeeded(force: true)
+        guard direction == .up || direction == .down else { return }
+        let reachable = items.filter(\.enabled)
+        guard !reachable.isEmpty else { return }
+        guard let current = reachable.firstIndex(where: { $0.id == focusedID }) else {
+            focusedID = reachable.first?.id
             return
         }
-        let origin = CGPoint(x: from.midX, y: from.midY)
-        var best: (id: String, score: CGFloat)?
-        for (id, frame) in frames where id != current && frame.scope == activeScope {
-            let center = CGPoint(x: frame.rect.midX, y: frame.rect.midY)
-            let dx = center.x - origin.x, dy = center.y - origin.y
-            let along: CGFloat, across: CGFloat
-            switch direction {
-            case .up: (along, across) = (-dy, abs(dx))
-            case .down: (along, across) = (dy, abs(dx))
-            case .left: (along, across) = (-dx, abs(dy))
-            case .right: (along, across) = (dx, abs(dy))
-            }
-            // in the direction, and not behind the edge of the current item
-            guard along > 4 else { continue }
-            let overlap: Bool
-            switch direction {
-            case .up, .down: overlap = frame.rect.maxX > from.minX && frame.rect.minX < from.maxX
-            case .left, .right: overlap = frame.rect.maxY > from.minY && frame.rect.minY < from.maxY
-            }
-            let score = along + across * (overlap ? 1.0 : 3.0) + (overlap ? 0 : 400)
-            if best == nil || score < best!.score { best = (id, score) }
-        }
-        if let best { focusedID = best.id }
+        let next = direction == .down ? min(current + 1, reachable.count - 1) : max(current - 1, 0)
+        focusedID = reachable[next].id
     }
-
-    func isFocused(_ id: String) -> Bool { focusedID == id }
 }
 
 // MARK: view side
 
-private struct FocusScopeKey: EnvironmentKey { static let defaultValue = "main" }
+/// The ring that shows where the pad's focus is: the accent color around the row, and a tint behind it in a list.
+struct PadFocusModifier: ViewModifier {
+    @EnvironmentObject private var focus: FocusStore
+    let id: String
 
-extension EnvironmentValues {
-    var focusScope: String {
-        get { self[FocusScopeKey.self] }
-        set { self[FocusScopeKey.self] = newValue }
+    func body(content: Content) -> some View {
+        let focused = focus.isFocused(id)
+        content
+            .overlay {
+                if focused {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .strokeBorder(Color.accentColor, lineWidth: 3)
+                        .padding(-4)
+                        .allowsHitTesting(false)
+                }
+            }
+            .listRowBackground(focused ? Color.accentColor.opacity(0.16) : nil)
+            .id(id)
     }
 }
 
-/// Makes a view a stop of the focus: it reports its frame, draws nothing itself (the content reads `isFocused` from the
-/// closure) and runs `onActivate` for Cross / Return, and `onSecondary` for Triangle.
-struct LauncherFocusable<Content: View>: View {
-    let id: String
-    var isDefault = false
-    var enabled = true
-    var onActivate: () -> Void
-    var onSecondary: (() -> Void)?
-    @ViewBuilder var content: (_ focused: Bool) -> Content
-
-    @EnvironmentObject private var store: FocusStore
-    @Environment(\.focusScope) private var scope
-
-    var body: some View {
-        let focused = store.isFocused(id)
-        content(focused)
-            .background(
-                GeometryReader { proxy in
-                    Color.clear.preference(
-                        key: FocusFramesKey.self,
-                        value: [id: FocusFrame(rect: proxy.frame(in: .named("launcher")), scope: scope, isDefault: isDefault,
-                                               actions: FocusActions(enabled: enabled, activate: onActivate, secondary: onSecondary))])
-                }
-            )
-            .contentShape(Rectangle())
-            #if os(macOS)
-            .onHover { inside in if inside && enabled { store.focus(id) } }
-            #endif
-            .onTapGesture {
-                #if os(iOS)
-                store.device = .touch
-                #endif
-                store.focus(id)
-                if enabled { onActivate() }
-            }
-            .id(id)
-    }
+extension View {
+    func padFocus(_ id: String) -> some View { modifier(PadFocusModifier(id: id)) }
 }

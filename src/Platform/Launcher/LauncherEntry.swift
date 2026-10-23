@@ -38,7 +38,6 @@ final class LauncherHost {
             }
         }
         model.start()
-        model.focus.device = config.isTouchDevice ? .touch : .keyboard
         guard let nativeWindow, attach(to: nativeWindow) else {
             model.stop()
             return nil
@@ -59,7 +58,7 @@ final class LauncherHost {
         let window = Unmanaged<UIWindow>.fromOpaque(pointer).takeUnretainedValue()
         guard let parent = window.rootViewController else { return false }
         let host = UIHostingController(rootView: root)
-        host.view.backgroundColor = UIColor(red: 0.047, green: 0.051, blue: 0.045, alpha: 1)
+        host.view.backgroundColor = .systemBackground
         host.view.frame = parent.view.bounds
         host.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         parent.addChild(host)
@@ -70,9 +69,6 @@ final class LauncherHost {
         #elseif canImport(AppKit)
         let window = Unmanaged<NSWindow>.fromOpaque(pointer).takeUnretainedValue()
         guard let content = window.contentView else { return false }
-        window.appearance = NSAppearance(named: .darkAqua)
-        window.backgroundColor = NSColor(red: 0.047, green: 0.051, blue: 0.045, alpha: 1)
-        window.titlebarAppearsTransparent = true
         let view = NSHostingView(rootView: root)
         view.frame = content.bounds
         view.autoresizingMask = [.width, .height]

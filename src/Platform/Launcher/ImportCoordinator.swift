@@ -20,6 +20,8 @@ final class ImportCoordinator: ObservableObject {
         case failed(title: String, message: String)
     }
 
+    static let installingTitle = "Installing"
+
     @Published private(set) var stage: Stage = .idle
     var isActive: Bool {
         if case .idle = stage { return false }
@@ -43,6 +45,11 @@ final class ImportCoordinator: ObservableObject {
 
     /// For the snapshot tool: shows a stage without doing the work.
     func preview(_ stage: Stage) { self.stage = stage }
+
+    var isInstalling: Bool {
+        if case .working(let title, _, _) = stage { return title == Self.installingTitle }
+        return false
+    }
 
     // MARK: entry points
 
@@ -104,7 +111,7 @@ final class ImportCoordinator: ObservableObject {
     /// Circle: leave where it is safe to leave. Not while files are being written.
     func back() {
         switch stage {
-        case .working(let title, _, _) where title == "Installing": break
+        case .working(let title, _, _) where title == Self.installingTitle: break
         default: cancel()
         }
     }
@@ -126,7 +133,7 @@ final class ImportCoordinator: ObservableObject {
 
     private func perform(_ plan: ImportPlan, choices: FomodChoices?) async throws {
         guard let importer else { return }
-        stage = .working(title: "Installing", detail: plan.displayName, progress: 0)
+        stage = .working(title: Self.installingTitle, detail: plan.displayName, progress: 0)
         let installed = try await importer.install(plan, choices: choices) { [weak self] fraction in
             Task { @MainActor [weak self] in
                 guard let self, case .working(let title, let detail, _) = self.stage else { return }

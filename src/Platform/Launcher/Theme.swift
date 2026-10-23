@@ -1,40 +1,14 @@
-// The launcher's look: dark, amber like the game's own menus, big enough to read from a couch.
+// The launcher uses the system's own look: stock controls, semantic colors, Dynamic Type text styles, and on iPadOS / macOS 26 and
+// later the Liquid Glass button styles. The only thing of its own is the accent: the amber of the game's menus.
 import SwiftUI
 
 enum Theme {
-    static let background = Color(red: 0.047, green: 0.051, blue: 0.045)
-    static let panel = Color(red: 0.093, green: 0.098, blue: 0.088)
-    static let panelRaised = Color(red: 0.135, green: 0.140, blue: 0.125)
-    static let line = Color.white.opacity(0.09)
-    static let accent = Color(red: 0.91, green: 0.66, blue: 0.22)
-    static let accentDim = Color(red: 0.91, green: 0.66, blue: 0.22).opacity(0.16)
-    static let text = Color(red: 0.90, green: 0.90, blue: 0.88)
-    static let dim = Color(red: 0.55, green: 0.57, blue: 0.55)
-    static let good = Color(red: 0.43, green: 0.84, blue: 0.47)
-    static let warn = Color(red: 0.94, green: 0.75, blue: 0.31)
-    static let bad = Color(red: 0.94, green: 0.39, blue: 0.35)
-
-    static let rowHeight: CGFloat = 76
-    static let radius: CGFloat = 14
-    static let gutter: CGFloat = 32
-
-    static func title(_ size: CGFloat = 40) -> Font { .system(size: size, weight: .heavy, design: .default) }
-    static func heading(_ size: CGFloat = 22) -> Font { .system(size: size, weight: .bold, design: .default) }
-    static func body(_ size: CGFloat = 19) -> Font { .system(size: size, weight: .regular, design: .default) }
-    static func small(_ size: CGFloat = 15) -> Font { .system(size: size, weight: .medium, design: .default) }
-    static func mono(_ size: CGFloat = 14) -> Font { .system(size: size, weight: .regular, design: .monospaced) }
+    static let accent = Color(red: 0.93, green: 0.58, blue: 0.08)
 }
 
 enum Format {
     static func bytes(_ value: Int64) -> String {
-        let units = ["B", "KiB", "MiB", "GiB", "TiB"]
-        var amount = Double(max(value, 0))
-        var unit = 0
-        while amount >= 1024, unit < units.count - 1 {
-            amount /= 1024
-            unit += 1
-        }
-        return unit == 0 ? "\(Int(amount)) B" : String(format: amount >= 100 ? "%.0f %@" : "%.1f %@", amount, units[unit])
+        ByteCountFormatter.string(fromByteCount: max(value, 0), countStyle: .binary)
     }
 
     static func count(_ value: Int, _ noun: String) -> String {
@@ -57,14 +31,41 @@ extension ISO8601DateFormatter {
     }()
 }
 
-/// The screen behind everything: near black with a faint warm glow from the top left, like the game's menu.
-struct LauncherBackground: View {
-    var body: some View {
-        ZStack {
-            Theme.background
-            RadialGradient(colors: [Theme.accent.opacity(0.10), .clear], center: .topLeading, startRadius: 0, endRadius: 900)
-            LinearGradient(colors: [.clear, Color.black.opacity(0.35)], startPoint: .center, endPoint: .bottom)
+/// The prominent button of a screen (Play, Add anyway): Liquid Glass where the system has it, the bordered style before.
+struct ProminentButtonStyle: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(iOS 26.0, macOS 26.0, *) {
+            content.buttonStyle(.glassProminent)
+        } else {
+            content.buttonStyle(.borderedProminent)
         }
-        .ignoresSafeArea()
+    }
+}
+
+extension View {
+    func prominentButton() -> some View { modifier(ProminentButtonStyle()) }
+}
+
+/// The grouped sections of Settings: an inset-grouped list on iPadOS, a grouped form on the Mac.
+struct LauncherForm<Content: View>: View {
+    @ViewBuilder var content: () -> Content
+
+    var body: some View {
+        #if os(macOS)
+        Form { content() }.formStyle(.grouped)
+        #else
+        List { content() }.listStyle(.insetGrouped)
+        #endif
+    }
+}
+
+extension View {
+    /// The grouped list of Settings on iPadOS; the plain inset list on the Mac.
+    func launcherListStyle() -> some View {
+        #if os(iOS)
+        listStyle(.insetGrouped)
+        #else
+        listStyle(.inset)
+        #endif
     }
 }

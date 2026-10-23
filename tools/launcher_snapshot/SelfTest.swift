@@ -17,13 +17,10 @@ enum SelfTest {
         if !condition { failures += 1 }
     }
 
+    /// Lets the model's own tasks run and applies the focus refresh they scheduled.
     static func render(_ model: LauncherModel) {
-        RunLoop.main.run(until: Date().addingTimeInterval(0.12))
-        let renderer = ImageRenderer(content: LauncherRootView(model: model).environment(\.launcherSnapshot, true).frame(width: 1366, height: 1024))
-        renderer.scale = 1
-        _ = renderer.cgImage
-        RunLoop.main.run(until: Date().addingTimeInterval(0.05))
-        _ = renderer.cgImage
+        RunLoop.main.run(until: Date().addingTimeInterval(0.1))
+        model.refreshFocus()
     }
 
     static func press(_ model: LauncherModel, _ button: PadButton, hold: Bool = false) {
@@ -40,8 +37,6 @@ enum SelfTest {
         let config = LauncherConfig(modsRoot: mods.path, downloadsDir: nil, version: "test", platform: "ios", allowQuit: false, logoPath: logo,
                                     deviceLine: nil, notices: [])
         let model = LauncherModel(config: config, data: DataStatus(state: "ok"))
-        model.focus.synchronousUpdates = true
-        model.focus.device = .pad
         render(model)
 
         check(model.focus.focusedID == "home.play", "home: Play has the focus at start (\(model.focus.focusedID ?? "nil"))")
@@ -89,21 +84,22 @@ enum SelfTest {
         // remove, through the confirmation card
         press(model, .triangle)
         render(model)
-        model.focus.focus("details.remove")
+        for _ in 0..<3 { press(model, .down) }
+        check(model.focus.focusedID == "details.remove", "details: three downs reach Remove (\(model.focus.focusedID ?? "nil"))")
         press(model, .confirm)
         render(model)
         check(model.removalCandidate == "sample-weather-pack", "details: Remove asks first")
-        check(model.focus.focusedID == "remove.cancel", "remove card: the safe button has the focus (\(model.focus.focusedID ?? "nil"))")
+        check(model.focus.focusedID == "remove.cancel", "remove sheet: the safe button has the focus (\(model.focus.focusedID ?? "nil"))")
         press(model, .back)
         render(model)
-        check(model.removalCandidate == nil && !ids(model).isEmpty, "remove card: Circle cancels")
+        check(model.removalCandidate == nil && !ids(model).isEmpty, "remove sheet: Circle cancels")
         press(model, .confirm) // focus is back on the Remove button
         render(model)
         press(model, .up)
-        check(model.focus.focusedID == "remove.confirm", "remove card: up goes to Remove (\(model.focus.focusedID ?? "nil"))")
+        check(model.focus.focusedID == "remove.confirm", "remove sheet: up goes to Remove (\(model.focus.focusedID ?? "nil"))")
         press(model, .confirm)
         render(model)
-        check(!ids(model).contains("sample-weather-pack"), "remove card: Cross removes the mod (\(ids(model)))")
+        check(!ids(model).contains("sample-weather-pack"), "remove sheet: Cross removes the mod (\(ids(model)))")
         check(model.screen == .mods, "after removing from the details the list is shown (\(model.screen))")
 
         press(model, .back)
@@ -122,11 +118,11 @@ enum SelfTest {
         var isReview = false
         if case .review = model.imports.stage { isReview = true }
         check(isReview, "import: a folder with a DLL stops at the warning")
-        check(model.focus.activeScope == "modal" && model.focus.focusedID == "import.cancel", "import: the card has the focus on Cancel (\(model.focus.focusedID ?? "nil"))")
+        check(model.focus.focusedID == "import.cancel", "import: the sheet has the focus on Cancel (\(model.focus.focusedID ?? "nil"))")
         press(model, .back)
         render(model)
         check(!model.imports.isActive && ids(model) == before, "import: Circle cancels and adds nothing")
-        check(model.focus.activeScope == "main" && model.focus.focusedID == "home.mods", "import: the focus is back on Mods (\(model.focus.focusedID ?? "nil"))")
+        check(model.focus.focusedID == "home.mods", "import: the focus is back on Mods (\(model.focus.focusedID ?? "nil"))")
 
         press(model, .options)
         render(model)

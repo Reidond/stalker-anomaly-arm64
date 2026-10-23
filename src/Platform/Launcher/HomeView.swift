@@ -5,91 +5,105 @@ struct HomeView: View {
     @EnvironmentObject private var model: LauncherModel
 
     var body: some View {
-        GeometryReader { proxy in
-            let wide = proxy.size.width > 760
-            Group {
-                if wide {
-                    HStack(alignment: .center, spacing: 56) {
-                        identity.frame(maxWidth: 380)
-                        menu.frame(maxWidth: 560)
-                    }
-                } else {
-                    VStack(spacing: 28) {
-                        identity
-                        menu
-                    }
-                }
+        LauncherForm {
+            Section {
+                hero
+                    .frame(maxWidth: .infinity)
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
             }
-            .padding(.horizontal, Theme.gutter)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-        }
-    }
 
-    private var identity: some View {
-        VStack(spacing: 22) {
-            LogoView(path: model.config.logoPath, size: 220)
-            VStack(spacing: 6) {
-                Text("ANOMALY")
-                    .font(Theme.title(46))
-                    .tracking(8)
-                    .foregroundStyle(Theme.text)
-                Text("S.T.A.L.K.E.R. · Mod launcher")
-                    .font(Theme.small(16))
-                    .tracking(1.5)
-                    .foregroundStyle(Theme.dim)
-                if let device = model.config.deviceLine, !device.isEmpty {
-                    Text(device).font(Theme.mono(12)).foregroundStyle(Theme.dim.opacity(0.7)).padding(.top, 2)
-                }
-            }
-        }
-    }
-
-    private var menu: some View {
-        VStack(spacing: 14) {
-            if !model.data.isOK { DataBanner() }
+            if !model.data.isOK { dataSection }
             ForEach(model.config.notices, id: \.self) { notice in
-                Banner(style: .warning, title: notice)
+                Section { Label(notice, systemImage: "exclamationmark.triangle.fill").symbolRenderingMode(.multicolor) }
             }
             if let error = model.libraryError {
-                Banner(style: .error, title: "The mod library could not be opened", message: error)
+                Section {
+                    Label("The mod library could not be opened", systemImage: "xmark.octagon.fill").foregroundStyle(.red)
+                } footer: { Text(error) }
             }
-            ConsoleButton(id: "home.play", title: "Play", subtitle: playSubtitle, systemImage: "play.fill", prominent: true,
-                          enabled: model.canPlay, isDefault: model.data.isOK) { model.play() }
-            ConsoleButton(id: "home.mods", title: "Mods", subtitle: modsSubtitle, systemImage: "square.stack.3d.up.fill",
-                          enabled: model.library != nil) { model.push(.mods) }
-            ConsoleButton(id: "home.add", title: "Add mod", subtitle: "From Files, the browser or a link", systemImage: "plus.circle.fill",
-                          enabled: model.library != nil) { model.push(.add) }
+
+            Section {
+                Button { model.play() } label: {
+                    Label("Play", systemImage: "play.fill")
+                        .font(.title3.weight(.semibold))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 8)
+                }
+                .prominentButton()
+                .controlSize(.large)
+                .disabled(!model.canPlay)
+                .padFocus("home.play")
+                .listRowBackground(Color.clear)
+                .listRowInsets(EdgeInsets())
+            } footer: {
+                Text(playCaption).frame(maxWidth: .infinity)
+            }
+
+            Section {
+                NavigationLink(value: Screen.mods) {
+                    HStack {
+                        Label("Mods", systemImage: "square.stack.3d.up.fill")
+                        Spacer()
+                        Text(modsDetail).foregroundStyle(.secondary)
+                    }
+                }
+                .disabled(model.library == nil)
+                .padFocus("home.mods")
+                NavigationLink(value: Screen.add) {
+                    Label("Add Mod", systemImage: "plus.circle.fill")
+                }
+                .disabled(model.library == nil)
+                .padFocus("home.add")
+            }
+
             if model.config.allowQuit {
-                ConsoleButton(id: "home.quit", title: "Quit", systemImage: "power") { model.quit() }
+                Section {
+                    Button(role: .destructive) { model.quit() } label: { Label("Quit", systemImage: "power") }
+                        .padFocus("home.quit")
+                }
             }
         }
+        #if os(iOS)
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.hidden, for: .navigationBar)
+        #endif
     }
 
-    private var playSubtitle: String {
-        let enabled = model.enabledCount
-        if !model.data.isOK { return "Needs the game data first" }
-        return enabled == 0 ? "No mods enabled" : "\(Format.count(enabled, "mod")) enabled"
-    }
-
-    private var modsSubtitle: String {
-        let total = model.mods.count
-        if total == 0 { return "Nothing installed yet" }
-        return "\(model.enabledCount) of \(total) enabled · load order, details"
-    }
-}
-
-/// The shell's check of the game data: what is wrong and how to copy it in, with a Rescan.
-struct DataBanner: View {
-    @EnvironmentObject private var model: LauncherModel
-
-    var body: some View {
-        VStack(spacing: 10) {
-            Banner(style: model.data.state == "incomplete" ? .warning : .error,
-                   title: model.data.summary.isEmpty ? "Game data not found" : model.data.summary,
-                   message: model.data.help.isEmpty ? model.data.root : model.data.help,
-                   monospaced: true)
-            ConsoleButton(id: "home.rescan", title: "Rescan", subtitle: "Looks again; this also happens by itself every 2 s",
-                          systemImage: "arrow.clockwise", isDefault: true) { model.rescan() }
+    private var hero: some View {
+        VStack(spacing: 14) {
+            LogoView(path: model.config.logoPath, size: 112)
+            VStack(spacing: 4) {
+                Text("Anomaly").font(.largeTitle.weight(.bold))
+                Text("S.T.A.L.K.E.R. · Mod launcher").font(.subheadline).foregroundStyle(.secondary)
+            }
         }
+        .padding(.vertical, 12)
+    }
+
+    private var dataSection: some View {
+        Section {
+            Label(model.data.summary.isEmpty ? "Game data not found" : model.data.summary,
+                  systemImage: model.data.state == "incomplete" ? "exclamationmark.triangle.fill" : "xmark.octagon.fill")
+                .symbolRenderingMode(.multicolor)
+                .font(.headline)
+            Button { model.rescan() } label: { Label("Rescan", systemImage: "arrow.clockwise") }
+                .padFocus("home.rescan")
+        } header: {
+            Text("Game data")
+        } footer: {
+            Text(model.data.help.isEmpty ? model.data.root : model.data.help + "\n\nIt looks again by itself every 2 seconds.")
+        }
+    }
+
+    private var playCaption: String {
+        if !model.data.isOK { return "Play needs the game data first." }
+        let enabled = model.enabledCount
+        return enabled == 0 ? "No mods are on." : "\(Format.count(enabled, "mod")) on."
+    }
+
+    private var modsDetail: String {
+        let total = model.mods.count
+        return total == 0 ? "None" : "\(model.enabledCount) of \(total) on"
     }
 }

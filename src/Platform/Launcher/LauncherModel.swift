@@ -2,6 +2,11 @@
 import Foundation
 import SwiftUI
 import Combine
+#if canImport(UIKit)
+import UIKit
+#elseif canImport(AppKit)
+import AppKit
+#endif
 #if canImport(ModManagerCore)
 import ModManagerCore
 #endif
@@ -115,20 +120,33 @@ struct Toast: Identifiable, Equatable {
 final class LauncherModel: ObservableObject {
     let config: LauncherConfig
     let focus = FocusStore()
+    let imports: ImportCoordinator
 
-    @Published private(set) var stack: [Screen] = [.home]
+    /// The screens pushed on top of home (bound to the NavigationStack: its back button and swipe change this too).
+    @Published var path: [Screen] = [] {
+        didSet { scheduleFocusRefresh() }
+    }
     @Published private(set) var library: ModLibrary?
     @Published private(set) var libraryError: String?
-    @Published private(set) var data = DataStatus()
+    @Published private(set) var data = DataStatus() {
+        didSet { scheduleFocusRefresh() }
+    }
     @Published private(set) var conflicts = ConflictSummary()
     @Published private(set) var result: LauncherResult = .running
+    @Published private(set) var launching = false {
+        didSet { scheduleFocusRefresh() }
+    }
     @Published var toast: Toast?
     @Published var showFilePicker = false
     @Published var removalCandidate: String? {
-        didSet { syncFocusScope() }
+        didSet { scheduleFocusRefresh() }
     }
-    @Published private(set) var launching = false
-    let imports: ImportCoordinator
+    /// The link field of Add mod (here, not in the view, so that the pad's Paste and Download rows reach it).
+    @Published var linkText = "" {
+        didSet { scheduleFocusRefresh() }
+    }
+    /// Bumped when Cross is pressed on the link row: the view puts the keyboard in the field.
+    @Published private(set) var linkFocusRequest = 0
 
     /// Re-reads the game data (the shell's validation). nil in the snapshot tool.
     var dataProvider: (() -> DataStatus)?
@@ -138,10 +156,10 @@ final class LauncherModel: ObservableObject {
     private var focusObserver: AnyCancellable?
     private var dataTimer: Task<Void, Never>?
     private var toastTask: Task<Void, Never>?
-    private var focusMemory: [Screen: String] = [:]
     private var conflictTask: Task<Void, Never>?
+    private var focusTask: Task<Void, Never>?
 
-    var screen: Screen { stack.last ?? .home }
+    var screen: Screen { path.last ?? .home }
     var downloadsDir: URL {
         URL(fileURLWithPath: config.downloadsDir ?? (config.modsRoot as NSString).appendingPathComponent(".downloads"))
     }
@@ -149,6 +167,11 @@ final class LauncherModel: ObservableObject {
     var enabledCount: Int { mods.filter(\.enabled).count }
     var modalActive: Bool { imports.isActive || removalCandidate != nil }
     var canPlay: Bool { data.isOK && !launching }
+    var linkURL: URL? {
+        let trimmed = linkText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let url = URL(string: trimmed), let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https", url.host != nil else { return nil }
+        return url
+    }
 
     init(config: LauncherConfig, data: DataStatus = DataStatus()) {
         self.config = config
@@ -157,12 +180,13 @@ final class LauncherModel: ObservableObject {
         do {
             let library = try ModLibrary(root: URL(fileURLWithPath: config.modsRoot))
             self.library = library
-            imports.attach(library: library)
+            imports.attach(library: library, downloadsDir: downloadsDir)
             libraryObserver = library.objectWillChange.sink { [weak self] _ in
                 // the change lands after this notification
                 Task { @MainActor [weak self] in
                     self?.objectWillChange.send()
                     self?.refreshConflicts()
+                    self?.scheduleFocusRefresh()
                 }
             }
         } catch {
@@ -170,9 +194,8 @@ final class LauncherModel: ObservableObject {
         }
         importObserver = imports.objectWillChange.sink { [weak self] _ in
             Task { @MainActor [weak self] in
-                guard let self else { return }
-                self.objectWillChange.send()
-                self.syncFocusScope()
+                self?.objectWillChange.send()
+                self?.scheduleFocusRefresh()
             }
         }
         focusObserver = focus.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }
@@ -186,11 +209,7 @@ final class LauncherModel: ObservableObject {
         }
         focus.optionsHandler = { [weak self] in self?.optionsPressed() }
         refreshConflicts()
-    }
-
-    /// The cards that sit on top (import flow, remove confirmation) take the focus; underneath, nothing can be reached.
-    private func syncFocusScope() {
-        focus.activeScope = modalActive ? "modal" : "main"
+        refreshFocus()
     }
 
     // MARK: lifecycle
@@ -212,6 +231,7 @@ final class LauncherModel: ObservableObject {
         dataTimer = nil
         toastTask?.cancel()
         conflictTask?.cancel()
+        focusTask?.cancel()
         focus.releaseAll()
         imports.cancel()
     }
@@ -226,15 +246,12 @@ final class LauncherModel: ObservableObject {
     // MARK: navigation
 
     func push(_ next: Screen) {
-        guard next != screen else { return }
-        if let id = focus.focusedID { focusMemory[screen] = id }
-        withAnimation(.easeOut(duration: 0.18)) { stack.append(next) }
+        guard next != screen, next != .home else { return }
+        path.append(next)
     }
 
     func pop() {
-        guard stack.count > 1 else { return }
-        focus.pendingFocus = focusMemory[stack[stack.count - 2]]
-        withAnimation(.easeOut(duration: 0.18)) { _ = stack.removeLast() }
+        if !path.isEmpty { path.removeLast() }
     }
 
     func back() {
@@ -281,9 +298,19 @@ final class LauncherModel: ObservableObject {
 
     // MARK: mods
 
+    func binding(for mod: InstalledMod) -> Binding<Bool> {
+        Binding(get: { [weak self] in self?.mods.first { $0.id == mod.id }?.enabled ?? mod.enabled },
+                set: { [weak self] value in self?.setEnabled(mod.id, value) })
+    }
+
+    func setEnabled(_ id: String, _ enabled: Bool) {
+        guard let library, let mod = mods.first(where: { $0.id == id }), mod.enabled != enabled else { return }
+        do { try library.setEnabled(id, enabled) } catch { show("Could not change \(mod.name): \(error.localizedDescription)", error: true) }
+    }
+
     func toggle(_ id: String) {
-        guard let library, let mod = mods.first(where: { $0.id == id }) else { return }
-        do { try library.setEnabled(id, !mod.enabled) } catch { show("Could not change \(mod.name): \(error.localizedDescription)", error: true) }
+        guard let mod = mods.first(where: { $0.id == id }) else { return }
+        setEnabled(id, !mod.enabled)
     }
 
     /// One step up or down the load order. `delta` -1 is lower priority (earlier), +1 higher (later: wins).
@@ -295,17 +322,20 @@ final class LauncherModel: ObservableObject {
     }
 
     func move(from: Int, to target: Int) {
-        guard let library, from != target, mods.indices.contains(from), mods.indices.contains(target) else { return }
-        do {
-            try library.move(fromOffsets: IndexSet(integer: from), toOffset: target > from ? target + 1 : target)
-        } catch {
-            show("Could not reorder: \(error.localizedDescription)", error: true)
-        }
+        guard from != target, mods.indices.contains(from), mods.indices.contains(target) else { return }
+        moveOffsets(IndexSet(integer: from), toOffset: target > from ? target + 1 : target)
+    }
+
+    /// For the list's own drag and edit mode.
+    func moveOffsets(_ source: IndexSet, toOffset destination: Int) {
+        guard let library else { return }
+        do { try library.move(fromOffsets: source, toOffset: destination) } catch { show("Could not reorder: \(error.localizedDescription)", error: true) }
     }
 
     func remove(_ id: String) {
         guard let library else { return }
         let name = mods.first { $0.id == id }?.name ?? id
+        removalCandidate = nil
         do {
             try library.remove(id)
             show("Removed \(name)", error: false)
@@ -313,7 +343,6 @@ final class LauncherModel: ObservableObject {
         } catch {
             show("Could not remove \(name): \(error.localizedDescription)", error: true)
         }
-        removalCandidate = nil
     }
 
     func refreshConflicts() {
@@ -331,6 +360,36 @@ final class LauncherModel: ObservableObject {
 
     func name(of id: String) -> String { mods.first { $0.id == id }?.name ?? id }
 
+    // MARK: adding
+
+    func pasteLink() {
+        #if canImport(UIKit)
+        if let text = UIPasteboard.general.string { linkText = text }
+        #elseif canImport(AppKit)
+        if let text = NSPasteboard.general.string(forType: .string) { linkText = text }
+        #endif
+    }
+
+    func startLinkDownload() {
+        guard let url = linkURL else { return }
+        imports.download(link: url)
+        linkText = ""
+    }
+
+    func requestLinkFocus() { linkFocusRequest += 1 }
+
+    /// After an import: switch the new mod on and look at the list.
+    func enableAfterImport(_ mod: InstalledMod) {
+        setEnabled(mod.id, true)
+        imports.dismiss()
+        if screen != .mods { push(.mods) }
+    }
+
+    func openModsAfterImport() {
+        imports.dismiss()
+        if screen != .mods { push(.mods) }
+    }
+
     // MARK: toast
 
     func show(_ text: String, error: Bool) {
@@ -339,6 +398,91 @@ final class LauncherModel: ObservableObject {
         toastTask = Task { [weak self] in
             try? await Task.sleep(nanoseconds: error ? 6_000_000_000 : 3_500_000_000)
             if !Task.isCancelled { self?.toast = nil }
+        }
+    }
+
+    // MARK: what the pad can reach
+
+    /// Coalesces the state changes of one tick into one refresh (the published values change after their willChange notification).
+    func scheduleFocusRefresh() {
+        focusTask?.cancel()
+        focusTask = Task { @MainActor [weak self] in
+            await Task.yield()
+            guard !Task.isCancelled else { return }
+            self?.refreshFocus()
+        }
+    }
+
+    func refreshFocus() {
+        let (context, items) = focusItems()
+        focus.setItems(items, context: context)
+    }
+
+    private func focusItems() -> (String, [FocusItem]) {
+        if let id = removalCandidate {
+            return ("remove", [
+                FocusItem(id: "remove.confirm", activate: { [weak self] in self?.remove(id) }),
+                FocusItem(id: "remove.cancel", isDefault: true, activate: { [weak self] in self?.removalCandidate = nil }),
+            ])
+        }
+        if imports.isActive { return ("import", importItems()) }
+        switch screen {
+        case .home:
+            var items: [FocusItem] = []
+            if !data.isOK { items.append(FocusItem(id: "home.rescan", isDefault: true, activate: { [weak self] in self?.rescan() })) }
+            items.append(FocusItem(id: "home.play", enabled: canPlay, isDefault: data.isOK, activate: { [weak self] in self?.play() }))
+            items.append(FocusItem(id: "home.mods", enabled: library != nil, activate: { [weak self] in self?.push(.mods) }))
+            items.append(FocusItem(id: "home.add", enabled: library != nil, activate: { [weak self] in self?.push(.add) }))
+            if config.allowQuit { items.append(FocusItem(id: "home.quit", activate: { [weak self] in self?.quit() })) }
+            return ("home", items)
+        case .mods:
+            var items = mods.enumerated().map { index, mod in
+                FocusItem(id: "mod:\(mod.id)", isDefault: index == 0,
+                          activate: { [weak self] in self?.toggle(mod.id) },
+                          secondary: { [weak self] in self?.push(.details(mod.id)) })
+            }
+            items.append(FocusItem(id: "mods.add", isDefault: mods.isEmpty, activate: { [weak self] in self?.push(.add) }))
+            return ("mods", items)
+        case .details(let id):
+            guard let mod = mods.first(where: { $0.id == id }) else { return ("details", []) }
+            return ("details:\(id)", [
+                FocusItem(id: "details.toggle", isDefault: true, activate: { [weak self] in self?.toggle(id) }),
+                FocusItem(id: "details.later", enabled: mods.last?.id != mod.id, activate: { [weak self] in self?.move(id, by: 1) }),
+                FocusItem(id: "details.earlier", enabled: mods.first?.id != mod.id, activate: { [weak self] in self?.move(id, by: -1) }),
+                FocusItem(id: "details.remove", activate: { [weak self] in self?.removalCandidate = id }),
+            ])
+        case .add:
+            return ("add", [
+                FocusItem(id: "add.files", isDefault: true, activate: { [weak self] in self?.showFilePicker = true }),
+                FocusItem(id: "add.browse", activate: { [weak self] in self?.push(.browse) }),
+                FocusItem(id: "add.link", activate: { [weak self] in self?.requestLinkFocus() }),
+                FocusItem(id: "add.paste", activate: { [weak self] in self?.pasteLink() }),
+                FocusItem(id: "add.download", enabled: linkURL != nil, activate: { [weak self] in self?.startLinkDownload() }),
+            ])
+        case .browse:
+            return ("browse", [])
+        }
+    }
+
+    private func importItems() -> [FocusItem] {
+        switch imports.stage {
+        case .idle, .fomod:
+            return []
+        case .working(let title, _, _):
+            return title == ImportCoordinator.installingTitle ? [] : [FocusItem(id: "import.cancel", isDefault: true, activate: { [weak self] in self?.imports.cancel() })]
+        case .review(let plan):
+            return [
+                FocusItem(id: "import.install", activate: { [weak self] in self?.imports.install(plan, choices: nil) }),
+                FocusItem(id: "import.cancel", isDefault: true, activate: { [weak self] in self?.imports.cancel() }),
+            ]
+        case .done(let mod):
+            var items: [FocusItem] = []
+            if !mod.enabled { items.append(FocusItem(id: "import.enable", isDefault: true, activate: { [weak self] in self?.enableAfterImport(mod) })) }
+            items.append(FocusItem(id: "import.mods", isDefault: mod.enabled, activate: { [weak self] in self?.openModsAfterImport() }))
+            items.append(FocusItem(id: "import.done", activate: { [weak self] in self?.imports.dismiss() }))
+            return items
+        case .failed:
+            return [FocusItem(id: "import.close", isDefault: true, activate: { [weak self] in self?.imports.dismiss() })]
         }
     }
 }
