@@ -194,9 +194,9 @@ not a clamp: a profile asking for 0.42 would leave the scale at 1.0, the iPad at
 **The iPad scales are below the renderer's minimum of 0.5, and below what the MetalFX session recommends (0.6 for Quality, 0.5 for Performance).** That
 recommendation keeps the old preset's GPU cost (15.3 ms in a field in the rain, 56 to 59 fps). The on-device runs of this profile (below) show that a
 frame of that cost does not hold 60 fps in the rain (54.6 fps at 1280x960, 1.23 Mpixel: about 15 ms a Mpixel), so the profile asks for about 1.0 Mpixel of
-scene for Quality and 0.79 for Performance: scales 0.42 and 0.375 of the panel. Until the renderer's minimum is lowered (the MetalFX session offered 0.35)
-the iPad runs at 0.5 with this build, which is 1.4 Mpixel (the old preset's pixel count: Quality dips under 60 in the rain); `gfx_profile` prints the value
-that was set. The change is the `0.5f` minimum in `CMD4(CCC_RenderScale, "r__render_scale", ...)` in `xrRender_console.cpp`.
+scene for Quality and 0.79 for Performance: scales 0.42 and 0.375 of the panel. This change lowers the renderer's minimum to 0.35 (the `0.5f` in `CMD4(CCC_RenderScale, "r__render_scale", ...)` in `xrRender_console.cpp`, as the MetalFX session offered);
+a build with the old minimum would run the iPad at 0.5, which is 1.4 Mpixel (the old preset's pixel count: Quality dips under 60 in the rain), and
+`gfx_profile` prints the value that was set.
 
 ## UI text size
 
@@ -253,33 +253,57 @@ What it says:
 
 ### iPad: Air 13-inch (M3, 8 GB), 2732x2048 at 60 Hz
 
-**Measurements that set the iPad numbers** (`docs/ios-port/IPAD.md`, 2026-10-22, the first iPad preset, `RelWithDebInfo`, same Cordon scenes,
-GPU ms is the sum of the command buffers' GPU time per frame; at 60 fps it includes waiting for the display):
+**Final run of the profile** (`tools/ios/measure_profile.sh`, 2026-10-23, `RelWithDebInfo`, the `ipad_test` save, locks on, the merged render scale: native 2732x2048 output, bilinear
+with sharpening 0.25, scene scale 0.42 for Quality and 0.375 for Performance, i.e. 1147x860 and 1024x768 of scene; one launch per mode). Each launch stands two
+minutes in the Rookie village first, so that the scenes run warm, then plays the five scenes (the thermal column says what state each window ran in). The frame
+rate is capped by the 60 Hz display, so a GPU time near 14 ms mostly says "the GPU waits for the display"; only a frame rate under 60 means the GPU or the CPU
+was the limit.
 
-| Render size | Mpixel | fps | GPU ms | footprint |
-|---|---:|---:|---:|---:|
-| 1024x768 | 0.79 | 60 | 16 (vsync) | 3.83 GB |
-| 1366x1024 (the first preset) | 1.40 | 60, 55 in a few spots | 14 to 16 (vsync) | 3.8 GB |
-| 1600x1200 | 1.92 | 42 to 47 | 17 to 18 | 4.09 GB |
-| 1920x1440 | 2.76 | 32 to 35 | 24 | 4.2 GB |
-| 2732x2048 (native) | 5.60 | 19 | 59 | 4.65 GB |
+| Run | Scene | windows | fps | slowest | CPU ms | GPU ms | draws | footprint MB | thermal |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---|
+| **Quality** (scale 0.42) | field | 2 | 60.0 | 60.0 | 16.6 | 13.1 | 1898 | 3976 | Nominal |
+|  | rain | 3 | 59.2 | 58.4 | 16.8 | 16.6 | 2773 | 4021 | Nominal |
+|  | bunker | 2 | 59.8 | 59.6 | 15.1 | 13.4 | 1493 | 4021 | Nominal |
+|  | village | 2 | 59.9 | 59.8 | 16.1 | 14.6 | 1972 | 4089 | Nominal |
+|  | night | 3 | 59.9 | 59.8 | 13.6 | 13.8 | 2256 | 4109 | Nominal |
+| **Performance** (scale 0.375) | field | 2 | 59.9 | 59.8 | 16.6 | 12.7 | 2047 | 3914 | Nominal |
+|  | rain | 3 | 59.9 | 59.7 | 8.6 | 12.1 | 2175 | 4059 | Nominal |
+|  | bunker | 2 | 60.0 | 59.9 | 16.6 | 11.1 | 1501 | 4055 | Nominal |
+|  | village | 2 | 60.0 | 59.9 | 16.6 | 14.2 | 1943 | 4060 | Nominal |
+|  | night | 3 | 60.0 | 59.8 | 12.4 | 13.5 | 2226 | 4085 | Nominal |
 
-The two long soaks of that preset (48 minutes in all, thermal Nominal to Serious, no change of frame rate): open field 56 to 60 fps, the
-Rookie village **49 to 55 fps at 15.2 to 16.2 ms of GPU**, footprint 3.96 to 4.10 GB of the 7.99 GB budget. GPU time grows with the pixel
-count, about 10 ms per Mpixel, and the one setting with a large cost at a given size is the shadows (sun 2.3 ms, a medium shadow quality
-+3 ms, wet surfaces 3.5 ms in rain at 1920x1440; SSAO 0.7 ms; grass, view distance, soft particles, soft water, sun shafts and
-anisotropy not measurable).
+- **Quality held 59.2 to 60.0 fps** in every scene; the rain is the worst (59.2, slowest window 58.4, 2773 draws, 16.6 ms of GPU).
+- **Performance held 59.9 to 60.0**, slowest window 59.7, in every scene.
+- The footprint is 3.9 to 4.1 GB of the 7.99 GB budget in both modes; the scene size changes the render targets (223 MB at scale 0.42, 190 MB at 0.375), not the
+  textures (2.4 to 2.5 GB).
+- **The iPad stayed at thermal state Nominal** through the two-minute warm-up and the four minutes of scenes in both launches, so the Serious state the MetalFX
+  measurements describe (45 to 51 fps at any scale, 12 to 20 % slower main thread) was not reached here, and nothing was measured in it. What the profile
+  does about it is the margin: Performance has about 25 % of the frame to spare in the worst scene, Quality about 10 % (the next table).
 
-From that: the first preset does not hold 60 in the village. **Quality is the first preset at 1280x960** (1.23 Mpixel: 16.2 ms x 1.23 / 1.40 =
-14.2 ms, 15 % of a 16.7 ms frame to spare) and **Performance is 1152x864 with no AO and shorter distances** (1.0 Mpixel: about 11.5 ms, 30 % to
-spare), both at the first preset's shadows (sun quality low, shadow map 1536, light shadows 0.5), no wet surfaces, texture level 1.
-The footprint stays at about 3.8 GB: a render size changes the render targets, not the textures.
+**Where the sizes come from.** The first on-device run of the profile (2026-10-23; before the render scale was merged, so the render size was `vid_mode`) had
+Quality at 1280x960 (1.23 Mpixel) and Performance at 1152x864 (1.0 Mpixel):
 
-**On-device run of the two modes: pending.** `tools/ios/measure_profile.sh -i` makes it in one go (about 25 minutes: install, the menu
-screenshot, the five scenes in each mode, the lock checks) and `profile_measure.py summarize` prints the same table as above for the iPad. It did
-not run for this change because the iPad was held by another session's measurements for the whole time (a note in the shared folder said so,
-and a launch from here would have killed that run); the numbers for Quality and Performance above are derived from the size sweep, not
-measured on the finished profile. Treat `ipad-8gb` as "derived, to be confirmed by `measure_profile.sh`".
+| Run | Scene | windows | fps | slowest | CPU ms | GPU ms | draws | footprint MB | thermal |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---|
+| **Quality** (1280x960) | field | 2 | 60.0 | 60.0 | 13.8 | 12.9 | 1718 | 3864 | Nominal |
+|  | rain | 3 | 54.6 | 53.6 | 18.1 | 15.4 | 2222 | 3929 | Nominal |
+|  | bunker | 2 | 59.9 | 59.7 | 15.9 | 12.9 | 1489 | 3968 | Nominal |
+|  | village | 2 | 59.8 | 59.6 | 12.2 | 13.2 | 1515 | 3971 | Nominal |
+|  | night | 3 | 59.9 | 59.8 | 14.4 | 14.1 | 1890 | 4044 | Nominal |
+| **Performance** (1152x864) | field | 2 | 60.0 | 60.0 | 13.2 | 11.2 | 1667 | 3808 | Nominal |
+|  | rain | 3 | 59.5 | 59.2 | 10.0 | 12.4 | 2191 | 3905 | Nominal |
+|  | bunker | 2 | 60.0 | 60.0 | 16.6 | 11.4 | 1484 | 3952 | Nominal |
+|  | village | 2 | 59.5 | 59.0 | 15.3 | 14.0 | 1472 | 4011 | Nominal |
+|  | night | 3 | 60.0 | 60.0 | 16.6 | 15.0 | 1890 | 4038 | Nominal |
+
+Quality held 60 in four of the five scenes and **dropped to 54.6 fps in the rain** (slowest window 53.6, 18 ms a frame, 2222 draws): at 1.23 Mpixel the frame
+costs about 15 ms a Mpixel there, so 1.0 Mpixel (scale 0.42 of the panel) leaves 10 % of a 16.7 ms frame and 0.79 Mpixel (0.375) leaves 25 %. The previous
+preset's 1366x1024 was 49 to 55 fps in the village (`IPAD.md`; 1.4 Mpixel, about 10 ms a Mpixel). The MetalFX session's recommendation for this iPad (scale
+0.6 for Quality, 0.5 for Performance, `RENDERER.md`) keeps that old cost class (15.3 ms in a field in the rain) and is not enough here; its minimum of 0.5
+cannot express these sizes either, so this change lowers the renderer's minimum to 0.35.
+
+Render size sweeps in the rain and in the village (one launch, the profile's Quality settings, one change at a time, 22 s each) were all display limited at
+60 fps and showed only that 1152x864 and below hold 60 where 1280x960 did not always; the numbers are in the PR for this change.
 
 ## Verification
 
@@ -290,14 +314,16 @@ Checks and where their output is:
 | Console and scripts cannot change locked settings | `tools/render_harness/scenes/20_locks.script`: `r2_sun_quality st_opt_extreme` typed, `exec_console_cmd("texture_lod 4")`, `exec_console_cmd("r4_enable_tessellation on")`, `exec_console_cmd("ssfx_ssr (1, 1, 1, 1)")` | each refused, the first refusal of each logged once (`! graphics: '...' refused: locked by the mac-pro profile. Further attempts ... are not logged.`), the second typed attempt silent; the values read back are the profile's; `fov 80` and `gfx_mode performance` accepted; `gfx_fps unlimited` refused |
 | The menu shows no locked row, and the PC menu is intact | `scenes/22_options_tree.script` prints the tree | with the profile: `OPTIONS locked rows visible: 0`, 7 rows on Visual / Basic; with `--graphics-profile none`: the stock tree (Advanced 42 rows, Graphics 8, Particles 4, HDR10 36, Optimizations 12, Debug 8) |
 | Locks survive a restart, stale `user.ltx` is overridden | `tools/render_harness/lock_restart.sh`: run 1 changes settings and saves; `user.ltx` gets stale values for 7 locked settings (`r2_sun_quality st_opt_extreme`, `texture_lod 0`, `r4_enable_tessellation on`, `r3_msaa 4x`, `r2_ssao st_opt_high`, `r3_dynamic_wet_surfaces on`, `r__detail_radius 250`) and `r2_mblur_enabled on`; run 2 prints the values | start log: `user.ltx has 186 locked settings, ignored (the mac-pro profile applies); 7 of them differ from the profile: ...`; read back: `r2_sun_quality st_opt_low`, `texture_lod 1`, `r4_enable_tessellation off`, `r3_msaa st_opt_off`, `r2_ssao st_opt_low`, `r3_dynamic_wet_surfaces off`, `r__detail_radius 75` (the Performance values: the mode saved by run 1); `r2_mblur_enabled on`, `fov 80.`, `gfx_mode performance`, `gfx_fps 30` kept (the player's) |
+| The same on the iPad (Air M3) | `tools/ios/measure_profile.sh`: `scripts/lock_test.txt` (refusals from the console and from `run_string`), then `scripts/restart_check.txt` after a `user.ltx` with stale values | refused and logged once each (`r2_sun_quality`, `texture_lod`, `r4_enable_tessellation`, `ssfx_ssr`, `vid_mode`, `r3_msaa`), `fov 80` and `gfx_fps 30` accepted; at the next start `user.ltx has 192 locked settings, ignored (the ipad-8gb profile applies); 7 of them differ from the profile: ...` and the values read back are the profile's (`r2_sun_quality st_opt_low`, `texture_lod 1`, `r3_msaa st_opt_off`, `r2_ssao st_opt_off`, `r3_dynamic_wet_surfaces off`, `r__detail_radius 30`, Performance mode saved by the run before); `r2_mblur_enabled on`, `fov 80.`, `gfx_mode performance`, `gfx_fps 30` kept |
+| The iPad menu | `scripts/settings_menu.txt` (Down three times, Return, a screenshot) | Visual / Basic with Graphics mode, Frame rate, Brightness, Text size, FOV, HUD FOV, Motion Blur and no Screen mode row; text sharp at the native output and as tall as on a 1080p PC |
 | Brightness changes the picture | `scenes/24_brightness.script`, `r__exposure` 0.7 / 1.0 / 1.5 | mean pixel value 46 / 65 / 94 |
 | Windows menu untouched | code review, below | every change guarded; the `--graphics-profile none` tree equals the stock one |
-| Profile tables | `ctest -R graphics_profile_test` | device selection for 14 hardware cases, unsupported features off in every profile and mode, lock rules, frame caps, MetalFX entries |
+| Profile tables | `ctest -R graphics_profile_test` | device selection for iPad and Mac cases, the render scale clamp, unsupported features off in every profile and mode, lock rules, frame caps, MetalFX entries |
 
-The menu through the cursor (Settings, Visual / Basic and Modded Exes pages) was screenshotted on the Mac; changing a value by clicking
-through the dropdown was not scripted (the cursor starts in the middle of the screen when a dialog opens and a click on a drop-down arrow
-needs calibration): Apply goes through the stock `On_Accept`, which runs `exec_console_cmd` (the console path above) and `vid_restart` for the
-mode row, and `gfx_mode performance` through the console was checked to re-apply the profile (`graphics profile mac-pro applied (mode change)`).
+Menus were screenshotted on the Mac (Settings, Visual / Basic, Modded Exes) and on the iPad. Changing a value by clicking through a drop-down was not
+scripted (the cursor starts in the middle of the screen when a dialog opens and a click on a drop-down arrow needs calibration): Apply goes through
+the stock `On_Accept`, which runs `exec_console_cmd` (the console path above) and `vid_restart` for the mode row, and `gfx_mode performance` through the
+console was checked to re-apply the profile (`graphics profile mac-pro applied (mode change)`, and on the iPad the scale 0.375 of Performance).
 
 ## Windows is unchanged
 
