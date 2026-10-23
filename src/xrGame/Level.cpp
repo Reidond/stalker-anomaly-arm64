@@ -86,6 +86,7 @@ static HANDLE prefetch_thread_signal;
 // close, wakes the thread and waits for finished before it frees anything the thread uses.
 static std::atomic<bool> g_prefetch_close{false};
 static std::atomic<bool> g_prefetch_finished{true};
+static std::atomic<bool> g_prefetch_started{false}; // the thread got as far as its first line (thread_spawn() can fail, silently)
 
 static void unpausePrefetchThreadSignal()
 {
@@ -280,6 +281,7 @@ CLevel::CLevel() :
     auto events = new spawn_and_prefetch_events({ spawn_events, spawn_events_data, prefetch_events, prefetched_models, &closeSignal, &prefetch_lock });
     createPrefetchThreadSignal();
     g_prefetch_close.store(false);
+    g_prefetch_started.store(false);
     g_prefetch_finished.store(false);
     thread_spawn(ProcessPrefetchEvents, "Pre-Spawn Prefetcher Thread", 0, events);
     Msg("CLevel::CLevel() Spawn Antifreeze initialized");
@@ -337,25 +339,25 @@ CLevel::~CLevel()
 
 #ifdef SPAWN_ANTIFREEZE
     // Stop the prefetcher before anything it uses (the queues, the lock, the model pool) goes away: it may be in the middle of
-    // loading a model. A thread that does not stop leaves the queues allocated rather than freeing them under it.
+    // loading a model. This waits for as long as it takes, like a join: a thread that is left running keeps &prefetch_lock (a member
+    // of this level) and the renderer's model pool, both of which are gone once the destructor and the shutdown that follows go on.
     closeSignal = true;
     g_prefetch_close.store(true); // signal ProcessPrefetchEvents thread to exit
     // (the event is set again on every turn: a thread that was between its wake-up and its ResetEvent() would miss a single one)
-    for (int waited_ms = 0; !g_prefetch_finished.load() && waited_ms < 30000; ++waited_ms)
+    for (int waited_ms = 0; !g_prefetch_finished.load(); ++waited_ms)
     {
+        if (!g_prefetch_started.load() && waited_ms > 5000)
+            break; // the thread was never created
         unpausePrefetchThreadSignal();
         Sleep(1);
+        if (waited_ms && waited_ms % 10000 == 0)
+            Msg("* CLevel::~CLevel: still waiting for the spawn prefetcher (%d s)", waited_ms / 1000);
     }
-    if (g_prefetch_finished.load())
-    {
-        closePrefetchThreadSignal(); // not by the thread: the loop above may still set the event until it has seen finished
-        xr_delete(spawn_events);
-        xr_delete(spawn_events_data);
-        xr_delete(prefetch_events);
-        xr_delete(prefetched_models);
-    }
-    else
-        Msg("! CLevel::~CLevel: the spawn prefetcher did not stop in 30 s, its queues are left allocated");
+    closePrefetchThreadSignal(); // not by the thread: the loop above may still set the event until it has seen finished
+    xr_delete(spawn_events);
+    xr_delete(spawn_events_data);
+    xr_delete(prefetch_events);
+    xr_delete(prefetched_models);
 #endif
 
     xr_delete(m_pBulletManager);
@@ -577,6 +579,7 @@ void CLevel::SortSpawnEventsQueue()
 
 void CLevel::ProcessPrefetchEvents(void* args)
 {
+    g_prefetch_started.store(true);
     auto events = reinterpret_cast<spawn_and_prefetch_events*>(args);
     auto spawn_events = events->spawn_events;
     auto spawn_events_data = events->spawn_events_data;

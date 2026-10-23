@@ -760,10 +760,15 @@ void CRenderDevice::RunEnd()
 	mt_bMustExit.store(TRUE, std::memory_order_release);
 	mt_csEnter.Leave();
 	while (mt_bMustExit.load(std::memory_order_acquire)) Sleep(0);
-	// Stop the freeze watchdog too (it flushes the log from its own thread); a stuck flush must not hold the quit for ever
+	// Stop the freeze watchdog too (it flushes the log from its own thread) and wait until it is gone, like a join: it uses the log and
+	// the file system, which the teardown after this destroys. It looks at the stop flag every 20 ms and a flush takes milliseconds.
 	mt_freeze_stop.store(true);
-	for (int waited_ms = 0; mt_freeze_running.load() && waited_ms < 3000; waited_ms += 5)
+	for (int waited_ms = 0; mt_freeze_running.load(); waited_ms += 5)
+	{
 		Sleep(5);
+		if (waited_ms == 5000)
+			fprintf(stderr, "xrEngine: still waiting for the freeze watchdog to stop\n"); // (not Msg: it may be the log that is stuck)
+	}
 	// DeleteCriticalSection (&mt_csEnter);
 	// DeleteCriticalSection (&mt_csLeave);
 }
