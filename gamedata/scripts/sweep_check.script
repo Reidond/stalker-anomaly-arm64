@@ -162,3 +162,38 @@ end
 function C.err_count()
 	return 0
 end
+
+-- the game-graph vertices of the level the actor is on, as { pos, lvid, gvid }: walkable places spread over the whole map
+-- (level.vertex_in_direction from the actor stops at the first wall, which is no use inside a village)
+function C.level_points()
+	local out = {}
+	local gg = game_graph()
+	local my_level = gg:vertex(db.actor:game_vertex_id()):level_id()
+	local id = 0
+	while id < 20000 do
+		if gg:valid_vertex_id(id) then
+			local v = gg:vertex(id)
+			if v:level_id() == my_level then
+				out[#out + 1] = { pos = v:level_point(), lvid = v:level_vertex_id(), gvid = id }
+			end
+		elseif id > 6000 then
+			break
+		end
+		id = id + 1
+	end
+	return out
+end
+
+-- a walkable point about `dist` metres from the actor (nearest match among the level's vertices), as pos, lvid, gvid, real distance
+function C.point_at(dist, skip)
+	local ap = db.actor:position()
+	local best, best_err = nil, 1e9
+	for i, p in ipairs(C.level_points()) do
+		if not (skip and skip(p)) then
+			local err = math.abs(p.pos:distance_to(ap) - dist)
+			if err < best_err then best, best_err = p, err end
+		end
+	end
+	if not best then return nil end
+	return best.pos, best.lvid, best.gvid, best.pos:distance_to(ap)
+end

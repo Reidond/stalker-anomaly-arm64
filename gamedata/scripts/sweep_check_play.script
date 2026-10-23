@@ -690,10 +690,88 @@ local function saveload_phase5()
 	return C.done("chk_saveload")
 end
 
+
+-- equipment: headlamp, night vision, binoculars, detector ------------------------------------------------------------------------------
+local function equipment()
+	start_quiet()
+	H.god(true)
+	-- night, so the light and the goggles have something to do
+	level.change_game_time(0, (1 - level.get_time_hours()) % 24, 0)
+	H.pause(3000)
+	give("device_torch_dummy", 1)
+	give("device_torch_nv_1", 1)
+	give("wpn_binoc", 1)
+	give("detector_simple", 1)
+	H.pause(2500)
+	local function torch() return db.actor:item_in_slot(10) end
+	local function equip_torch(sec)
+		local o = db.actor:object(sec)
+		db.actor:move_to_slot(o, 10)
+		H.pause(2500)
+		return torch() ~= nil and torch():section() == sec
+	end
+
+	-- headlamp: the key plays the animation, the device script switches the lamp on, and again for off
+	C.check("equipment", "headlamp/equip", equip_torch("device_torch_dummy"), "device_torch_dummy in the headlamp slot")
+	H.press(key_bindings.kTORCH, 100)
+	local on = H.wait_for("the headlamp", 8000, function() return torch() ~= nil and torch():torch_enabled() end)
+	C.check("equipment", "headlamp/on", on, "torch_enabled after the key: " .. tostring(torch() and torch():torch_enabled()))
+	C.run("equipment", "headlamp/screenshot", function() return C.shot("chk_headlamp"), "screenshot chk_headlamp" end)
+	H.press(key_bindings.kTORCH, 100)
+	local off = H.wait_for("the headlamp to go off", 8000, function() return torch() ~= nil and not torch():torch_enabled() end)
+	C.check("equipment", "headlamp/off", off, "torch_enabled after the second key: " .. tostring(torch() and torch():torch_enabled()))
+
+	-- night vision
+	C.check("equipment", "night-vision/equip", equip_torch("device_torch_nv_1"), "device_torch_nv_1 in the headlamp slot")
+	H.press(key_bindings.kNIGHT_VISION, 100)
+	local nv = H.wait_for("night vision", 8000, function() return get_hud():GetCustomStatic("nv_tunnel") ~= nil end)
+	C.check("equipment", "night-vision/on", nv, "the goggles' HUD overlay is up: " .. tostring(get_hud():GetCustomStatic("nv_tunnel") ~= nil))
+	H.pause(1500)
+	C.run("equipment", "night-vision/screenshot", function() return C.shot("chk_night_vision"), "screenshot chk_night_vision" end)
+	H.press(key_bindings.kNIGHT_VISION, 100)
+	local nv_off = H.wait_for("night vision off", 8000, function() return get_hud():GetCustomStatic("nv_tunnel") == nil end)
+	C.check("equipment", "night-vision/off", nv_off, "the overlay is gone")
+
+	-- binoculars: up, zoomed while the key is held
+	local bin = db.actor:object("wpn_binoc")
+	C.run("equipment", "binoculars", function()
+		db.actor:move_to_slot(bin, 5)
+		db.actor:make_item_active(bin)
+		H.pause(4000)
+		local active = db.actor:active_item() ~= nil and db.actor:active_item():section() == "wpn_binoc"
+		local zdik = bind_to_dik(key_bindings.kWPN_ZOOM)
+		level.press_action(zdik)
+		for i = 1, 60 do level.hold_action(zdik) coroutine.yield() end
+		local w = db.actor:active_item() and db.actor:active_item():cast_Weapon()
+		local zoomed = w ~= nil and w:IsZoomed()
+		local factor = w and w:GetZoomFactor() or 0
+		C.shot("chk_binoculars")
+		level.release_action(zdik)
+		H.pause(1000)
+		return active and zoomed, string.format("in the hands %s, zoomed %s, zoom factor %.1f", tostring(active), tostring(zoomed), factor)
+	end)
+
+	-- detector: the show-detector key brings it up
+	C.run("equipment", "detector", function()
+		local det = db.actor:object("detector_simple")
+		db.actor:move_to_slot(det, 9)
+		H.pause(2500)
+		db.actor:activate_slot(0)
+		H.pause(2500)
+		H.press_dik(DIK_keys.DIK_O, 120)
+		local up = H.wait_for("the detector", 8000, function() return db.actor:active_detector() ~= nil end)
+		C.shot("chk_detector")
+		return up, "active_detector " .. tostring(db.actor:active_detector() and db.actor:active_detector():section())
+	end)
+	H.god(false)
+	return C.done("chk_equipment")
+end
+
 function plans(c, h)
 	C, H = c, h
 	local out = {}
 	out.chk_saveload = { saveload_phase1, saveload_phase2, saveload_phase3, saveload_phase4, saveload_phase5 }
+	out.chk_equipment = { function() return equipment() end }
 	out.chk_weapons = { function() return weapons() end }
 	-- chk_probe: runs appdata/probe.lua (a scratch file, not part of the check) with the library and the helpers, to try an API out
 	out.chk_probe = { function()

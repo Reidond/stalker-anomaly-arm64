@@ -131,20 +131,15 @@ local function alife_plan()
 end
 
 -- combat AI ----------------------------------------------------------------------------------------------------------------------
--- a walkable spot about `dist` metres from the actor: the direction (of eight) where the vertex search got farthest
+-- a walkable spot about `dist` metres from the actor (a game-graph vertex of the level; the actor's own level vertex search stops at walls)
 local function here(dist, ang)
-	local best, best_lvid, best_d = nil, nil, -1
-	for i = 0, 7 do
-		local pos, lvid = H.spot(dist, (ang or 0) + i * 0.785)
-		local d = db.actor:position():distance_to(pos)
-		if d > best_d then best, best_lvid, best_d = pos, lvid, d end
-	end
-	return best, best_lvid, best_d
+	local pos, lvid, gvid, d = C.point_at(dist)
+	return pos, lvid, d, gvid
 end
 
 local function spawn_at(sec, dist, ang)
-	local pos, lvid, d = here(dist, ang)
-	local se = alife_create(sec, pos, lvid, db.actor:game_vertex_id())
+	local pos, lvid, d, gvid = here(dist, ang)
+	local se = alife_create(sec, pos, lvid, gvid or db.actor:game_vertex_id())
 	if se then se.__spawn_dist = d end
 	return se
 end
@@ -298,11 +293,260 @@ local function stalkers_plan()
 	return C.done("chk_stalkers")
 end
 
+
+-- emission and psi storm ---------------------------------------------------------------------------------------------------------
+-- A cover is a restrictor zone of misc\surge_manager.ltx; the zones exist only on the level the actor is on.
+local function find_cover()
+	local sm = surge_manager.get_surge_manager()
+	sm:init_surge_covers()
+	local names = {}
+	for name in pairs(sm.covers or {}) do names[#names + 1] = name end
+	table.sort(names)
+	for _, name in ipairs(names) do
+		local z = db.zone_by_name[name]
+		if z then return name, z, #names end
+	end
+	return nil, nil, #names
+end
+
+local function find_open_spot()
+	local sm = surge_manager.get_surge_manager()
+	local zones = {}
+	for name in pairs(sm.covers or {}) do
+		local z = db.zone_by_name[name]
+		if z then zones[#zones + 1] = z:position() end
+	end
+	local best, best_d = nil, -1
+	for _, p in ipairs(C.level_points()) do
+		if not sm:pos_in_cover(p.pos) then
+			local nearest = 1e9
+			for _, zp in ipairs(zones) do nearest = math.min(nearest, zp:distance_to(p.pos)) end
+			if nearest > best_d then best, best_d = p.pos, nearest end
+		end
+	end
+	return best, best_d
+end
+
+local function run_event(kind, in_cover)
+	start_quiet()
+	H.god(false)
+	db.actor.health = 1
+	local sm = surge_manager.get_surge_manager()
+	local pm = psi_storm_manager.get_psi_storm_manager()
+	local mgr = (kind == "emission") and sm or pm
+	local is_started = (kind == "emission") and surge_manager.is_started or psi_storm_manager.is_started
+	local is_finished = (kind == "emission") and surge_manager.is_finished or psi_storm_manager.is_finished
+	local sys = kind
+	local item = in_cover and "cover" or "open"
+
+	local name, zone, n_covers = find_cover()
+	C.check(sys, item .. "/covers", n_covers > 0, string.format("%d cover zones in surge_manager.ltx, first one on this level: %s", n_covers, tostring(name)))
+	if in_cover then
+		if not zone then return C.done("chk_" .. kind .. "_" .. item) end
+		db.actor:set_actor_position(zone:position())
+	else
+		local pos, d = find_open_spot()
+		if pos then db.actor:set_actor_position(pos) end
+		H.say("open spot %s m from the nearest cover zone", tostring(d and math.floor(d)))
+	end
+	H.pause(4000)
+	local inside = sm:pos_in_cover(db.actor:position()) and true or false
+	C.check(sys, item .. "/position", inside == in_cover, string.format("actor %s a cover zone (%s)", inside and "inside" or "outside", tostring(name)))
+
+	mgr.started = false
+	mgr:start(true)
+	C.check(sys, item .. "/start", mgr.started == true and is_started(), string.format("%s started: %s", kind, tostring(mgr.started)))
+	local started_at = time_global()
+	local cover_seen, wave_seen, dead_at = false, false, nil
+	local weather0 = level.get_weather()
+	local weather_changed = false
+	local t_end = time_global() + 420000
+	local last_log = 0
+	while time_global() < t_end do
+		H.pause(1000)
+		if (kind == "emission" and surge_manager.actor_in_cover()) or (kind == "psi_storm" and GetEvent and GetEvent("current_safe_cover")) then cover_seen = true end
+		if level.get_weather() ~= weather0 then weather_changed = true end
+		if not db.actor:alive() then dead_at = time_global() break end
+		if is_finished() and not is_started() then break end
+		if time_global() - last_log > 30000 then
+			last_log = time_global()
+			H.say("%s: %d s in, started %s, in cover %s, weather %s, health %s", kind, math.floor((time_global() - started_at) / 1000), tostring(mgr.started), tostring(cover_seen), tostring(level.get_weather()), tostring(db.actor.health))
+		end
+	end
+	local secs = (time_global() - started_at) / 1000
+	C.check(sys, item .. "/duration", secs > 100 or dead_at ~= nil, string.format("lasted %.0f s", secs))
+	if in_cover then
+		C.check(sys, item .. "/cover-flag", cover_seen, "the game saw the actor in cover")
+		C.check(sys, item .. "/survives", db.actor:alive() and is_finished(), string.format("actor alive %s, %s finished %s, health %.2f", tostring(db.actor:alive()), kind, tostring(is_finished()), db.actor.health))
+		C.check(sys, item .. "/effects", weather_changed, "weather " .. tostring(weather0) .. " -> " .. tostring(level.get_weather()))
+		H.pause(3000)
+		C.run(sys, item .. "/screenshot", function() return C.shot("chk_" .. kind .. "_" .. item), "screenshot" end)
+		return C.done("chk_" .. kind .. "_" .. item)
+	end
+	C.check(sys, item .. "/kills", dead_at ~= nil, dead_at and string.format("actor killed after %.0f s in the open", (dead_at - started_at) / 1000) or "the actor survived in the open")
+	if dead_at then
+		H.finish_game_over()
+		return { reload = "last" }
+	end
+	return C.done("chk_" .. kind .. "_" .. item)
+end
+
+local function after_death(name)
+	return function()
+		H.wait_for("the reload", 240000, H.actor_ready)
+		H.enable_ui()
+		H.pause(6000)
+		C.check("emission", "open/reload-alive", db.actor:alive() and db.actor.health > 0.3, "health " .. C.fmt(db.actor.health))
+		return C.done(name)
+	end
+end
+
+-- weather and the day/night cycle -----------------------------------------------------------------------------------------------------
+local function weather_plan()
+	start_quiet()
+	H.god(true)
+	-- the clock: set it, read it back
+	level.change_game_time(0, 24, 0) -- move on a day so the sun is known
+	H.pause(2000)
+	local function set_hour(h)
+		local now = level.get_time_hours()
+		local add = (h - now) % 24
+		level.change_game_time(0, add, 0)
+		H.pause(2500)
+		return level.get_time_hours()
+	end
+	local noon = set_hour(12)
+	C.check("weather", "set-noon", noon == 12, "hour " .. noon)
+	local sun_noon = level.get_sun_intensity()
+	C.shot("chk_weather_noon")
+	local mid = set_hour(1)
+	C.check("weather", "set-night", mid == 1, "hour " .. mid)
+	local sun_night = level.get_sun_intensity()
+	C.shot("chk_weather_night")
+	C.check("weather", "sun-intensity", sun_noon > sun_night, string.format("sun intensity %.3f at noon, %.3f at 1 o'clock", sun_noon, sun_night))
+	local pos_noon = set_hour(12)
+
+	-- weather presets: each is applied and read back
+	local presets = { "w_clear1", "w_partly1", "w_cloudy1", "w_foggy1", "w_rain1", "w_storm1" }
+	local seen = {}
+	for _, w in ipairs(presets) do
+		C.run("weather", "preset/" .. w, function()
+			level.set_weather(w, true)
+			H.pause(3500)
+			local got = level.get_weather()
+			seen[#seen + 1] = got
+			if w == "w_rain1" or w == "w_storm1" then C.shot("chk_weather_" .. w) end
+			return got == w, "weather " .. tostring(got)
+		end)
+	end
+	level.set_weather("w_clear1", true)
+	H.pause(2000)
+
+	-- the clock runs: a game day passes in a minute or so, the hour moves on and the date changes
+	local d0 = game.get_game_time()
+	local h0 = level.get_time_hours()
+	local hours_seen, weather_seen = {}, {}
+	local t_end = time_global() + 60000
+	local last_sample = 0
+	while time_global() < t_end do
+		level.set_time_factor(1000)
+		coroutine.yield()
+		if time_global() - last_sample > 1000 then
+			last_sample = time_global()
+			hours_seen[level.get_time_hours()] = true
+			weather_seen[level.get_weather()] = true
+		end
+	end
+	level.set_time_factor(6)
+	local n_hours, n_weathers = 0, 0
+	for _ in pairs(hours_seen) do n_hours = n_hours + 1 end
+	for _ in pairs(weather_seen) do n_weathers = n_weathers + 1 end
+	local advanced = game.get_game_time():diffSec(d0)
+	C.check("weather", "cycle-clock", advanced > 20 * 3600 and n_hours >= 12, string.format("%.1f game hours in 60 s, %d different hours seen", advanced / 3600, n_hours))
+	C.check("weather", "cycle-weather", n_weathers >= 2, string.format("%d weather presets over the day: %s", n_weathers, (function() local t = {} for k in pairs(weather_seen) do t[#t + 1] = k end return table.concat(t, ",") end)()))
+	H.god(false)
+	return C.done("chk_weather")
+end
+
+-- sleeping -------------------------------------------------------------------------------------------------------------------------------
+local function sleep_plan()
+	start_quiet()
+	local sm = surge_manager.get_surge_manager()
+	-- not in a safe place: the game refuses
+	local open_pos = find_open_spot_for_sleep and find_open_spot_for_sleep() or nil
+	local name, zone = nil, nil
+	do
+		sm:init_surge_covers()
+		for n in pairs(sm.covers) do
+			if db.zone_by_name[n] then name, zone = n, db.zone_by_name[n] break end
+		end
+	end
+	-- refuse in the open
+	do
+		local zones = {}
+		for n in pairs(sm.covers) do if db.zone_by_name[n] then zones[#zones + 1] = db.zone_by_name[n]:position() end end
+		local best, best_d = nil, -1
+		for _, p in ipairs(C.level_points()) do
+			if not sm:pos_in_cover(p.pos) then
+				local nearest = 1e9
+				for _, zp in ipairs(zones) do nearest = math.min(nearest, zp:distance_to(p.pos)) end
+				if nearest > best_d then best, best_d = p.pos, nearest end
+			end
+		end
+		if best then db.actor:set_actor_position(best) end
+		H.pause(4000)
+		ui_sleep_dialog.sleep(false)
+		H.pause(2000)
+		local shown = ui_sleep_dialog.GUI and ui_sleep_dialog.GUI:IsShown()
+		C.check("sleep", "refused-in-the-open", not shown, string.format("%.0f m from any cover: dialog shown %s", best_d, tostring(shown)))
+		if shown then ui_sleep_dialog.GUI:Close() end
+	end
+	-- in a cover zone it opens
+	db.actor:set_actor_position(zone:position())
+	H.pause(4000)
+	H.god(false)
+	local v0 = C.vitals()
+	local t0 = game.get_game_time()
+	local h0 = level.get_time_hours()
+	local saves0 = #C.saves("*sleep*.scop")
+	ui_sleep_dialog.sleep(false)
+	H.pause(2500)
+	local shown = ui_sleep_dialog.GUI ~= nil and ui_sleep_dialog.GUI:IsShown()
+	C.check("sleep", "dialog", shown, "sleep dialog shown in " .. tostring(name))
+	C.run("sleep", "screenshot", function() return C.shot("chk_sleep_dialog"), "screenshot" end)
+	if not shown then return C.done("chk_sleep") end
+	ui_sleep_dialog.GUI.time_track:SetCurrentValue()
+	ui_sleep_dialog.GUI:OnButtonSleep()
+	-- the sleep effect runs a few seconds of camera animation, then the game clock jumps
+	local woke = H.wait_for("the sleep to end", 90000, function() return not db.actor:has_info("actor_is_sleeping") and game.get_game_time():diffSec(t0) > 3600 end)
+	H.pause(2500)
+	local slept = game.get_game_time():diffSec(t0) / 3600
+	local v1 = C.vitals()
+	C.check("sleep", "time-passes", woke and slept >= 1, string.format("%.1f game hours passed, hour %d -> %d", slept, h0, level.get_time_hours()))
+	C.check("sleep", "rested", v1.power >= 0.99 and (v1.sleepiness or 0) <= (v0.sleepiness or 1), string.format("sleepiness %s -> %s, power %s", C.fmt(v0.sleepiness), C.fmt(v1.sleepiness), C.fmt(v1.power)))
+	C.check("sleep", "hungrier", v1.satiety < v0.satiety, string.format("satiety %.4f -> %.4f", v0.satiety, v1.satiety))
+	C.check("sleep", "thirstier", (v1.thirst or 0) > (v0.thirst or 0), string.format("thirst %s -> %s", C.fmt(v0.thirst), C.fmt(v1.thirst)))
+	C.check("sleep", "autosave", C.save_exists("player - sleep") ~= nil, "the sleep save: " .. tostring(C.save_exists("player - sleep") ~= nil))
+	C.check("sleep", "ui-back", db.actor:alive() and not H.ui_open(), "the HUD is back, the actor is alive")
+	-- forced sleep (the "you cannot stay awake" path)
+	local t1 = game.get_game_time()
+	ui_sleep_dialog.sleep_forced(4)
+	local woke2 = H.wait_for("the forced sleep to end", 90000, function() return not db.actor:has_info("actor_is_sleeping") and game.get_game_time():diffSec(t1) >= 3 * 3600 end)
+	H.pause(2000)
+	C.check("sleep", "forced", woke2 and db.actor:alive(), string.format("%.1f game hours passed", game.get_game_time():diffSec(t1) / 3600))
+	return C.done("chk_sleep")
+end
+
 function plans(c, h)
 	C, H = c, h
 	local out = {}
 	out.chk_alife = { alife_plan }
 	out.chk_mutants = { mutants_plan }
 	out.chk_stalkers = { stalkers_plan }
+	out.chk_emission_cover = { function() return run_event("emission", true) end }
+	out.chk_emission_open = { function() return run_event("emission", false) end, after_death("chk_emission_open") }
+	out.chk_weather = { weather_plan }
+	out.chk_sleep = { sleep_plan }
+	out.chk_psistorm_cover = { function() return run_event("psi_storm", true) end }
 	return out
 end
