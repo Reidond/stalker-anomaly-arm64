@@ -236,17 +236,21 @@ sequence() {
 
 cleanup() {
     [[ -f $pushed_list ]] || { echo "nothing pushed"; return; }
-    : > "$out/empty-manifest.txt"
-    # an empty scenario = removed minus the probe: stage "removed", push, then drop the probe's files too
-    push removed
     local -a left=("${(@f)$(<$pushed_list)}")
-    local -a none=()
-    : > "$pushed_list"
+    (( ${#left} )) || { echo "nothing pushed"; return; }
     case $target in
-        mac) local f; for f in $left; do rm -f "$data_root/$f"; done ;;
-        ipad) ipad_push_none "${(@)left}" ;;
+        mac)
+            local f d
+            for f in $left; do
+                rm -f "$data_root/${f#*/}"
+                d=${${f#*/}:h}
+                while [[ $d != . && ${d:l} != gamedata && ${d:l} != db ]]; do rmdir "$data_root/$d" 2>/dev/null || break; d=${d:h}; done
+            done
+            ;;
+        ipad) ipad_remove "${(@)left}" ;;
     esac
-    echo "cleaned: ${#left} files"
+    : > "$pushed_list"
+    echo "cleaned: ${#left} files ($target)"
 }
 
 case $cmd in
