@@ -25,6 +25,7 @@
 #                               TSAN_OPTIONS and tools/sweep/tsan.supp instead of the ASan/UBSan environment; use --scale 3 and a
 #                               longer --timeout (the game runs 5 to 15 times slower)
 #           SWEEP_QUIT_AT=<s> moves the script's quit; SWEEP_TERM_AT=<s> sends SIGTERM to the app that many seconds after the launch
+#           SWEEP_APP_ENV="K=V ..." adds environment variables to the app (MallocScribble=1 MallocPreScribble=1 ...)
 #           SWEEP_ASAN_EXTRA=<options> in the environment adds to ASAN_OPTIONS (e.g. quarantine_size_mb=3072 to keep freed blocks longer)
 #           --size WxH          window size in pixels (default 1280x720, the unattended default), --density <n> the display scale (2)
 #
@@ -147,6 +148,8 @@ hard_stop=$(( timeout_s - 60 ))
 # ---- environment ------------------------------------------------------------------------------------------------------
 # the overlay is read from the checkout, not from the bundle, so an edit of gamedata/ (the driver) needs no relink
 env_args=(--env "ANOMALY_STATE_ROOT=$state" --env "ANOMALY_SWEEP=${sweep_plan:-$plan}" --env "ANOMALY_OVERLAY=$repo/gamedata")
+# SWEEP_APP_ENV="K=V K=V": more environment variables for the app (MallocScribble=1 MallocPreScribble=1 turns a use after free into a wild pointer)
+for kv in ${SWEEP_APP_ENV:-}; do env_args+=(--env "$kv"); done
 if [ "$tsan" = 1 ]; then
     # halt_on_error=0: keep going after a report; report_thread_leaks=0: the engine's detached threads (the freeze watchdog, the
     # network sync) are never joined by design; report_signal_unsafe=0: the crash handlers log from a signal on purpose;
