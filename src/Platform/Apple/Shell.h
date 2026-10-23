@@ -44,6 +44,7 @@ struct Paths
     // Library/Caches/Anomaly: anything that can be rebuilt; the OS may delete it when storage is low.
     std::string caches;
     std::string shader_cache; // caches/shaders
+    std::string lua_cache;    // caches/lua: compiled script bytecode (docs/ios-port/LUA-PERF.md)
 
     // Where the shell's own files are written. iPad: Documents (visible in the Files app and Finder).
     // macOS: ~/Library/Logs/Anomaly.

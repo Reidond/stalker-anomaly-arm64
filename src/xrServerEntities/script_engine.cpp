@@ -8,6 +8,7 @@
 
 #include "pch_script.h"
 #include "script_engine.h"
+#include "script_perf.h"
 #include "ai_space.h"
 #include "object_factory.h"
 #include "script_process.h"
@@ -431,6 +432,8 @@ void CScriptEngine::init()
     if (strstr(Core.Params, "-ldbg")) {
         CScriptStorage::DebuggerAttach();
     }
+
+	script_perf::init(lua());
 }
 
 void CScriptEngine::remove_script_process(const EScriptProcessors& process_id)

@@ -15,6 +15,7 @@
 //-AVO
 #include "script_engine.h"
 #include "script_thread.h"
+#include "script_perf.h"
 #include "ai_space.h"
 
 #define LUABIND_HAS_BUGS_WITH_LUA_THREADS
@@ -150,7 +151,12 @@ bool CScriptThread::update()
 	{
 		ai().script_engine().current_thread(this);
 
-		int l_iErrorCode = lua_resume(lua(), 0);
+		int l_iErrorCode;
+		{
+			script_perf::Context perf_section(script_perf::Scheduler);
+			script_perf::Call perf_call;
+			l_iErrorCode = lua_resume(lua(), 0);
+		}
 
 		if (l_iErrorCode && (l_iErrorCode != LUA_YIELD))
 		{
