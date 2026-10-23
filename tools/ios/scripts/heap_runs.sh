@@ -1,7 +1,8 @@
 #!/bin/zsh
 # Repeated start / play / quit runs on the iPad, to count heap aborts (libmalloc "pointer being freed was not allocated") and hangs.
 #
-#   tools/ios/scripts/heap_runs.sh [-n runs] [-s scenario[,scenario...]] [-m none|scribble|full] [-o outdir] [-t timeout-s]
+#   tools/ios/scripts/heap_runs.sh [-n runs] [-s scenario[,scenario...]] [-m none|scribble|full] [-o outdir] [-t timeout-s] [-b "Oct 23 2026 18:35:01"]
+#     -b: the build stamp the shell log must show ("anomaly: build <date> <time>"); a run of another build is "wrongbuild" and does not count
 #
 #   scenarios  menu      cold start to the main menu, quit from the menu after 25 s
 #              loading   load ipad_test, quit 30 s in (during the load)
@@ -22,10 +23,10 @@
 # crash (another fatal signal), hang (timeout), or other. Needs the app installed and the iPad unlocked and the only user of it.
 here=${0:A:h}
 ipad=$here/../ipad.sh
-runs=12; scenarios=(menu loading play); mode=none; out=ipad-heap-runs; limit=420
-while getopts "n:s:m:o:t:" opt; do
+runs=12; scenarios=(menu loading play); mode=none; out=ipad-heap-runs; limit=420; expect_build=
+while getopts "n:s:m:o:t:b:" opt; do
     case $opt in
-        n) runs=$OPTARG ;; s) scenarios=(${(s:,:)OPTARG}) ;; m) mode=$OPTARG ;; o) out=$OPTARG ;; t) limit=$OPTARG ;;
+        n) runs=$OPTARG ;; s) scenarios=(${(s:,:)OPTARG}) ;; m) mode=$OPTARG ;; o) out=$OPTARG ;; t) limit=$OPTARG ;; b) expect_build=$OPTARG ;;
         *) sed -n 2,26p "$0"; exit 2 ;;
     esac
 done
@@ -82,7 +83,8 @@ for ((i = 1; i <= runs; i++)); do
     pull Documents/anomaly-crash.log $d/crash.log
     pull "Library/Application Support/Anomaly/appdata/logs/xray_mobile.log" $d/engine.log
     result=other
-    if (( secs >= limit )); then result=hang
+    if [[ -n $expect_build ]] && ! grep -a -q "anomaly: build $expect_build" $d/shell.log $d/console.txt 2>/dev/null; then result=wrongbuild
+    elif (( secs >= limit )); then result=hang
     elif [[ -s $d/crash.log ]] && grep -a -q -i "SIGABRT\|abort" $d/crash.log; then result=abort
     elif grep -a -q -i "pointer being freed\|malloc: \*\*\* error\|malloc: Heap corruption detected\|corruption detected" $d/console.txt $d/crash.log 2>/dev/null; then result=abort
     elif [[ -s $d/crash.log ]]; then result=crash

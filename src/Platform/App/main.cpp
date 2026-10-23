@@ -846,6 +846,7 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char** argv)
         if (!LoadScript(*app, resolved.c_str()))
             return SDL_APP_FAILURE;
     }
+    AppleShell::Log("anomaly: build %s %s", __DATE__, __TIME__); // which binary a log belongs to (this file's compile time)
     AppleShell::Log("anomaly: data root %s", paths.data_root.c_str());
     AppleShell::Log("anomaly: appdata   %s", paths.appdata.c_str());
     if (app->unattended)
