@@ -42,8 +42,8 @@ u8 q_N(float v)
 	return u8(_v);
 }
 
-// 139 stock models (item_merger, mwolf, rotan, a few stalker suits and masks, a hundred weapon variants) carry a binormal of
-// (inf, inf, inf) on 779 of their 25.5 million skinned vertices, and 5,512 vertices of weapons an infinite texture coordinate.
+// 139 stock models (item_merger, mwolf, rotan, stalker suits and masks, weapons) carry a binormal of
+// (inf, inf, inf) on 779 of their 25.5 million skinned vertices (tools/xrdb_unpack/ogf_scan), and 2,756 vertices in 39 models (weapons) an infinite texture coordinate.
 // normalize_safe makes a NaN of an infinite vector (inf * 0), which then reaches the quantisation above. Such a component
 // carries no information: 0.
 static IC float finite_or_zero(float x) { return std::isfinite(x) ? x : 0.f; }

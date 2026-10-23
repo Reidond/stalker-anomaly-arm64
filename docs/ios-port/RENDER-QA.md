@@ -64,7 +64,7 @@ Debugging commands the harness uses (all Apple-only console commands of the rend
 | Screenshots | the Metal back buffer is empty after Present | capture is a blit in the Present command buffer; its state outlives the swap chain, rows are 256-byte aligned, a failed blit is not published | `679605d7` and the earlier harness commits |
 | ShaderXlat crash guard | replaced any alternate signal stack with an unfreed 64 KB block | | `fd371d5f` keeps an existing one and frees its own |
 | Scoped weapons, aimed | the whole screen magenta and purple, a magenta lens | the fake scope (`fakescope.ps`) samples `$user$scopeRT`, which nothing in the engine draws into; D3D11 hands out a render target zeroed (no overlay), a private Metal texture shows what its memory held | the shim clears a render target or depth buffer created without data (`Context::zeroInitialise`). The magenta came back in a later run of scenes under heavy machine load (load average 400) with Metal's fast math and not with safe or relaxed math: the library is now compiled with relaxed math (METAL-SHIM.md item 19); the cause of that second magenta is not pinned down |
-| Skinned models' tangent frame | `float-cast-overflow` in `q_N` while a model loads (SANITIZERS.md open item 4: "a NaN normal") | not a normal and not NaN in the file: 779 of 25.5 M skinned vertices in 139 models (`item_merger`, `mwolf`, `rotan`, `mini_psevdogigant`, stalker suits and masks, weapons and their variants) carry a binormal of (inf, inf, inf), and 5,512 vertices of weapons an infinite texture coordinate; `normalize_safe` turns infinity into NaN (inf * 0), the conversion to a byte is undefined (x64: `INT_MIN` and a clamp, arm64: 0 or saturated) | `FSkinned.cpp` replaces a non-finite component with 0 before it is normalised and quantised, `q_N` maps NaN to the middle of the range |
+| Skinned models' tangent frame | `float-cast-overflow` in `q_N` while a model loads (SANITIZERS.md open item 4: "a NaN normal") | not a normal and not NaN in the file: 779 of 25.5 M skinned vertices in 139 models (`item_merger`, `mwolf`, `rotan`, `mini_psevdogigant`, stalker suits and masks, weapons and their variants) carry a binormal of (inf, inf, inf), and 2,756 vertices in 39 models (weapons) an infinite texture coordinate; `normalize_safe` turns infinity into NaN (inf * 0), the conversion to a byte is undefined (x64: `INT_MIN` and a clamp, arm64: 0 or saturated) | `FSkinned.cpp` replaces a non-finite component with 0 before it is normalised and quantised, `q_N` maps NaN to the middle of the range |
 | Shader sharing | `ShaderElement::equal(ShaderElement*)` tested `this` against null, `&*E[4]` and `*val_pTransform` bound references to null | clang may fold `this == 0` to false (only xrGame is built with `-fno-delete-null-pointer-checks`): two shaders without a technique compared unequal | `equal_elements` on the pointers, `E[4]._get()`, `IsValuableToRender` takes the matrix by pointer and reads it only for dynamic geometry |
 | ShaderXlat crash guard, again | `AltStack` left the (freed) stack installed when its thread exited | Darwin refuses `sigaltstack(SS_DISABLE)` with a size of 0 (`ENOMEM`) and keeps the stack | the disable carries the size and is checked; the guard installs nothing under a sanitizer (the runtime owns the thread's stack and unmaps it at exit); a thread test in `shaderxlat_selftest` |
 | Log line per pair | `pixel shader ... zero-filled, 1 of another width adapted` (and, before `fc780483`, `pipeline creation failed ... user(locn2) mismatching`) once per level load | D3D links interpolants by semantic and component; the stock set has four pairs that pack a register differently (`waterd`, `wmark` + `simple`, `stub_notransform_aa_AA` + `accum_sun_msaa`/`_nomsaa`) | adapting is the normal path: not logged, counted (`Stats::linkAdaptedPairs`); `tools/r4_shader_warmup` lists the pairs and compiles each adapted variant; only a pair that cannot be adapted is logged |
@@ -102,6 +102,22 @@ What is not right or not checked:
   although the harness zeroes the damage). Not a renderer fault.
 * A crash in `CPHCommander::update` (`CLevel::OnFrame`) after a teleport, 2 of 80 runs: the known heap-corruption class (stability session).
 * Not checked: SMAA and the other AA modes, HDR10, the 3D PDA, heat vision (its shader is not in the data), the `ssfx_*` features (not in the data).
+
+### Verification of the M5 renderer pass
+
+| Check | Result |
+|---|---|
+| `metal_d3d11_headless_test` | all checks pass, including the new one: a render target created after a same-sized one held white reads zero (fails without `zeroInitialise`) |
+| `shaderxlat_selftest` under ASan+UBSan (six threads that use the crash guard and exit, three of them with a faulting translation) | passes; the old and the new guard both pass it (the sanitizer owns the stack there), the plain build's old destructor left the stack installed (`ENOMEM`), the new one disables it |
+| `r4_shader_warmup` | 168 vertex/pixel pairs, 0 with an unwritten pixel input, 4 with a width mismatch (listed, adapted variants compile: 4 of 4), 272 patch stress variants compile |
+| `tools/sweep/run.sh smoke` on this branch, release build, 4 runs | 0 `[MetalD3D11]` lines in the stderr of every run; the unmodified main app prints 3 (`waterd` twice, `wmark` + `simple`) |
+| the same plan under ASan+UBSan, 2 runs | run 1 (completed): 0 ASan reports, 2 UBSan (NaN into `iFloor`/`iCeil` in the occlusion rasteriser, fixed after it); run 2: 0 and 0 |
+| scenes, 4 configurations x 18 | 72 runs, 0 linkage lines, 0 `pipeline creation failed`; 2 crashes (below), rerun clean |
+| scope, aimed, 4 configurations | 0 % magenta pixels in the final build (12 runs of 12 magenta before it under load; screenshots in the PR) |
+
+The smoke plan's last step, the arrival in the Garbage, intermittently never starts the driver ("driver armed" and then nothing, until the plan's
+timeout): the unmodified main app does it too (1 of 2 runs here), this branch 2 of 4. Not caused by this change; the plan's earlier parts, the
+Cordon combat, inventory, save, death and reload, PDA and trade, ran in every run.
 
 ### Open
 
