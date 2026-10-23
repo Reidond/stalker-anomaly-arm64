@@ -4,11 +4,12 @@ Anomaly addons are folders of game files: scripts, configs, textures, shaders, s
 places the PC game does, so most addons work by being copied into the game folder. This guide says how to install one with the Files
 app, in which order the game reads them, what cannot work, how much memory a texture pack may use, and where to look when something is wrong.
 
-> **Status.** Written from a test set of our own addons, run on the iPad (iPad Air 13-inch M3, iPadOS 27.0.1) and on a Mac with a
-> case-sensitive volume: [`tools/addons_test`](../../tools/addons_test/README.md), [How this was tested](#how-this-was-tested). No third-party
-> addon has been installed yet, and the Files app itself was not driven (the test set copies files into the same folders with `devicectl`),
-> so the Files steps below are the ones the iPadOS Files app documents, not something we filmed. Where a statement is about addons in general
-> and not something the test set shows, it says so.
+> **Status.** Written from a test set of our own addons, [`tools/addons_test`](../../tools/addons_test/README.md), run on a Mac against a
+> **case-sensitive volume**, which is what the iPad has (the shell log says `volume: file names are case-sensitive`, and two files `A` and `a` copied into
+> the app's `Documents` stay two files). The engine code is the same on both. The same set has not been run on the iPad itself yet: the script
+> supports it (`run.sh` without `--target mac`), but the device was not reachable when this was written, so the Files-side steps below are what the
+> iPadOS Files app documents, not something we filmed (the test set puts files into the same folders with `devicectl`). No third-party addon has been
+> installed yet. Where a statement is about addons in general and not something the test set shows, it says so.
 
 Two routes put an addon into the game. **The mod manager in the app** ([MOD-MANAGER.md](MOD-MANAGER.md)) imports `.zip`, `.7z` and `.rar` files and
 FOMOD installers from the Files app or a download, keeps every mod in its own folder under `Documents/Mods`, and lets the player switch mods
@@ -196,4 +197,32 @@ wrong folder, or in a sub-folder of `db/addons`), and `Init FileSystem` / `FS: N
 
 ## How this was tested
 
-TO BE FILLED IN.
+[`tools/addons_test`](../../tools/addons_test/README.md) holds test addons of our own that follow real addon layouts, a packer, and `run.sh`, which puts a scenario
+into a game folder, runs the game offscreen with a `--script` timeline, and has a probe script inside the game check what the addons did
+(`ADDON_TEST <id> PASS|FAIL` lines in the engine log).
+
+| Addon | Checked |
+|---|---|
+| script: a new script, `on_game_start`, two callbacks, a monkey-patched stock function | loaded, started, the patch answers for its own input and passes the rest to the stock function; `actor_on_first_update` and `actor_on_update` fire in a game |
+| config: DLTX `mod_system_*.ltx` (lower case, and capitals with `.LTX`), `@[wpn_ak74]`, a plain `.ltx`, a string table | `system_ini()` has the sections and the added line, the stock line is intact, `translate_string` |
+| texture: the main menu background replaced by a test card, a new texture | the registry serves the loose file; the screenshot shows the card |
+| shader: the stock `distort.ps` (the main menu's image pass) with a tint, through a new include | a screenshot shows the tint; ShaderXlat translates it, and again after the include changes, and again after the shader changes; a run with nothing changed translates nothing; with the addon removed the stock shader comes from the cache |
+| MCM page: `on_mcm_load()` in a `*_mcm` script, values in `axr_options.ltx` | page found, default read, value written, **read back by a new process** (the file is `gamedata/configs/axr_options.ltx`); the MCM mod itself is not part of the test (a stand-in host reads the page) |
+| archives in `db/patches` (LZO entries, `entry_point = gamedata`) and `db/addons` (`entry_point = $fs_root$\gamedata\`) | mounted; patches over a stock file and over a Monolith overlay file; addons over patches; loose over addons |
+| names in Windows case (`Scripts`, `Configs`, `Textures/UI`, `.PS`, `.DB0`, `GameData`, `DB/Addons`) | all of the above with these spellings, next to the lower-case folders the game made |
+
+Result on the case-sensitive volume, the whole sequence (baseline, install, new process, case variants, shader changed twice, removed): **every check passes**
+(21 to 28 per run), the shader translation counts are 1, 0, 1, 1, 0 as they should be, and removing the addons brings every file size back to the stock one.
+Before the fix of `xr_native_path` / `_findfirst` (xrCore, `PlatformApple.cpp`) the same run failed 7 to 8 checks per run: every file of an addon folder spelled
+`Configs` while the game's own `configs` existed, the loose file over an archive's, and the `GameData` and `DB/Addons` roots. The new `xrcore_smoke --case-test <dir>` checks
+the path layer alone (12 checks on a case-sensitive volume, 8 of them fail on the old code).
+
+What the test set found out, that is not obvious:
+
+- a **case-variant folder was invisible**: the registry and the file open each looked at one spelling of a folder only (fixed);
+- **archives in a sub-folder of `db/addons` or `db/patches` are not mounted** (the same on the PC: the two folders are scanned without recursion);
+- the translation cache is **content-addressed**: a shader or an include that changes is translated again, one that was seen before (an addon switched on again) is a hit;
+- **scripts cannot delete files**: the engine removes `os.remove`, `os.rename` and `os.execute` from Lua, so an addon that relies on them does not work;
+- the engine log, where all of this shows, was not reachable from the Files app; the app now copies the previous run's log next to the shell log ([Logs](#logs)).
+
+To run it yourself: `tools/addons_test/run.sh --target mac --data-root <copy of the Anomaly folder> sequence`, or for the iPad `tools/addons_test/run.sh sequence`.
