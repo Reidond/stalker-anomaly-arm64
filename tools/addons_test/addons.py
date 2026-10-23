@@ -43,8 +43,17 @@ SCENARIOS = {
     "shader_v2": dict(script=1, config=1, texture=1, shader=2, mcm=1, patches=1, addons=1, loose_priority=1, mcm_expect=42),
     "shader_v3": dict(script=1, config=1, texture=1, shader=3, mcm=1, patches=1, addons=1, loose_priority=1, mcm_expect=42),
     "case_variants": dict(script=1, config=1, texture=1, shader=1, mcm=1, patches=1, addons=1, loose_priority=1, variants=1, mcm_expect=42),
+    "broken": dict(broken=1, mcm_expect=None),
+    "texpack": dict(texpack=1, mcm_expect=None),
     "removed": dict(mcm_expect=None, mcm_reset=1),
 }
+
+# 1024x1024 DXT5 stock atlases of textures\\ui (the main menu background is left alone: the texture addon owns it)
+TEXPACK = ["ui_common", "ui_hud", "ui_ingame2_common", "ui_iconstotal", "ui_load", "ui_load_en", "ui_actor_options_background",
+           "ui_actor_loadgame_screen", "ui_actor_dialog_screen", "ui_actor_pda", "ui_actor_radio", "ui_actor_sleep_screen",
+           "ui_actor_widescreen_sidepanels", "ui_actor_widescreen_sidepanels_1", "ui_global_map", "ui_mod_minigames", "ui_mod_wnds_1",
+           "ui_npc_unique", "ui_npc_unique_2", "ui_actor_upgrades_1", "ui_actor_mp_screen", "ui_actor_multiplayer_background",
+           "ui_actor_multiplayer_game_menu", "ui_icon_news_trx"]
 
 TINTS = {1: "float3(1.0, 0.2, 0.2)", 2: "float3(0.2, 1.0, 0.2)", 3: "float3(0.2, 1.0, 0.2)"}
 
@@ -98,23 +107,38 @@ class Stock:
         raise SystemExit(f"{path} could not be extracted from {archive}")
 
 
-def dxt1(width, height, cell, colors):
-    """A DXT1 DDS (no mip chain) with a checker of cell x cell pixel squares in two colors."""
+def dxt1(width, height, cell, colors, mips=False):
+    """A DXT1 DDS with a checker of cell x cell pixel squares in two colors; mips=True adds the whole mip chain (each level the same checker,
+    cells halved down to one block)."""
     def rgb565(r, g, b):
         return ((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3)
 
     c = [rgb565(*col) for col in colors]
-    blocks = bytearray()
-    for by in range(height // 4):
-        for bx in range(width // 4):
-            color = c[((bx * 4) // cell + (by * 4) // cell) % 2]
-            blocks += struct.pack("<HHI", color, color, 0)
-    header = b"DDS " + struct.pack("<7I", 124, 0x1 | 0x2 | 0x4 | 0x1000 | 0x80000, height, width, len(blocks), 0, 1)
+
+    def level(w, h, cell_px):
+        blocks = bytearray()
+        for by in range(max(h // 4, 1)):
+            for bx in range(max(w // 4, 1)):
+                color = c[((bx * 4) // max(cell_px, 1) + (by * 4) // max(cell_px, 1)) % 2]
+                blocks += struct.pack("<HHI", color, color, 0)
+        return bytes(blocks)
+
+    data = level(width, height, cell)
+    count = 1
+    if mips:
+        w, h, cell_px = width, height, cell
+        while w > 1 or h > 1:
+            w, h, cell_px = max(w // 2, 1), max(h // 2, 1), max(cell_px // 2, 1)
+            data += level(w, h, cell_px)
+            count += 1
+    flags = 0x1 | 0x2 | 0x4 | 0x1000 | 0x80000 | (0x20000 if mips else 0)
+    caps = 0x1000 | (0x400008 if mips else 0)
+    header = b"DDS " + struct.pack("<7I", 124, flags, height, width, (max(width // 4, 1) * max(height // 4, 1)) * 8, 0, count)
     header += b"\x00" * 44
     header += struct.pack("<II4s5I", 32, 0x4, b"DXT1", 0, 0, 0, 0, 0)
-    header += struct.pack("<5I", 0x1000, 0, 0, 0, 0)
+    header += struct.pack("<5I", caps, 0, 0, 0, 0)
     assert len(header) == 128
-    return header + bytes(blocks)
+    return header + data
 
 
 def write(path, data):
@@ -188,7 +212,7 @@ def stage(scenario, out, game_dir, xrdb_unpack, mode="boot", nonce="0"):
     # the harness is always installed
     copy_tree(os.path.join(ADDONS, "probe", "gamedata"), gamedata)
 
-    for name in ("script", "config", "mcm"):
+    for name in ("script", "config", "mcm", "broken"):
         if cfg.get(name):
             copy_tree(os.path.join(ADDONS, name, "gamedata"), gamedata)
     if cfg.get("loose_priority"):
@@ -198,6 +222,11 @@ def stage(scenario, out, game_dir, xrdb_unpack, mode="boot", nonce="0"):
         # the main menu background, in the spelling of a Windows texture pack, as a 1024x1024 DXT1 test card
         sizes["main_menu_tex"] = write(os.path.join(gamedata, "Textures", "UI", "UI_Actor_Main_Menu2.DDS"), dxt1(1024, 1024, 64, ((255, 0, 255), (0, 255, 0))))
         sizes["new_tex"] = write(os.path.join(gamedata, "Textures", "ui", "ui_zz_addon_new.dds"), dxt1(64, 64, 8, ((255, 128, 0), (0, 128, 255))))
+
+    if cfg.get("texpack"):
+        # memory measurement: the big UI atlases the menus and the HUD load, as 4096x4096 DXT1 with a full mip chain (11.2 MB each on the GPU)
+        for name in TEXPACK:
+            write(os.path.join(gamedata, "Textures", "ui", name + ".dds"), dxt1(4096, 4096, 256, ((200, 60, 60), (60, 60, 200)), mips=True))
 
     if cfg.get("shader"):
         v = cfg["shader"]

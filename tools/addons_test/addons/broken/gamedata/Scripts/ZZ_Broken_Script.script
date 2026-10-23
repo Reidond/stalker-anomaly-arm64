@@ -1,0 +1,4 @@
+-- Test addon "broken": a script with a syntax error. Used to see where the engine reports a broken addon script (docs/ios-port/ADDONS.md).
+function on_game_start()
+	local x = = 1
+end

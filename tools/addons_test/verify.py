@@ -34,6 +34,15 @@ def main():
 
     log = read(args.engine_log)
     cfg = addons.SCENARIOS[args.scenario]
+    if cfg.get("broken"):
+        # no probe here: the point is where the engine says that the addon's script is broken
+        lines = [l for l in log.splitlines() if "zz_broken_script" in l.lower() and re.search(r"error|fail|fatal|assert", l, re.I)]
+        print(f"scenario {args.scenario}: {len(lines)} log lines about the broken script")
+        for l in lines[:6]:
+            print("  |", l.strip()[:220])
+        if not lines:
+            print("  FAIL the engine log does not mention the broken script")
+        return 0 if lines else 1
     problems = []
     checks = {}
     for m in re.finditer(r"ADDON_TEST (\w+) (PASS|FAIL)(?: (.*))?", log):
@@ -78,6 +87,14 @@ def main():
             problems.append(f"{translated} shaders were translated again, expected all from the cache")
         elif args.translated == "some" and translated == 0:
             problems.append("no shader was translated: the changed shader was not picked up")
+
+    if args.shell_log:
+        # what the texture pack cost: the GPU texture bytes and the process footprint the shell logs every 10 s
+        shell = read(args.shell_log)
+        tex = [int(m) for m in re.findall(r"textures (\d+) MB", shell)]
+        foot = [int(m) for m in re.findall(r"footprint (\d+) MB", shell)]
+        if tex and foot:
+            print(f"  memory: textures {max(tex)} MB, footprint {max(foot)} MB (max over the run)")
 
     passed = sum(1 for v, _ in checks.values() if v == "PASS")
     print(f"scenario {args.scenario}: {passed} checks passed, {len(checks) - passed} failed" + (f", {translated} shaders translated" if translated is not None else ""))

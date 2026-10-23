@@ -12,6 +12,7 @@
 
 #include <chrono>
 #include <cstring>
+#include <filesystem>
 #include <fstream>
 #include <sstream>
 #include <vector>
@@ -96,6 +97,34 @@ bool WriteFileIfChanged(const std::string& path, const std::string& content)
     std::ofstream out(path, std::ios::binary | std::ios::trunc);
     out << content;
     return bool(out);
+}
+
+// The engine's log of the run before (and its crash report, if it left one) is copied next to the shell log, which is where the Files app
+// shows it: Library/ (where the engine writes appdata/logs) is not visible there, and a script error of an addon is only in the engine log.
+// Done before this run's engine starts: the engine moves its previous log aside when it opens the new one.
+void KeepPreviousEngineLogs(const std::string& logs_dir, const std::string& shell_dir)
+{
+    namespace fs = std::filesystem;
+    std::error_code ec;
+    fs::path newest_log, newest_crash;
+    fs::file_time_type log_time{}, crash_time{};
+    for (const auto& entry : fs::directory_iterator(logs_dir, ec))
+    {
+        const std::string name = entry.path().filename().string();
+        if (name.rfind("xray_", 0) != 0 || !entry.is_regular_file(ec))
+            continue;
+        const auto time = entry.last_write_time(ec);
+        const bool is_log = name.size() > 4 && name.compare(name.size() - 4, 4, ".log") == 0;
+        const bool is_crash = name.size() > 10 && name.compare(name.size() - 10, 10, ".crash.txt") == 0;
+        if (is_log && (newest_log.empty() || time > log_time))
+            newest_log = entry.path(), log_time = time;
+        else if (is_crash && (newest_crash.empty() || time > crash_time))
+            newest_crash = entry.path(), crash_time = time;
+    }
+    if (!newest_log.empty())
+        fs::copy_file(newest_log, fs::path(shell_dir) / "anomaly-engine.prev.log", fs::copy_options::overwrite_existing, ec);
+    if (!newest_crash.empty())
+        fs::copy_file(newest_crash, fs::path(shell_dir) / "anomaly-engine-crash.prev.txt", fs::copy_options::overwrite_existing, ec);
 }
 
 // Where the game data lives. Documents/Anomaly on iPad; configurable on the Mac.
@@ -328,6 +357,7 @@ bool Init(const InitParams& params)
         const std::string last_state = ReadFile(s.session_file);
         s.previous_session_unexpected = last_state.rfind("running", 0) == 0;
 
+        KeepPreviousEngineLogs(p.logs, p.shell_dir);
         Internal::OpenLog(p.shell_log, p.shell_dir + "/anomaly-shell.prev.log");
         Internal::RedirectSDLLog();
         Internal::SetCrashContext(std::string("app: ") + params.app_name + "  pid: " + std::to_string(getpid()));

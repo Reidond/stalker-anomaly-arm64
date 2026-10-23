@@ -18,6 +18,9 @@ Nothing third-party is in this folder: the addons are written for the test, the 
 | `archive_patches` | packed into `db/patches/ZZ_Addon_Patches.DB0` (LZO entries, `entry_point = gamedata`) | its files are served; it overrides a stock file and a Monolith overlay file |
 | `archive_addons` | packed into `db/addons/ZZ_Addon_Pack.db0` (`entry_point = $fs_root$\gamedata\`) | its files are served; it wins over `db/patches` |
 | `loose_priority` | a loose file that is also in both archives | the loose one wins |
+| `case_variants` (+ `case_variants_pack`) | `GameData/Scripts/ZZ_Case_Script.script` and an archive in `DB/Addons/`: folder spellings that are separate folders next to `gamedata/` and `db/addons/` on a case-sensitive volume | the script is loaded, the archive is mounted |
+| `broken` | a script with a syntax error (scenario `broken`, not part of the sequence) | `run.sh check broken game` prints what the engine log says about it |
+| texture pack (generated, scenario `texpack`, not part of the sequence) | 24 big UI atlases replaced by 4096x4096 DXT1 with a mip chain (11.2 MB each) | `verify.py` prints the texture bytes and the footprint the shell logged; compare with the baseline run |
 | `probe` | the harness: `zzz_addon_probe.script` runs the checks and logs `ADDON_TEST <id> PASS|FAIL`; `zz_addon_mcm_host.script` stands in for the MCM mod; `zz_addon_expect.script` (generated) says what the scenario should find | |
 
 File and folder names are spelled the way a Windows zip has them (`Scripts`, `Configs`, `Textures/UI`, `.PS`, `.DB0`), on purpose.
@@ -32,6 +35,8 @@ File and folder names are spelled the way a Windows zip has them (`Scripts`, `Co
 4. `shader_v2` / `shader_v3` (boot): the include / the shader itself changed: translated again.
 5. `removed` (boot): the addons are gone. Every size is the stock one again, the original `distort` translation comes from the cache.
 
+Not in the sequence: `broken` (game) and `texpack` (boot), run them with `run.sh check <scenario> <mode>`.
+
 *boot* stops in the main menu and runs the probe from the console; *game* starts a new game so the addon scripts' `on_game_start` and
 callbacks run (axr_main calls them only when a game starts).
 
@@ -43,6 +48,11 @@ tools/addons_test/run.sh sequence                                               
 tools/addons_test/run.sh push installed game      # just put a scenario into the game folder
 tools/addons_test/run.sh cleanup                  # take everything this tool pushed out again
 ```
+
+**Removing files on the iPad.** `devicectl` cannot delete a file, and its `copy to --remove-existing-content` once emptied a whole app container
+(game data and saves) when it was given an empty source folder. Never use it. `run.sh` therefore has the game delete what an earlier push left:
+it generates `zz_addon_remove.script` (the list of files, with their case), pushes it, runs `timelines/remove.txt` (a boot that calls it) and the
+script removes the files, the folders that are then empty, and itself, with `os.remove` under `$HOME/Documents/Anomaly`.
 
 On the Mac `--data-root` is written to (the addons go into its `gamedata/` and `db/`), so use a copy: `db/` can be a folder of symlinks to the
 real archives. A volume that is **case-sensitive** (`hdiutil create -fs "Case-sensitive APFS" ...`) shows the same behaviour as an iPad whose
