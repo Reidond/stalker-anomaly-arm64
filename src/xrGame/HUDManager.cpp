@@ -12,6 +12,9 @@
 #include "UIGameCustom.h"
 #include "UICursor.h"
 #include "string_table.h"
+#ifdef XR_PLATFORM_APPLE
+#include "xr_level_controller.h"
+#endif
 #include "game_cl_base.h"
 #ifdef	DEBUG
 #include "phdebug.h"
@@ -274,6 +277,20 @@ void CHUDManager::RenderUI()
 		pFont->SetAligment(CGameFont::alCenter);
 		pFont->Out(_pos.x, _pos.y, _str);
 		pFont->OnRender();
+#ifdef XR_PLATFORM_APPLE
+		// held by the controller layer: say why and what ends it
+		if (xr_pad_paused_by_disconnect())
+		{
+			CGameFont* pSmall = UI().Font().pFontGraffiti32Russian;
+			pSmall->SetColor(0xC0FFFFFF);
+			Fvector2 _pos2;
+			_pos2.set(UI_BASE_WIDTH / 2.0f, UI_BASE_HEIGHT / 2.0f + 60.0f);
+			UI().ClientToScreenScaled(_pos2);
+			pSmall->SetAligment(CGameFont::alCenter);
+			pSmall->Out(_pos2.x, _pos2.y, "%s", CStringTable().translate("st_pad_reconnect").c_str());
+			pSmall->OnRender();
+		}
+#endif
 	}
 }
 

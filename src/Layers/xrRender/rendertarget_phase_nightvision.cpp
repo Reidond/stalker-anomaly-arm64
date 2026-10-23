@@ -53,9 +53,16 @@ void CRenderTarget::phase_nightvision()
 };
 
 
+#if defined(XR_PLATFORM_APPLE)
+void AppleRTDumpHook(const char* stage); // rt_dump (r__screenshot.cpp)
+#endif
+
 //crookr
 void CRenderTarget::phase_fakescope()
 {
+#if defined(XR_PLATFORM_APPLE)
+	AppleRTDumpHook("fakescope"); // rt_dump <target> <file> fakescope: the inputs of the pass
+#endif
 	//Constants
 	u32 Offset = 0;
 	u32 C = color_rgba(0, 0, 0, 255);

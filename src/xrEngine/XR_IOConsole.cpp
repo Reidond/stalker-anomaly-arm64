@@ -3,6 +3,7 @@
 
 #include "stdafx.h"
 #include "XR_IOConsole.h"
+#include "../xrCore/log_lines.h"
 #include "line_editor.h"
 
 #include "igame_level.h"
@@ -402,16 +403,20 @@ void CConsole::OnRender()
 	}
 
 	// ---------------------
-	u32 log_line = LogFile.size() - 1;
+	// The lines are copied under the log lock (other threads log while this draws, and the vector moves when it grows); a screen
+	// holds far fewer than the 128 lines asked for
+	const u32 log_line = LogLineCount() - 1;
+	xr_vector<xr_string> shown;
+	const u32 shown_first = LogCopyLines(log_line - scroll_delta, 128, shown);
 	ypos -= LDIST;
-	for (int i = log_line - scroll_delta; i >= 0; --i)
+	for (int i = int(shown_first + shown.size()) - 1; i >= int(shown_first); --i)
 	{
 		ypos -= LDIST;
 		if (ypos < -1.0f)
 		{
 			break;
 		}
-		LPCSTR ls = LogFile[i].c_str();
+		LPCSTR ls = shown[i - shown_first].c_str();
 
 		if (!ls)
 		{

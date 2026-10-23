@@ -11,7 +11,8 @@
 // --unattended (implied by --script and --exit-after, unless --foreground is given) is for runs nobody watches, on a Mac
 // somebody is working on: the app stays in the background (SDL's MAC_BACKGROUND_APP and ACTIVATE_WHEN_* hints, set before
 // SDL_Init: no dock icon, no focus, no new Space), the engine renders offscreen at --size (default 1280x720 pixels; no window
-// is ever shown, --show-window gives it a windowed one in the background), does not pause when unfocused, sound goes to OpenAL Soft's null device, and App Nap is off so frame pacing stays real. The engine
+// is ever shown, --show-window gives it a windowed one in the background), does not pause when unfocused, joystick events are not
+// dropped for want of focus (the script pad), sound goes to OpenAL Soft's null device, and App Nap is off so frame pacing stays real. The engine
 // reads its settings from appdata/unattended.ltx (a copy of user.ltx plus those overrides, written at start) and saves them
 // there, so the player's user.ltx is left alone.
 //
@@ -23,18 +24,30 @@
 //   <t> keydown <name> | keyup <name>
 //   <t> move <x> <y>                mouse pointer, window points
 //   <t> relmove <dx> <dy>           relative mouse motion
+//   <t> touch <x> <y>               a finger tap (the touch pseudo-mouse: a click in a dialog, ignored in the world)
 //   <t> click <x> <y> [button]      move, press and release (1 left, 2 middle, 3 right)
 //   <t> waitlevel [seconds [level]] hold the timeline until a level (that one, if named) is loaded and playing (default
 //                                   limit 240 s); the steps after it run with t counted from that moment, so a scene can
 //                                   follow a load of any length
-//   <t> padon                       attach a virtual DualSense (to drive the controller layer without a person holding one)
+//   <t> padon [n]                   attach virtual pad n (1: a DualSense, 2: an Xbox Series pad; default 1) and drive it from now on;
+//                                   again after `padoff` it is a reconnect (same guid, a new SDL instance)
+//   <t> padoff [n]                  detach virtual pad n (default: the one being driven): a controller that powers off
+//   <t> padsel <n>                  drive virtual pad n with the commands below
 //   <t> pad <button> [ms]           press a button for ms (80): cross circle square triangle l1 r1 l3 r3 create options touchpad ps
 //                                   up down left right
 //   <t> paddown <button> | padup <button>
 //   <t> padaxis <axis> <value>      lx ly rx ry l2 r2, -1..1 (triggers 0..1); stays until changed
+//   <t> padtouch <x> <y> | padtouchup   the DualSense's touchpad finger (0..1 each way), for the trackpad cursor
+//   The virtual pads log what the game asks of them (`script pad n: rumble|triggers rumble|led ...`, on change) in the shell log.
+//   <t> lifecycle background|foreground|lowmemory
+//                                   the app events iPadOS sends (WillEnter/DidEnter Background or Foreground, UIKit's memory warning), pushed
+//                                   into SDL's queue: the shell's pause, background save and resume run, but the OS does not suspend the app
+//   <t> audiointerrupt began|ended  iOS: post the audio-session interruption a call or an alarm would (sound pauses, then resumes)
 //   <t> ballast <MB>                allocate and touch that much memory (to provoke the memory warnings), in 64 MB chunks
 //   <t> unballast                   free it again
 //   <t> log <text...>               a line in the shell log
+//   <t> mods_delete <id>            remove <mods root>/<id> (only a plain folder name directly inside the mods root; symlinks are not followed)
+//   <t> mods_clear                  remove every entry of the mods root; put it last, the mounted mods are still in use by the engine
 //   <t> quit                        leave the app
 
 #define SDL_MAIN_USE_CALLBACKS 1
@@ -51,6 +64,8 @@
 #include "Unattended.h"
 #include "xrEngine/xr_engine_app.h"
 
+#include <dispatch/dispatch.h>
+#include <signal.h>
 #include <sys/stat.h>
 
 #include <algorithm>
@@ -58,6 +73,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
+#include <initializer_list>
 #include <memory>
 #include <sstream>
 #include <string>
@@ -79,6 +95,7 @@ struct ScriptStep
     std::string args;
     double release_at = -1; // key presses: when the matching key-up is due
     bool pad = false;       // the release is for a pad button
+    int pad_index = 0;      // ... of this virtual pad (the one `padsel` had picked when the press was made)
 };
 
 struct App
@@ -121,7 +138,16 @@ struct App
     double wait_started_s = 0, wait_limit_s = 0, wait_step_at = 0;
     std::string wait_level_name;
     std::vector<void*> ballast; // script `ballast`: memory held on purpose
-    SDL_Joystick* virtual_pad = nullptr; // script `padon`
+    // script `padon`: up to two virtual pads (0: DualSense, 1: Xbox Series), `padsel` picks the one the pad commands drive
+    struct VirtualPad
+    {
+        SDL_Joystick* joystick = nullptr;
+        SDL_JoystickID id = 0;
+        Uint16 rumble_low = 0, rumble_high = 0, rumble_left = 0, rumble_right = 0;
+        Uint8 led[3] = {0, 0, 0};
+    };
+    VirtualPad virtual_pads[2];
+    int pad_sel = 0;
 
     AppleShell::ListenerId lifecycle_listener = 0;
     bool saving = false;            // a background save is under way (its frames must not start another)
@@ -232,10 +258,11 @@ void PushKey(const std::string& name, bool down)
     SDL_PushEvent(&e);
 }
 
-void PushMotion(App& app, float x, float y)
+void PushMotion(App& app, float x, float y, SDL_MouseID which = 0)
 {
     SDL_Event e{};
     e.type = SDL_EVENT_MOUSE_MOTION;
+    e.motion.which = which;
     e.motion.timestamp = SDL_GetTicksNS();
     e.motion.windowID = EngineWindowID();
     e.motion.x = x;
@@ -247,10 +274,11 @@ void PushMotion(App& app, float x, float y)
     SDL_PushEvent(&e);
 }
 
-void PushButton(int button, bool down, float x, float y)
+void PushButton(int button, bool down, float x, float y, SDL_MouseID which = 0)
 {
     SDL_Event e{};
     e.type = down ? SDL_EVENT_MOUSE_BUTTON_DOWN : SDL_EVENT_MOUSE_BUTTON_UP;
+    e.button.which = which;
     e.button.timestamp = SDL_GetTicksNS();
     e.button.windowID = EngineWindowID();
     e.button.button = Uint8(button);
@@ -261,11 +289,69 @@ void PushButton(int button, bool down, float x, float y)
     SDL_PushEvent(&e);
 }
 
-// Script pad: a virtual gamepad that SDL reports like a DualSense (the way tools/xrinput_smoke drives the controller layer)
-bool AttachVirtualPad(App& app)
+// Script `lifecycle`: the events SDL turns UIKit's notifications into. The shell's watcher sees them as it sees the real ones.
+void PushAppEvents(std::initializer_list<Uint32> types)
 {
-    if (app.virtual_pad)
+    for (Uint32 type : types)
+    {
+        SDL_Event e;
+        SDL_zero(e);
+        e.type = type;
+        e.common.timestamp = SDL_GetTicksNS();
+        SDL_PushEvent(&e);
+    }
+}
+
+// Script pad: a virtual gamepad that SDL reports like a DualSense (the way tools/xrinput_smoke drives the controller layer).
+// Its rumble, trigger rumble and light bar callbacks log what the game sends (on change), which is how a Mac run checks the
+// feedback calls: the real motors are the user's to judge.
+App::VirtualPad& SelectedPad(App& app) { return app.virtual_pads[app.pad_sel]; }
+
+bool PadRumble(void* user, Uint16 low, Uint16 high)
+{
+    auto* pad = static_cast<App::VirtualPad*>(user);
+    if (pad->rumble_low != low || pad->rumble_high != high)
+    {
+        pad->rumble_low = low;
+        pad->rumble_high = high;
+        AppleShell::Log("anomaly: script pad %d: rumble low %u (%.2f) high %u (%.2f)", int(pad->id), unsigned(low), low / 65535.0,
+            unsigned(high), high / 65535.0);
+    }
+    return true;
+}
+
+bool PadRumbleTriggers(void* user, Uint16 left, Uint16 right)
+{
+    auto* pad = static_cast<App::VirtualPad*>(user);
+    if (pad->rumble_left != left || pad->rumble_right != right)
+    {
+        pad->rumble_left = left;
+        pad->rumble_right = right;
+        AppleShell::Log("anomaly: script pad %d: trigger rumble left %u right %u", int(pad->id), unsigned(left), unsigned(right));
+    }
+    return true;
+}
+
+bool PadSetLed(void* user, Uint8 r, Uint8 g, Uint8 b)
+{
+    auto* pad = static_cast<App::VirtualPad*>(user);
+    if (pad->led[0] != r || pad->led[1] != g || pad->led[2] != b)
+    {
+        pad->led[0] = r;
+        pad->led[1] = g;
+        pad->led[2] = b;
+        AppleShell::Log("anomaly: script pad %d: led %u %u %u", int(pad->id), unsigned(r), unsigned(g), unsigned(b));
+    }
+    return true;
+}
+
+bool AttachVirtualPad(App& app, int index)
+{
+    App::VirtualPad& pad = app.virtual_pads[index];
+    app.pad_sel = index;
+    if (pad.joystick)
         return true;
+    static const SDL_VirtualJoystickTouchpadDesc touchpad = {2, {0, 0, 0}};
     SDL_VirtualJoystickDesc desc;
     SDL_INIT_INTERFACE(&desc);
     desc.type = SDL_JOYSTICK_TYPE_GAMEPAD;
@@ -273,13 +359,42 @@ bool AttachVirtualPad(App& app)
     desc.nbuttons = SDL_GAMEPAD_BUTTON_COUNT;
     desc.button_mask = 0xFFFFFFFFu;
     desc.axis_mask = 0xFFFFFFFFu;
-    desc.name = "anomaly script pad";
-    desc.vendor_id = 0x054C;
-    desc.product_id = 0x0CE6; // DualSense
-    const SDL_JoystickID id = SDL_AttachVirtualJoystick(&desc);
-    app.virtual_pad = id ? SDL_OpenJoystick(id) : nullptr;
-    AppleShell::Log("anomaly: script: virtual pad %s", app.virtual_pad ? "attached" : SDL_GetError());
-    return app.virtual_pad != nullptr;
+    if (index == 0)
+    {
+        desc.name = "anomaly script pad";
+        desc.vendor_id = 0x054C;
+        desc.product_id = 0x0CE6; // DualSense
+        desc.ntouchpads = 1;
+        desc.touchpads = &touchpad;
+    }
+    else
+    {
+        desc.name = "anomaly script pad 2";
+        desc.vendor_id = 0x045E;
+        desc.product_id = 0x0B13; // Xbox Series
+    }
+    desc.userdata = &pad;
+    desc.Rumble = PadRumble;
+    desc.RumbleTriggers = PadRumbleTriggers;
+    desc.SetLED = PadSetLed;
+    pad.id = SDL_AttachVirtualJoystick(&desc);
+    pad.joystick = pad.id ? SDL_OpenJoystick(pad.id) : nullptr;
+    pad.rumble_low = pad.rumble_high = pad.rumble_left = pad.rumble_right = 0;
+    pad.led[0] = pad.led[1] = pad.led[2] = 0;
+    AppleShell::Log("anomaly: script: virtual pad %d %s", index + 1, pad.joystick ? "attached" : SDL_GetError());
+    return pad.joystick != nullptr;
+}
+
+void DetachVirtualPad(App& app, int index)
+{
+    App::VirtualPad& pad = app.virtual_pads[index];
+    if (!pad.joystick)
+        return;
+    SDL_CloseJoystick(pad.joystick);
+    SDL_DetachVirtualJoystick(pad.id);
+    AppleShell::Log("anomaly: script: virtual pad %d detached", index + 1);
+    pad.joystick = nullptr;
+    pad.id = 0;
 }
 
 int PadButtonFromName(const std::string& name)
@@ -299,22 +414,25 @@ int PadButtonFromName(const std::string& name)
     return -1;
 }
 
-void SetPadButton(App& app, const std::string& name, bool down)
+// `index` is the virtual pad (0 or 1); -1 is the one being driven. A release for a pad that was detached in the meantime has nothing left to do.
+void SetPadButton(App& app, const std::string& name, bool down, int index = -1)
 {
     const int button = PadButtonFromName(name);
-    if (!app.virtual_pad || button < 0)
+    SDL_Joystick* joystick = app.virtual_pads[index < 0 ? app.pad_sel : index].joystick;
+    if (!joystick || button < 0)
     {
-        AppleShell::Log("anomaly: script: no pad or unknown button '%s'", name.c_str());
+        if (down || button < 0)
+            AppleShell::Log("anomaly: script: no pad or unknown button '%s'", name.c_str());
         return;
     }
-    SDL_SetJoystickVirtualButton(app.virtual_pad, button, down);
+    SDL_SetJoystickVirtualButton(joystick, button, down);
 }
 
 void SetPadAxis(App& app, const std::string& args)
 {
     char name[16] = {};
     float value = 0;
-    if (!app.virtual_pad || sscanf(args.c_str(), "%15s %f", name, &value) != 2)
+    if (!SelectedPad(app).joystick || sscanf(args.c_str(), "%15s %f", name, &value) != 2)
     {
         AppleShell::Log("anomaly: script: padaxis needs a pad and '<axis> <value>'");
         return;
@@ -328,7 +446,7 @@ void SetPadAxis(App& app, const std::string& args)
         if (!strcmp(name, entry.name))
         {
             const float clamped = std::max(entry.trigger ? 0.f : -1.f, std::min(1.f, value));
-            SDL_SetJoystickVirtualAxis(app.virtual_pad, entry.axis, Sint16(clamped * 32767.f));
+            SDL_SetJoystickVirtualAxis(SelectedPad(app).joystick, entry.axis, Sint16(clamped * 32767.f));
             return;
         }
     AppleShell::Log("anomaly: script: unknown pad axis '%s'", name);
@@ -355,7 +473,7 @@ bool RunScript(App& app)
         if (now >= app.pending_releases[i].release_at)
         {
             if (app.pending_releases[i].pad)
-                SetPadButton(app, app.pending_releases[i].args, false);
+                SetPadButton(app, app.pending_releases[i].args, false, app.pending_releases[i].pad_index);
             else
                 PushKey(app.pending_releases[i].args, false);
             app.pending_releases.erase(app.pending_releases.begin() + long(i));
@@ -394,7 +512,15 @@ bool RunScript(App& app)
             app.pending_releases.push_back(release);
         }
         else if (step.command == "padon")
-            AttachVirtualPad(app);
+            AttachVirtualPad(app, atoi(step.args.c_str()) == 2 ? 1 : 0);
+        else if (step.command == "padoff")
+            DetachVirtualPad(app, step.args.empty() ? app.pad_sel : (atoi(step.args.c_str()) == 2 ? 1 : 0));
+        else if (step.command == "padsel")
+            app.pad_sel = atoi(step.args.c_str()) == 2 ? 1 : 0;
+        else if (step.command == "padtouch" && sscanf(step.args.c_str(), "%f %f", &x, &y) == 2)
+            SDL_SetJoystickVirtualTouchpad(SelectedPad(app).joystick, 0, 0, true, x, y, 1.f);
+        else if (step.command == "padtouchup")
+            SDL_SetJoystickVirtualTouchpad(SelectedPad(app).joystick, 0, 0, false, 0.f, 0.f, 0.f);
         else if (step.command == "pad")
         {
             std::string name = step.args;
@@ -409,6 +535,7 @@ bool RunScript(App& app)
             ScriptStep release;
             release.args = name;
             release.pad = true;
+            release.pad_index = app.pad_sel;
             release.release_at = now + ms * 1e-3;
             app.pending_releases.push_back(release);
         }
@@ -418,6 +545,19 @@ bool RunScript(App& app)
             SetPadButton(app, step.args, false);
         else if (step.command == "padaxis")
             SetPadAxis(app, step.args);
+        else if (step.command == "lifecycle")
+        {
+            if (step.args == "background")
+                PushAppEvents({SDL_EVENT_WILL_ENTER_BACKGROUND, SDL_EVENT_DID_ENTER_BACKGROUND});
+            else if (step.args == "foreground")
+                PushAppEvents({SDL_EVENT_WILL_ENTER_FOREGROUND, SDL_EVENT_DID_ENTER_FOREGROUND});
+            else if (step.args == "lowmemory")
+                PushAppEvents({SDL_EVENT_LOW_MEMORY});
+            else
+                AppleShell::Log("anomaly: script: lifecycle needs background, foreground or lowmemory");
+        }
+        else if (step.command == "audiointerrupt")
+            anomaly_app::PostAudioInterruption(step.args.compare(0, 5, "began") == 0);
         else if (step.command == "keydown")
             PushKey(step.args, true);
         else if (step.command == "keyup")
@@ -431,6 +571,13 @@ bool RunScript(App& app)
             PushMotion(app, x, y);
             PushButton(button, true, x, y);
             PushButton(button, false, x, y);
+        }
+        else if (step.command == "touch" && sscanf(step.args.c_str(), "%f %f", &x, &y) == 2)
+        {
+            // a finger tap as SDL reports it on iPadOS: the touch pseudo-mouse moves to the finger, presses and lets go
+            PushMotion(app, x, y, SDL_TOUCH_MOUSEID);
+            PushButton(1, true, x, y, SDL_TOUCH_MOUSEID);
+            PushButton(1, false, x, y, SDL_TOUCH_MOUSEID);
         }
         else if (step.command == "waitlevel")
         {
@@ -467,6 +614,18 @@ bool RunScript(App& app)
         }
         else if (step.command == "log")
             AppleShell::Log("anomaly: script: %s", step.args.c_str());
+        else if (step.command == "mods_delete" || step.command == "mods_clear")
+        {
+            // test runs that leave the mods folder as they found it (the iPad has no way to delete a file from outside): these act on the
+            // shell's own mods root only, and only when it is a folder named Mods with a modlist.json or nothing but mod folders in it
+            const AppleShell::ModsRemoval result =
+                step.command == "mods_clear" ? AppleShell::ClearModsRoot() : AppleShell::RemoveModFolder(step.args);
+            for (const std::string& path : result.removed)
+                AppleShell::Log("anomaly: script: removed %s", path.c_str());
+            for (const std::string& why : result.refused)
+                AppleShell::Log("anomaly: script: %s refused: %s", step.command.c_str(), why.c_str());
+            AppleShell::Log("anomaly: script: %s: %zu removed, %zu refused", step.command.c_str(), result.removed.size(), result.refused.size());
+        }
         else if (step.command == "quit")
             return false;
         else
@@ -530,6 +689,37 @@ void SaveForBackground(App& app)
     xr_engine::HoldActive(false);
     AppleShell::Log("anomaly: background save %s in %.2f s", written ? "written" : "NOT written", double(SDL_GetTicksNS() - start_ns) * 1e-9);
     app.saving = false;
+}
+
+// SIGTERM (what `devicectl ... terminate`, the system and a `kill` send). SDL turns it into SDL_EVENT_QUIT, but only when its event pump runs,
+// and an app in the background is not iterated at its display link's pace. While the app is paused in the background the engine cannot
+// answer a quit either (it does not run its event queue, and frames are not allowed): the disconnect it would quit through never
+// happens. (Once the system has suspended the app nothing runs at all and the system's SIGKILL, 31 s later, is what ends it.) The game
+// was saved when the app left the screen, so the main queue ends it at once through the same exit as a normal quit, also when the
+// signal arrives while the app is waking up. Otherwise SDL's own behaviour: a quit event.
+void OnTerminateSignal(void*)
+{
+    App* const app = g_app;
+    if (app && app->engine_up && AppleShell::IsPaused())
+    {
+        AppleShell::Log("anomaly: SIGTERM while in the background, leaving without the disconnect");
+        g_app = nullptr;
+        SDL_AppQuit(app, SDL_APP_SUCCESS);
+        exit(0);
+    }
+    SDL_Event quit{};
+    quit.type = SDL_EVENT_QUIT;
+    SDL_PushEvent(&quit);
+}
+
+dispatch_source_t g_terminate_source = nullptr;
+
+void InstallTerminateSource()
+{
+    signal(SIGTERM, SIG_IGN); // the dispatch source sees it, the default action (and SDL's handler) does not
+    g_terminate_source = dispatch_source_create(DISPATCH_SOURCE_TYPE_SIGNAL, SIGTERM, 0, dispatch_get_main_queue());
+    dispatch_source_set_event_handler_f(g_terminate_source, OnTerminateSignal);
+    dispatch_resume(g_terminate_source);
 }
 
 bool StartEngine(App& app)
@@ -639,6 +829,9 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char** argv)
         SDL_SetHint(SDL_HINT_MAC_BACKGROUND_APP, "1");
         SDL_SetHint(SDL_HINT_WINDOW_ACTIVATE_WHEN_SHOWN, "0");
         SDL_SetHint(SDL_HINT_WINDOW_ACTIVATE_WHEN_RAISED, "0");
+        // the script's virtual pad is a joystick, and SDL drops joystick events while no window has the keyboard focus (always, here):
+        // the pad would follow the script for a few frames and then stay at whatever it showed last
+        SDL_SetHint(SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS, "1");
         setenv("ALSOFT_DRIVERS", "null", 0); // OpenAL Soft's silent device, read when the engine opens its first one
         anomaly_app::BeginUnattendedActivity();
         anomaly_app::SetBackgroundActivationPolicy(); // before SDL creates the NSApplication and its first window
@@ -668,19 +861,26 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char** argv)
         if (!LoadScript(*app, resolved.c_str()))
             return SDL_APP_FAILURE;
     }
+    AppleShell::Log("anomaly: build %s %s", __DATE__, __TIME__); // which binary a log belongs to (this file's compile time)
     AppleShell::Log("anomaly: data root %s", paths.data_root.c_str());
     AppleShell::Log("anomaly: appdata   %s", paths.appdata.c_str());
     if (app->unattended)
         PrepareUnattendedConfig(*app, paths);
 
+    InstallTerminateSource();
     const bool data_ok = AppleShell::ValidateGameData(paths.data_root).state == AppleShell::DataState::Ok;
+    // --no-launcher, --script and --exit-after (also on the iPad, where unattended mode is off) start the engine with modlist.json as it is
+    const bool skip_launcher = AppleShell::SkipLauncher();
+    if (skip_launcher)
+        want_launcher = false;
     if (data_ok && !want_launcher)
         return StartEngine(*app) ? SDL_APP_CONTINUE : SDL_APP_FAILURE;
-    if (app->unattended)
+    if (app->unattended || skip_launcher)
     {
         // nobody is there to read a launcher: fail instead of waiting for a click
-        AppleShell::Log("anomaly: unattended: the game data at %s is not usable, not showing the launcher", paths.data_root.c_str());
-        fprintf(stderr, "anomaly: unattended: the game data at %s is not usable\n", paths.data_root.c_str());
+        AppleShell::Log("anomaly: %s: the game data at %s is not usable, not showing the launcher", app->unattended ? "unattended" : "no launcher",
+                        paths.data_root.c_str());
+        fprintf(stderr, "anomaly: the game data at %s is not usable (no launcher was asked for)\n", paths.data_root.c_str());
         return SDL_APP_FAILURE;
     }
     return OpenLauncher(*app) ? SDL_APP_CONTINUE : SDL_APP_FAILURE;
@@ -728,7 +928,11 @@ SDL_AppResult SDL_AppIterate(void* appstate)
         bool keep_going = true;
         AppleShell::WithAutoreleasePool([&] { keep_going = xr_engine::Frame(); });
         if (!keep_going)
+        {
+            // the last frame: the level is gone, what follows is xr_engine::Shutdown() (the "quit (ok)" line ends it)
+            AppleShell::Log("anomaly: the engine asked to quit");
             return SDL_APP_SUCCESS;
+        }
         // one line in the shell log every 10 s: frames per second of the main loop, the CPU time of a frame (time inside
         // Frame(): the rest of the frame interval is the wait for the GPU and the display), and the memory the OS charges us
         ++app->fps_frames;
@@ -835,6 +1039,15 @@ SDL_AppResult SDL_AppEvent(void* appstate, SDL_Event* event)
             AppleShell::Log("anomaly: disconnect %s", double(SDL_GetTicksNS() - t0) * 1e-9 < 4.0 ? "finished" : "timed out");
             return SDL_APP_SUCCESS;
         }
+        if (event->type == SDL_EVENT_QUIT && AppleShell::IsPaused())
+        {
+            // A SIGTERM (or RequestQuit) while the app sits in the background: the engine is paused, it does not run its event
+            // queue, so the disconnect it would quit through never happens, and RequestQuit's 30 s limit was all that ended the app
+            // (31 s). Frames cannot run in the background either (GPU work there kills the app). The game was saved when the app
+            // left the screen (SaveForBackground), so leave at once: SDL_AppQuit runs xr_engine::Shutdown().
+            AppleShell::Log("anomaly: quit while in the background, leaving without the disconnect");
+            return SDL_APP_SUCCESS;
+        }
         // SDL3's callback loop has already taken the event out of the queue the engine would pump
         xr_engine::HandleEvent(*event);
         return SDL_APP_CONTINUE;
@@ -847,6 +1060,7 @@ SDL_AppResult SDL_AppEvent(void* appstate, SDL_Event* event)
     {
     case AppleShell::Launcher::Action::StartGame:
         CloseLauncher(*app);
+        AppleShell::WriteFsGameLtx(); // the data root or the mod list may have changed since the shell started: the engine mounts what this file says
         return StartEngine(*app) ? SDL_APP_CONTINUE : SDL_APP_FAILURE;
     case AppleShell::Launcher::Action::Quit:
         return SDL_APP_SUCCESS;

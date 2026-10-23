@@ -4,7 +4,8 @@
   tools/sweep/triage.py stderr.txt [--frames N] [--ubsan-top N]
 
 ASan: one line per distinct (kind, top <N> frames in the engine's own code), with the count and the first line number in the
-file. UBSan: one line per distinct (file:line, check) with the count. Paths are shortened to src/... and addresses dropped.
+file. UBSan: one line per distinct (file:line, check) with the count. TSan: one line per distinct (kind, the two accesses' top frames
+in the engine's code), with the count. Paths are shortened to src/... and addresses dropped.
 """
 import argparse
 import collections
@@ -62,6 +63,49 @@ def asan(lines, nframes):
     return groups
 
 
+TSAN_FRAME = re.compile(r"^\s+#(\d+) (.*?) (\S+?:\d+)(?::\d+)? \(")
+TSAN_ACCESS = re.compile(r"^\s+(Write|Read|Atomic write|Atomic read|Previous write|Previous read|Previous atomic write|Previous atomic read)"
+                         r" of size (\d+) at 0x[0-9a-f]+ by (main thread|thread T\d+)")
+
+
+def tsan(lines, nframes):
+    """Blocks between '==================' lines that start with 'WARNING: ThreadSanitizer: <kind>'."""
+    groups = collections.OrderedDict()
+    i = 0
+    while i < len(lines):
+        m = re.match(r"^WARNING: ThreadSanitizer: (.*?)(?: \(pid=\d+\))?$", lines[i])
+        if not m:
+            i += 1
+            continue
+        kind = m.group(1)
+        first = i
+        stacks = []  # (what, [frames])
+        cur = None
+        i += 1
+        while i < len(lines) and not lines[i].startswith("==================") and not lines[i].startswith("SUMMARY:"):
+            line = lines[i]
+            am = TSAN_ACCESS.match(line)
+            if am:
+                cur = (am.group(1).replace("Previous ", "prev "), [])
+                stacks.append(cur)
+            elif re.match(r"^\s+(Location|Thread T\d+|Mutex|As if|Heap block|Previous|Cycle)", line):
+                cur = None  # context lines (thread creation stacks, locations): not an access
+            else:
+                fm = TSAN_FRAME.match(line)
+                if fm and cur is not None:
+                    cur[1].append((short_fn(fm.group(2)), short_path(fm.group(3))))
+            i += 1
+        top = []
+        for what, frames in stacks[:2]:
+            mine = [f for f in frames if f[1].split("/")[0] in ("src", "external")]
+            top.append((what, tuple((mine or frames)[:nframes])))
+        key = (kind, tuple(top))
+        if key not in groups:
+            groups[key] = [0, first + 1]
+        groups[key][0] += 1
+    return groups
+
+
 def ubsan(lines):
     groups = collections.OrderedDict()
     for n, line in enumerate(lines, 1):
@@ -93,6 +137,15 @@ def main():
         print(f"  {count:4d}x {kind} {access} (line {line})")
         for fn, loc in frames:
             print(f"          {fn} {loc}")
+    t = tsan(lines, args.frames)
+    if t:
+        print(f"TSan: {sum(v[0] for v in t.values())} reports, {len(t)} distinct")
+        for (kind, accesses), (count, line) in sorted(t.items(), key=lambda kv: -kv[1][0]):
+            print(f"  {count:4d}x {kind} (line {line})")
+            for what, frames in accesses:
+                print(f"          {what}:")
+                for fn, loc in frames:
+                    print(f"              {fn} {loc}")
     u = ubsan(lines)
     print(f"UBSan: {sum(v[0] for v in u.values())} reports, {len(u)} distinct places")
     for (where, msg), (count, line) in sorted(u.items(), key=lambda kv: -kv[1][0])[: args.ubsan_top]:

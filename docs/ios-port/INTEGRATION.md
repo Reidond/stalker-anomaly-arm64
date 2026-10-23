@@ -76,6 +76,8 @@ com.andriishafar.anomaly AnomalyDataRoot <path>`, the default `~/Documents/Anoma
 | `--foreground` | with `--script` or `--exit-after`: a normal, visible, focused run |
 | `--graphics-profile <id\|none>` | force a device graphics profile (e.g. `ipad-8gb`, `mac-pro`), or `none`: no profile, no locks, the full PC options menu ([SETTINGS.md](SETTINGS.md)) |
 | `--unlocked-graphics` | keep the profile as the starting values but let everything be changed (console, scripts, the full options menu); for testing and measuring |
+| `--mods-off` | mount no mods, whatever `modlist.json` says ([MOD-MANAGER.md](MOD-MANAGER.md), "Mounting") |
+| `--no-launcher` | do not show the launcher and use `modlist.json` as it is (`--script` and `--exit-after` imply it) |
 | `--show-launcher` | show the launcher (data status, how to copy data) even when the data is valid; it is shown by itself when the data is missing or incomplete |
 | anything else | the engine's command line, as on Windows (`-nosound`, `-nojit`, `-start ...`, ...), after `commandline.txt` (`~/Library/Application Support/Anomaly/commandline.txt`) |
 
@@ -141,6 +143,7 @@ Without it the game boots to the menu and then fails in scripts (`Failed to load
 | generated `fsgame.ltx` | `~/Library/Application Support/Anomaly/fsgame.ltx` |
 | shader cache | `~/Library/Caches/Anomaly/shaders/{xlat,r4}`: 8 MB after a few sessions; deleting it costs about 2 s at the next start (and ShaderXlat translates again at each level) |
 | overlay archive | `~/Library/Caches/Anomaly/overlay/` |
+| mods, `modlist.json` | `~/Library/Application Support/Anomaly/Mods/` (iPad: `Documents/Mods`; `ANOMALY_MODS_ROOT` overrides, `<ANOMALY_STATE_ROOT>/Mods` in a state-root run) |
 
 ### Unattended runs: `--script`
 
@@ -156,6 +159,8 @@ the time is seconds since the engine came up:
 <t> relmove <dx> <dy>
 <t> click <x> <y> [button]
 <t> log <text...>            a line in the shell log
+<t> mods_delete <id>         remove <mods root>/<id> (a plain folder name, directly inside the mods root; MOD-MANAGER.md)
+<t> mods_clear               remove every entry of the mods root (put it last)
 <t> quit                     leave through the engine's own disconnect path
 ```
 
@@ -260,11 +265,11 @@ Re-run `tools/sweep/run.sh smoke` after a change in the gameplay or engine code.
 ## Known issues by module
 
 - **Renderer R4 / Metal shim (M2).**
-  - The weather layer (rain) is drawn over interior geometry, and some UI and HUD windows show dark rectangles (screenshots in
-    the PR). The scene is lit and textured, the sky and the HUD draw.
+  - (Fixed since: the weather layer drawn over interior geometry and the dark rectangles in the UI, RENDER-QA.md.)
   - 34 optional post-process shaders are in no archive and fall back to `stub_default` (`ssfx_*`, `heatvision`,
     `deffer_terrain_low_flat`): SSR, SSS, bloom, TAA, volumetrics, water effects are absent.
-  - `pixel shader N reads 1 interpolant(s) vertex shader M does not write ... zero-filled` is logged once.
+  - (Fixed since: `pixel shader N reads 1 interpolant(s) vertex shader M does not write ... zero-filled`. Vertex/pixel pairs that
+    pack a register differently are adapted by the shim and not logged, METAL-SHIM.md item 13.)
   - Tessellation, 3D fluid (volumetric smoke) are switched off (no hull/domain/geometry stages).
   - `screenshot` and `r4_...` console paths were not exercised.
 - **ShaderXlat.** A cold cache costs about 2 s at the menu (138 shaders, 1.3 s of translation); a level asks for about 165

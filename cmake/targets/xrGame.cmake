@@ -79,6 +79,13 @@ if(xrgame_unassigned)
         "(run tools/xrgame_shards.py): ${xrgame_unassigned}")
 endif()
 
+# Apple port: the Lua performance tools and the bytecode cache (docs/ios-port/LUA-PERF.md). Not in the vcxproj: the Windows build does not
+# compile them. The cache has no engine dependency (tools/lua_cache_test builds it alone), so it skips the engine's precompiled header.
+foreach(extra script_perf.cpp script_bytecode_cache.cpp)
+    list(APPEND xrgame_sources_script-entities "${ANOMALY_SRC_DIR}/xrServerEntities/${extra}")
+endforeach()
+set_source_files_properties("${ANOMALY_SRC_DIR}/xrServerEntities/script_bytecode_cache.cpp" PROPERTIES SKIP_PRECOMPILE_HEADERS ON)
+
 # Multiplayer exclusion: the mp-stub shard compiles its keep list instead of the multiplayer sources.
 if(NOT ANOMALY_XRGAME_MULTIPLAYER)
     set(xrgame_sources_mp-stub "")

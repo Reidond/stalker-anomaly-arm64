@@ -127,6 +127,16 @@ in order:
 The JIT stays available as the opt-in route for full speed: SideStore + StikDebug, or a debugger
 ([IPAD-JIT.md](IPAD-JIT.md)).
 
+State (2026-10-23, measured on the Mac and on the iPad; the method, tools and tables are in [LUA-PERF.md](LUA-PERF.md), the iPad's numbers also in [IPAD.md](IPAD.md#lua-on-the-ipad)):
+
+1. **Measured.** Lua is 1.0 to 3.6 ms of a frame on the iPad's interpreter, 6 to 11 % of the frame budget in the Cordon, the Rookie village and the Bar, in both modes; both modes hold their cap
+   (Quality 30 fps, Performance 60). The profile is flat: a quarter of the time is the collector, half is engine functions called from scripts, a fifth is bytecode.
+2. **Bytecode cache.** Built (`Library/Caches/Anomaly/lua`, keyed by a hash of the exact text, any mismatch or error loads the source; tested for stale sources, addon overrides and damaged entries) and
+   **off by default**, switched on with `-lua_cache`, or `-lua_prefetch` for the version with a read-ahead thread. Compiling is not where the load time goes: the scripts are 0.27 to 0.34 s of a
+   5.5 s level load on the iPad and 66 ms of that is compiling. The Lua part of a load goes from 326-343 ms (no cache) to 318-322 ms (cache) and 270-273 ms (cache with the read-ahead): under 1 % of
+   the load, for a new on-disk cache and a thread at every level load, so it waits until the hands-on test is done.
+3. **Hot paths: not needed**, the budget holds with room; nothing was ported.
+
 ## Risks
 
 1. **Memory on 8 GB.** This is the most likely blocker; the mitigations are above. Measure it

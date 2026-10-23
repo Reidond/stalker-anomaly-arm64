@@ -388,7 +388,16 @@ static void handler_base(LPCSTR reason_string)
 	Debug.backend(nullptr, reason_string, 0, 0, DEBUG_INFO, ignore_always);
 }
 
-static void terminate_handler() { handler_base("Unexpected application termination"); }
+static void terminate_handler()
+{
+	// The report logs, and logging can itself fail with an exception (the log's mutex throws once it is destroyed, which is
+	// the case after the static destructors have run): that is another std::terminate() and this handler again, for ever. One
+	// level only; when the report cannot be made the process ends.
+	static std::atomic_flag in_terminate = ATOMIC_FLAG_INIT;
+	if (in_terminate.test_and_set())
+		_exit(128 + SIGABRT);
+	handler_base("Unexpected application termination");
+}
 
 static std::atomic_flag g_in_crash = ATOMIC_FLAG_INIT;
 

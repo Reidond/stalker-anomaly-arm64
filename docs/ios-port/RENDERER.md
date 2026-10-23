@@ -134,7 +134,10 @@ Against what R4 calls (see [D3D11-SURFACE.md](D3D11-SURFACE.md)); the rest of ME
 * Pixel inputs the vertex shader never writes: the pixel function is rebuilt from MSL with those inputs as zero locals
   (`Context::fragmentFunctionFor`); a pixel input of another width than the vertex output at the same location (`waterd`: FOG packed
   next to TEXCOORD2) is rebuilt with the vertex shader's type and a swizzled or zero-extended local (`AdaptFragmentInputs`). Covered
-  by the warm-up tool and `metal_d3d11_headless_test` on real and synthetic MSL.
+  by the warm-up tool, which lists the four stock pairs that need it and compiles the adapted variants, and `metal_d3d11_headless_test`
+  on real and synthetic MSL. A pair that needs it is normal, counted in the render stats and not logged.
+* Render targets and depth buffers are cleared to zero when they are created, as in D3D11 (a scope's fake-scope target was read
+  before any write and showed magenta noise).
 * Screenshots: `D3DX11SaveTextureToMemory/File` encode JPG, PNG, TIFF and GIF through ImageIO (R4's `screenshot` token 0/1).
 * `D3DX11LoadTextureFromTexture` between different sizes (savegame and level thumbnails) filters on the CPU.
 * `D3D11_SRV_DIMENSION` is the `d3dcommon.h` enum, `LPD3DBLOB` / `LPD3D10BLOB` exist.

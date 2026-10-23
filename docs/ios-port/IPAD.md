@@ -12,7 +12,7 @@ with the free Personal Team, `RelWithDebInfo` build, game data in `Documents/Ano
 | Play | Walking, rain, AI ticking, outdoors and interiors, teleporting around the level: 60 fps in the field, 49 to 55 at the village ([long runs](#long-runs-stability-and-thermal)) |
 | Save, load | Yes (`save`, the menu, and an automatic save when the app loses the screen) |
 | Background and return | Yes: the game pauses, saves first, resumes at 60 fps |
-| DualSense, sound | Virtual pad on the iPad: yes. First hands-on session: sound and look fine; the rest is [deferred to M5](#deferred-to-m5-hands-on-dualsense-test) |
+| DualSense, sound | Virtual pad on the iPad and the Mac: every binding and UI screen checked ([M5 system checks](#m5-system-checks)); the feel is the [hands-on list](#hands-on-dualsense-checklist-needs-a-person) |
 
 ## Install
 
@@ -57,6 +57,7 @@ Xcode re-signs with a new profile, and `Documents` (data, `commandline.txt`, log
 | saves, `user.ltx`, screenshots | `Library/Application Support/Anomaly/appdata/{savedgames,user.ltx,screenshots}` |
 | generated `fsgame.ltx` | `Library/Application Support/Anomaly/fsgame.ltx` (rewritten at every launch) |
 | shader cache | `Library/Caches/Anomaly/shaders/{xlat,r4}` (rebuilt when missing; 276 shaders for a level take 77 ms from the cache, 1.3 s translated) |
+| compiled script bytecode | `Library/Caches/Anomaly/lua/*.luac` (one file per script, 476 entries, about 5 MB; rebuilt when missing or when a script changes, `lua_cache clear` empties it) |
 | Monolith overlay archive | `Library/Caches/Anomaly/overlay/monolith_overlay.db0` (packed from the bundle's `overlay/` at launch: 161 files, 0.1 s) |
 
 `tools/ios/ipad.sh get "<path>" <local>` and `put` copy files in and out through `devicectl`.
@@ -168,6 +169,23 @@ scheduler, AI, Lua) about 2.8 ms. Lua's `lua_pcall` is 0.66 s, 8% of the main th
 by Lua. A secondary engine thread uses 36% of a core. So: **GPU bound** at the native size, at 1600x1200 and above; at the preset GPU and
 vsync, with the CPU at about 45% of a frame.
 
+## Lua on the iPad
+
+The iPad runs LuaJIT as an interpreter. Measured with the engine's own timers (`-lua_perf`, [LUA-PERF.md](LUA-PERF.md)) on the `ipad_test` save, Cordon field / Rookie village / Bar, after a two-minute warm-up:
+
+| Mode | fps | Lua per frame | share of the budget | frames on the beat |
+|---|---:|---:|---:|---:|
+| Quality (30 fps cap) | 29.9 / 29.9 / 30.0 | 2.6 / 3.6 / 2.9 ms | 8 / 11 / 8 % of 33.3 ms | 98.5 / 99.3 / 100 % |
+| Performance (60 fps) | 59.9 / 59.7 / 60.0 | 1.0 / 1.9 / 1.2 ms | 6 / 11 / 7 % of 16.7 ms | 99.7 / 98.3 / 99.7 % |
+
+**The budget holds in both modes, so no script function was moved to C++.** The profile is flat: 22 to 24 % of the Lua time is bytecode, about half is engine functions called from scripts, a
+quarter is the collector. The collector's steps run on a second thread (3 to 4 ms per frame there, parallel to the renderer). Level load: the scripts are 0.32 to 0.34 s of the ~5.5 s (running
+their main chunks, 250 ms, is most of it; the compile is 66 ms). The opt-in bytecode cache (`Library/Caches/Anomaly/lua`, `-lua_cache`) with its read-ahead thread (`-lua_prefetch`) shortens the Lua part of a
+load from 326-343 ms to 270-273 ms (the cache alone does not: reading 474 small files takes as long as parsing them, 318-322 ms); under 1 % of the load, so both are off by default. New game: the Lua part is 0.34 to 0.46 s; a steady 60 fps window ends 27 to 29 s
+after Start. The Time Profiler figure in "Performance: where the time goes" (`lua_pcall` about 1.4 ms per frame at the 60 fps preset) agrees: the field is 1.0 ms in Performance and 2.6 ms in Quality (a Quality frame covers two frames of game time).
+
+Switches: `-lua_perf`, `-lua_profile`, `-lua_cache`, `-lua_prefetch` in `Documents/commandline.txt`; console `lua_perf`, `lua_profile`, `lua_cache` (with `-dbg`). `tools/ios/lua_measure.sh` repeats the whole set (about 45 minutes).
+
 ## Long runs: stability and thermal
 
 Two soaks with the virtual DualSense on the `ipad_armed` save (god mode on, `-dbg`): `tools/ios/scripts/soak.txt` (27 minutes) and `soak2.txt` (21 minutes).
@@ -193,22 +211,39 @@ Both ended with exit code 0: no crash, no memory warning, no lifecycle event, th
 | Argument | Meaning |
 |---|---|
 | `--graphics-profile <id\|none>`, `--unlocked-graphics` | the device graphics profile ([SETTINGS.md](SETTINGS.md)); `--device-preset none\|ipad` is the old spelling |
-| `--script <file>` | scripted run (INTEGRATION.md). New in the app: relative paths are looked up in `Documents/`, a trailing ` # comment` is ignored, `ballast <MB>` / `unballast` |
+| `--script <file>` | scripted run (INTEGRATION.md). New in the app: relative paths are looked up in `Documents/`, a trailing ` # comment` is ignored, `ballast <MB>` / `unballast`; the virtual pad, touch, lifecycle and audio-interruption commands are in CONTROLS.md "Test aids". `run_string` in a script needs `-dbg` (`ipad.sh script <file> -dbg`) |
 | `-dbg` | engine flag: enables the console's `run_string`, `run_script`, `jump_to_level`, `g_god`; `gamedata/scripts/ipad_debug.script` has `dump_smarts()` and `tp(x, y, z)` for test runs |
 | `--exit-after <s>`, `--show-launcher`, `--data-root` | as on the Mac |
+| environment `ANOMALY_CLEAR_SHADER_CACHE=1` | empties `Library/Caches/Anomaly/shaders` at start (every shader is translated again): a cold start for tests; pass it with `devicectl ... --environment-variables` (`ANOMALY_LAUNCH_ENV='{"ANOMALY_CLEAR_SHADER_CACHE":"1"}' tools/ios/ipad.sh script ...`) |
 
 Test scripts in `tools/ios/scripts/`: `new_game.txt` (menu, faction dialog, Start, the Cordon, a walk, a save: makes the `ipad_test` save),
-`load_game.txt`, `tour.txt` (four places of the Cordon), `res_sweep.sh`, `sweep_gpu.txt`, `memory_pressure.txt`. The shell log line every 10 s has
+`load_game.txt`, `tour.txt` (four places of the Cordon), `res_sweep.sh`, `sweep_gpu.txt`, `memory_pressure.txt`, `heap_runs.sh` (repeated cold start / play / quit
+runs with malloc debugging, counts aborts and hangs and times the quit; scenarios `menu`, `loading`, `play`, `churn`) and `bg_term.sh` (SIGTERM to the game while it is in
+the background; `ipad.sh pid|signal|front|install-app` are its helpers). The shell log line every 10 s has
 fps, CPU ms inside `Frame()`, GPU ms, footprint (peak), available memory and the thermal state. `soak.txt` and `soak2.txt` are the long runs (below).
 
 ## Known issues
 
-- **Intermittent abort in ShaderXlat** (renderer session). `malloc: pointer being freed was not allocated` in vkd3d's `preproc_free_macro` /
-  `preproc_yyparse` while a shader is translated at run time: seen once, non-fatal, at start-up, and twice as a `SIGABRT` (once at quit, once
-  mid-run), both times translating a `hud_font` shader requested by `CConsole::OnRender`. It never shows on the Mac. Shaders already in the cache
-  do not go through vkd3d, so it shows when new shaders are needed (the first run of a level, the console font). Reported to the M2 session.
-- The renderer's known defects (INTEGRATION.md): rain over interior geometry, the 34 missing `ssfx_*` shaders, no tessellation. One
-  `pipeline creation failed (vs206 ps205): Fragment input user(locn2) mismatching` per load.
+- **Intermittent heap abort** (`malloc: pointer being freed was not allocated`, about 4 in 90 runs before M5, in vkd3d's `preproc_free_macro`/`preproc_yyparse` while a shader is
+  translated, in `CloseLog` at a normal quit, once in a system framework): **causes found and fixed in M5, not reproduced either way.** vkd3d is the victim, not the culprit:
+  the threads that share the heap with it were not safe (the spawn prefetcher outliving its level and sharing the model pool and the file registry with the primary thread, the
+  freeze watchdog flushing the log into the file system being torn down, unlocked `LogFile`; SANITIZERS.md findings 29 to 37). Runs (`tools/ios/scripts/heap_runs.sh`, cold shader
+  cache every run, `MallocScribble`/`MallocPreScribble`/`MallocGuardEdges`/`MallocErrorAbort`/`MallocStackLogging`): before, 27 runs on the unfixed build, 0 aborts (8 menu, 8 quit during
+  the load, 8 load and play, plus 3 with `MallocCheckHeapStart=5000`/`Each=1000`); after, **40 runs, 0 aborts, 0 crashes, 0 hangs** (8 menu, 8 quit during the load, 8 load and play 150 s,
+  16 `churn`: teleports to four places 15 s apart and a quit 3 s after the last, with the prefetcher's queue full). Zero in 27 is what chance gives a third of the time at the old rate,
+  so the evidence for the fix is the code, the TSan runs and the Mac runs, and these as no regression. Quit time (the script's `quit` to `quit (ok)`), median (max): menu 0.12 s (0.13) before,
+  0.15 s (0.15) after; during the load 1.38 s (1.55), 1.21 s (1.48); from the level 1.23 s (1.34), 1.02 s (1.34); churn 1.35 s (1.58) after. If it comes back, `MallocStackLogging` with
+  `MallocErrorAbort` names the allocation; `lua_parallel_gc 0` is the next suspect (SANITIZERS.md open item 12).
+- **A SIGTERM to the game in the background takes 31 s (the system's grace period).** Measured (`bg_term.sh`: load a level, launch Settings over the game, SIGTERM): the shell log ends at
+  `DidEnterBackground`, the process does nothing for 90 s with the old build and the new one (5 of 5 runs), and only SIGKILL ends it: iOS suspends a backgrounded app and a suspended
+  process cannot answer. What the app can do, it does: while it is paused but still running, and when it wakes with the SIGTERM pending, it leaves at once (SANITIZERS.md finding 38). The
+  background save (`ipad_autosave`) is written at the transition, so a kill loses nothing.
+- The renderer's known defects (INTEGRATION.md): the 34 missing `ssfx_*` shaders, no tessellation. (The rain over interiors and the
+  `pipeline creation failed (vs206 ps205): Fragment input user(locn2) mismatching` once per load are fixed: the pixel function of the
+  water distortion pass is adapted to the vertex shader's packing, `fc780483`, which this run predates.)
+- **Quick use does nothing in a scripted start** (Mac, M5): the Quick 1 wheel slot and F1 on the keyboard both reach `quick_use_1`, `CInventory__eat` called from Lua
+  returns true, but the medkit is not used (count 3 stays 3, health stays). Not the pad; for the gameplay session.
+- Flashlight and night vision were only seen reaching their actions: the scripted start has neither item. Check them in a normal game.
 - `sound: OpenAL: Can't create source. Error: Out of Memory.` once at start-up with 256 targets (the engine continues); `bin/alsoft.ini` is not on the
   iPad (the push script skips `bin/`), so OpenAL Soft runs on its defaults.
 - Runtime changes of `vid_mode` through the console work, but the engine saves the last one at exit, and it becomes the next start's size.
@@ -216,11 +251,6 @@ fps, CPU ms inside `Frame()`, GPU ms, footprint (peak), available memory and the
 - The Load game list was not screenshotted again after the colour fix (it uses the same Lua colours as the inventory list, which was). In a script the virtual
   pad's analog stick moves the cursor sprite but the menu does not see a hover or a click from it; the D-pad nudge (96 UI units a step) does click.
 - The save screenshot (`.dds`) next to a save is black (the Load game preview shows black or noise).
-- Four `SIGABRT`s from libmalloc (`pointer being freed was not allocated`) in about 90 runs, at different places (vkd3d; `CloseLog` at shutdown, twice): a
-  double free or a foreign pointer somewhere, passed to the crash-sweep session. The latest, with the merged tree: `pick.txt`-style 100 s run, normal `quit`,
-  `anomaly: script asked to quit`, then `xr_engine::Shutdown` -> `xrCore::_destroy` -> `CLocatorAPI::_destroy` -> `CloseLog` -> `LogFile.clear()` frees a bad
-  block (`libsystem_malloc` abort). `clear()` walks every log line's string, so it trips over a heap corruption made anywhere earlier. Also worth a guard:
-  `AddOne` does `LogFile.erase(LogFile.end()-1)` for a repeated line, which is undefined if the `clear_log` console command emptied the vector first.
 
 ## Controller
 
@@ -252,6 +282,17 @@ in hand puts the weapon away (stock). `pad_test.txt` does the PDA, Circle, the p
 Not done: the Controls screen has no Gamepad column. A game started by script leaves the PDA and the outfit in the backpack (`slots(true)` moves the PDA to its
 slot; a normal new game from the menu was not checked), and the 3D PDA only rises from its slot.
 
+### What M5 changed in the controller path
+
+- **The cursor that stopped answering** (the old known issue: the stick moves the cursor, the menu sees no hover or click). On the Mac it was SDL: it drops joystick events
+  while no window has the keyboard focus, so the script pad followed the script for a few frames and then froze (the cursor ran to the edge and ignored everything after).
+  Unattended runs set `SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS`. Two real defects showed up behind it: a cursor *jump* (R3, a D-pad jump to a widget, a touch)
+  moved the cursor without a mouse move, so no hover followed, and the main menu's click needed the sliding lens to be under the cursor, so a tap or a click right after a
+  jump was dropped. Jumps now send the widgets a mouse move and the button under the cursor takes the click (`UIMMShniaga.cpp`).
+- **Touch** puts the UI cursor on the finger (it integrated deltas from the last pointer position, which is not where the UI cursor is when there is no mouse).
+- **L2 / R2** step the PDA's tabs; **a missing controller** pauses with a reason on screen and any key, click or tap lets go.
+- **Test aids** for all of it: `pad_feedback_log`, `pad_info`, `pad_cursor`, the script commands of CONTROLS.md "Test aids".
+
 ## The UI colour bug
 
 Symptoms: the Load game list showed no saves, the inventory no item icons. Cause (luabind, found on the iPad): Lua scripts pass UI colours to `u32` parameters as
@@ -259,17 +300,74 @@ negative numbers (`GetARGB(255, 216, 186, 140)` is -2573684, the alpha in the si
 is undefined for a negative value: x86 wrapped it, arm64 saturates it to 0. Every Lua-set colour became `00000000`, fully transparent (the list's
 glyph quads were being drawn, with vertex colour 0). Integer parameters now go through `long long`. This is very likely the Mac's "dark rectangles".
 
-## Deferred to M5: hands-on DualSense test
+## M5 system checks
 
-First session (before the controller fix): menu and loading fine, the look stick smooth and a stable frame rate, sound good (it went to the AirPods Max once the
-iPad had them connected), background and return fine. Movement, Create, touchpad, L1 and R1 did nothing, the list text and the item icons were missing:
-all of it fixed above, and re-checked with the virtual DualSense. The second session, with a real pad and the fixed build, moves to M5 (PLAN.md).
-Load the `ipad_armed` save (`tools/ios/scripts/pad_test.txt` makes it: AK-74 in hand, PDA in slot 8, outfit, quick slots F1 medkit, F3 bread, F4 flask).
+Before the second hands-on session every system the DualSense test touches was run without a person: the virtual pad of `--script` (`padon`, `pad`, `paddown`/`padup`,
+`padaxis`, CONTROLS.md "Test aids") on the Mac (unattended, own state, the 2026-10-23 build of the M5 PR) and on the iPad, with logs and screenshots read for each row. The two
+scripts are `tools/ios/scripts/pad_bindings.txt` (every default binding, a `STATE` and a `VIEW` line around each) and `pad_ui.txt` (every UI screen, screenshots);
+`lifecycle.txt` with `tools/ios/lifecycle_check.sh` drives the app lifecycle from the Mac. The two pad scripts gave the same effects on the iPad (2026-10-23, the PR's build, run
+with `-dbg`) as on the Mac; the Mac ran at a load average of 400, so only effects are judged there and the iPad's numbers are quoted where there is one.
 
-- [ ] Menu: virtual cursor with the left stick, Cross to click, Circle to go back
-- [ ] Move, look, jump, crouch, sprint
-- [ ] Aim (L2) and shoot (R2) with the AK-74; reload
-- [ ] Inventory (Create), PDA (touchpad press, press again to close); drag and drop with the cursor
-- [ ] Radial wheels: hold L1 (items) and R1 (combat), pick with the right stick, flip pages with D-pad left/right, release to use
-- [ ] Rumble on a hit, light bar colour, adaptive trigger resistance
-- [ ] Sound (effects, music, ambience); PS button or Control Center and back: pause, resume, sound
+| Item | How verified | Result |
+|---|---|---|
+| **Controller, in the level** | | |
+| Move, strafe (left stick) | `padaxis ly/lx 1`, position after 1.5 to 2 s | OK on both: forward 5.4 m in 2 s, back 2.1 m in 1.5 s, strafe 3.8 m in 1.5 s (`forward` `back` `lstrafe` `rstrafe` reach the game) |
+| Walk (gentle push) | `padaxis ly -0.6`, 2 s | OK: 2.4 m against 5.4 m running, `accel` is held. A push under about 0.52 of the stick moves nothing (dead zone 0.18, then the keys switch on at 0.42 of the rest): the walk window is 0.52 to 0.69 |
+| Sprint (L3) | L3 tap while running forward | OK: 11.7 m in 2.5 s (`sprint_toggle`) |
+| Look (right stick) | `padaxis rx/ry`, `VIEW` yaw and pitch sampled every 0.5 s | OK both axes (the camera yaw wraps at 180: read it in steps of less than half a turn). iPad: full push turns the view at about 310 degrees per second (220 and the 1.5x after 0.45 s at the edge), a 0.3 push at 17 |
+| Crouch (Circle held), jump (Cross), lean (D-pad left / right) | eye height, y, camera roll | OK: eye 1.66 to 1.24 m, jump +1.1 m, roll -0.19 and +0.20 |
+| Aim (L2), fire (R2), reload (Square) | field of view, magazine | OK: fov 75 to 63.1, 30 to 16 rounds in a 0.3 s pull, reload refills |
+| Previous / next weapon (L1, R1 taps) | active slot | OK: slot 3 to 2 to 3 |
+| Wheels: L1 hold (items), R1 hold (combat) | stick pick and release, action log, screenshots | Both open and pick (`wpn_3`, `quick_save` reach the game, the quicksave and its preview are written). **Quick use 1 reaches `quick_use_1` but does not use the medkit**; F1 on the keyboard does not either, so it is not the pad (see follow-ups) |
+| Flashlight, night vision (D-pad up, down) | action log | Reach `torch` and `night_vision`; no visible effect: the test start has no flashlight or night-vision item |
+| Use (Triangle) | action log | Reaches `use`; picking an item up was not exercised |
+| Inventory (Create), PDA (touchpad), pause menu (Options) | `pad ui: dialog up / closed` log lines, screenshots | OK. Map: the stock game has no map binding, it is a PDA tab, reached with R2 / L2 |
+| **Controller, UI screens** (`pad_ui.txt`) | | |
+| Main menu | stick to a button, Cross; D-pad; R3 | OK: the stick hovers and clicks (the lens follows), D-pad nudges, R3 recentres. A tap or a click right after a cursor jump now takes the button under the cursor (it was dropped until the lens arrived) |
+| Load game list | click a row, Cross | OK: the row is selected and the preview shows the frame of the save. Saves made before M5 have a black preview and `(no save)` shows the stock noise texture |
+| Options and the console-style graphics menu | Settings, Cross on the Graphics mode combo | OK: the combo opens (Quality, Performance); the page list on the left is two list boxes: click them (L2 / R2 do not step them) |
+| Inventory | drag the rifle out of its slot (Cross held, stick), Square | OK: drag and drop and the context menu work |
+| PDA tabs | L2 / R2 | OK (new): the tab strip of the PDA steps through its 7 tabs |
+| In-game menu and message box | Options, click Quit game | OK: "Are you sure you want to quit the game?" with Yes / No, answered with Cross. Circle (Escape) did nothing in a Yes / No box (the stock code has that case commented out): it answers No now (new, `CUIMessageBox::OnEscape`) |
+| Dialog choices and trade | trader dialog, click choice 1 | OK: the trade window opens |
+| Touch, no controller | `touch x y` on Settings | OK after the fix below: the cursor jumps to the finger and the tap opens Settings |
+| **Controller, connection** | | |
+| Disconnect and reconnect mid-game | `padoff` while walking, `padon` | Pauses at once ("Game paused", "Reconnect the controller to continue"); reconnecting resumes, walking and Create still work (bindings intact) |
+| Second controller | `padon 2` (an Xbox Series pad) | Both are listed (`pad_info`); the pad touched last drives; one going away while the other stays does not pause |
+| No controller at all | the last pad off, then a key, `touch` | Pauses like a disconnect; a key, a click or a tap ends the pause and the game goes on with the keyboard (new). On the iPad a game started with no pad shows no controls on screen: only the menus take touch |
+| Rumble, light bar, adaptive triggers | `pad_feedback_log 1`, shots, a hit, low health, the menu | Calls go out with the CONTROLS.md parameters (shots rumble low 0.04 to 0.16 and high 0.07 to 0.27; `R2 weapon 0.40 / 0.62 / 0.55` at rest, `vibration 0.40 / 0.55 / 0.55` firing, `L2 feedback 0.25 / 0.40` aiming, both off on an empty magazine; light bar blue in a menu, a green pulse following health). The feel is for a person |
+| **Other systems** | | |
+| Save thumbnail | quick save, the Load game list | Fixed (Mac): `.dds` was black because the shim could not copy to a BC1 texture and the Metal back buffer is empty after Present. The preview is now captured from the presented frame, resized and BC1 encoded. An autosave made while the app is leaving the screen has no frame to capture and keeps the previous preview |
+| Exit button | the pad, Exit game, Yes | The label said "Exit to Windows"; it reads "Exit game" now (new string `ui_mm_exit_game` in English and Russian, other languages keep the stock text) and quits cleanly: `anomaly: quit (ok)` 0.5 s after Yes |
+| Audio start-up error | engine log | Fixed (Mac): `Max targets - 256` and `Can't create source. Error: Out of Memory.` came from OpenAL Soft's default of 256 sources against `snd_targets 1024`; with a generated `alsoft.ini` (`sources = 1024`) the log is clean |
+| **App lifecycle on the iPad** (`lifecycle_check.sh`, the game standing in the Cordon at 30 fps) | | |
+| Home and back, app switcher | Settings launched over the game with `devicectl` (the same transition), the game launched again | OK: `WillEnterBackground`, `ipad_autosave` written in 0.11 to 0.14 s, `DidEnterBackground` 1.0 s after the first; on the way back `WillEnterForeground`, `DidEnterForeground`, 29.7 fps in the next 10 s window, the footprint 3.9 GB, 3.73 GB in the background, 3.87 GB after; the actor was where it had stood. What is on the screen was not looked at (hands-on list) |
+| Low-memory warning | `lifecycle lowmemory` (UIKit's event pushed in), then `ballast 3200` | OK: the app warning takes memory Normal to Critical and back after 5 s; real pressure at a 7.2 GB footprint with 0.99 GB available: Critical via system pressure and a genuine UIKit memory warning, 28.6 fps, no kill; ballast freed, 3.2 GB available again. `devicectl ... sendMemoryWarning` is refused by this iPad (ENOENT), hence the script's own events |
+| Terminated while backgrounded | `devicectl ... signal --signal 9` (what jetsam does), then a start loading `ipad_autosave` | OK: the next start logs `previous session ended unexpectedly`, `ipad_autosave` (written at the background transition) loads, the actor and 15 inventory items are there, `ipad_test` is intact. A SIGTERM instead takes 31 s to quit (the paused engine cannot answer the quit before the 30 s limit): that is the quit hang, with the heap-stability session |
+| Audio interruption | `audiointerrupt began` / `ended` (the notification a call or an alarm posts) | OK: `SOUND: audio session interrupted, device paused`, 6 s later `audio session reactivated`, the game stays up. A real one is on the hands-on list |
+| Lock and unlock, Control Center, a banner | nobody can touch the iPad | Hands-on list |
+| Audio start-up error | engine log of the iPad start | Fixed on the iPad: `no alsoft.ini in the game data, OpenAL Soft settings written to ...`, `snd_targets 256`, no `Max targets` and no `Can't create source`; the output route is logged (`Speaker`) |
+| `vid_mode` saved at exit | `lock_test.txt` twice (`vid_mode 640x480` from the console, `cfg_save`) | Nothing to fix: the profile locks it (`vid_mode 640x480` refused, logged once), and the next start says `user.ltx has 192 locked settings, ignored (the ipad-8gb profile applies); 0 of them differ from the profile`; `vid_mode` stays `2732x2048` |
+| Exit button, iPad | Exit game, Yes | OK: `quit (ok)` 0.5 s after Yes, exit code 0 |
+| Save preview, iPad | the Load game list | OK: the preview shows the saved frame |
+| Touch, iPad | `touch 683 688` (Settings in window points) | OK: Settings opens |
+| Main menu cursor bug on the iPad | `padaxis ly 1` for 0.2 s, Cross | OK: the stick hovers Settings and Cross opens it (the baseline build was not run: the cause on the Mac was SDL dropping the script pad's events, above) |
+
+## Hands-on DualSense checklist (needs a person)
+
+Everything that has a log line or a screenshot above is done; what is left is how it feels, and the events nobody can trigger over USB. Load the `ipad_armed` save
+(`tools/ios/scripts/pad_test.txt` makes it: AK-74 in hand, PDA in slot 8, outfit, quick slots F1 medkit, F3 bread, F4 flask) or any game.
+
+- [ ] Sticks: the response curve and dead zone of move and look, the walk window (gentle push), acceleration after 0.45 s at the edge, look speed while aiming
+- [ ] Cursor: stick speed, precision mode (L3 held), trackpad with the touchpad, D-pad nudges in the inventory
+- [ ] Wheels: how quickly a slot is picked (hold L1 or R1, flick, release), page flip with D-pad left / right
+- [ ] Haptics: a hit of each kind, a shot per weapon class, the blowout
+- [ ] Adaptive triggers: R2 per weapon class (pistol to launcher), the vibration while an automatic weapon fires, limp on empty and during reload, the wall when jammed, L2 firming up while aiming
+- [ ] Light bar: green to red with health, the pulse below 25 %, blue in menus
+- [ ] Latency: stick to view, R2 to shot, Cross to click
+- [ ] Gyro aiming (off by default; `gyro.mode` 1 is "ADS only")
+- [ ] Hold Create for about a second (the system capture gesture) and PS (Home): the game must not misbehave afterwards
+- [ ] Power the pad off and on again in the game: pause, "Reconnect the controller to continue", resume
+- [ ] Lock and unlock, Control Center, a notification banner over the game: the game pauses, comes back with sound and without a black frame
+- [ ] A real audio interruption (an alarm or a call) and the output moving to AirPods and back
+- [ ] The on-screen taps in the menus with a finger, with and without a pad

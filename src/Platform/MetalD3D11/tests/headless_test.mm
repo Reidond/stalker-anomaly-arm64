@@ -205,6 +205,42 @@ int main()
         check(mtl_d3d11::AdaptFragmentInputs(msl, {{vars[0], {"uint2", "o0", 0}}}) == msl, "another base type is left alone");
     }
 
+    printf("[5] render targets and depth buffers start zeroed (D3D11 semantics)\n");
+    {
+        // A texture of the same size is filled and released first, so a recycled allocation would show it.
+        const uint32_t S = 256;
+        D3D11_TEXTURE2D_DESC td{};
+        td.Width = S; td.Height = S; td.MipLevels = 1; td.ArraySize = 1; td.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        td.SampleDesc.Count = 1; td.Usage = D3D11_USAGE_DEFAULT; td.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
+        for (int round = 0; round < 2; ++round)
+        {
+            ID3D11Texture2D* rt = nullptr;
+            ID3D11RenderTargetView* rtv = nullptr;
+            dev->CreateTexture2D(&td, nullptr, &rt);
+            if (round == 0)
+            {
+                dev->CreateRenderTargetView(rt, nullptr, &rtv);
+                const FLOAT white[4] = {1, 1, 1, 1};
+                ctx->ClearRenderTargetView(rtv, white);
+                ctx->Flush();
+                rtv->Release();
+            }
+            else
+            {
+                // PNG round trip: every texel zero (a cleared target would be white)
+                ID3D10Blob* out = nullptr;
+                D3DX11SaveTextureToMemory(ctx, rt, D3DX11_IFF_PNG, &out, 0);
+                Rgba img;
+                bool ok = out && decode(out->GetBufferPointer(), out->GetBufferSize(), &img) && img.w == S;
+                for (size_t i = 0; ok && i < img.px.size(); ++i)
+                    ok = img.px[i] == 0;
+                check(ok, "a new render target reads zero after a same-sized one held white");
+                if (out) out->Release();
+            }
+            rt->Release();
+        }
+    }
+
     ctx->Release();
     dev->Release();
     printf("\n%s\n", g_failed ? "FAILED" : "all checks passed");

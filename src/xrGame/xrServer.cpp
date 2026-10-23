@@ -11,6 +11,7 @@
 #include "game_sv_mp.h"
 #include "game_cl_base_weapon_usage_statistic.h"
 #include "ai_space.h"
+#include "alife_simulator.h"
 #include "../xrEngine/IGame_Persistent.h"
 #include "string_table.h"
 #include "object_broker.h"
@@ -878,7 +879,15 @@ if( dbg_net_Draw_Flags.test( dbg_destroy ) )
 	P->owner = NULL;
 	if (!ai().get_alife() || !P->m_bALifeControl)
 	{
-		F_entity_Destroy(P);
+		// Scripts hold on to the server entities the simulator gave them and read them after they are gone (axr_companions keeps
+		// squads in a table); the entity is freed when the simulator unloads. See CALifeSimulatorBase::defer_destroy.
+		if (ai().get_alife())
+		{
+			ai().alife().defer_destroy(P);
+			P = nullptr;
+		}
+		else
+			F_entity_Destroy(P);
 	}
 }
 

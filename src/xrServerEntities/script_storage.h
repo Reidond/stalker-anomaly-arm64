@@ -46,6 +46,7 @@ private:
 	lua_State* m_virtual_machine;
 	CScriptThread* m_current_thread;
 	BOOL m_jit;
+	bool m_warm_only; // do_file compiles (and caches) the script and does not run it: lua_cache warm
 
 #ifdef DEBUG
 public:
@@ -82,7 +83,12 @@ public:
 	IC lua_State* lua();
 	IC void current_thread(CScriptThread* thread);
 	IC CScriptThread* current_thread() const;
-	bool load_buffer(lua_State* L, LPCSTR caBuffer, size_t tSize, LPCSTR caScriptName, LPCSTR caNameSpaceName = 0);
+	// `cacheable`: the buffer is a script file (not a one-line chunk): compiled bytecode comes from / goes to the bytecode cache (Apple port)
+	bool load_buffer(lua_State* L, LPCSTR caBuffer, size_t tSize, LPCSTR caScriptName, LPCSTR caNameSpaceName = 0, bool cacheable = false);
+	// Apple port (docs/ios-port/LUA-PERF.md): compiles every script of $game_scripts$ into the bytecode cache without running it.
+	// Returns the number of scripts.
+	size_t warm_bytecode_cache();
+	void set_bytecode_cache(bool on);
 	bool load_file_into_namespace(LPCSTR caScriptName, LPCSTR caNamespaceName);
 	bool namespace_loaded(LPCSTR caName, bool remove_from_stack = true);
 	bool object(LPCSTR caIdentifier, int type);

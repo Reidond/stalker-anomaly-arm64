@@ -143,22 +143,24 @@ BOOL ShaderElement::equal(ShaderElement& S)
 	return TRUE;
 }
 
-BOOL ShaderElement::equal(ShaderElement* S)
+// Either element may be null (a shader without that technique); two nulls are equal. A member function cannot test its own
+// `this` for null (the compiler may fold it away), so the null cases are decided here, on the pointers.
+static BOOL equal_elements(ShaderElement* a, ShaderElement* b)
 {
-	if (0 == S && 0 == this) return TRUE;
-	if (0 == S || 0 == this) return FALSE;
-	return equal(*S);
+	if (0 == a && 0 == b) return TRUE;
+	if (0 == a || 0 == b) return FALSE;
+	return a->equal(*b);
 }
 
 //
 BOOL Shader::equal(Shader& S)
 {
 	return
-		E[0]->equal(&*S.E[0]) &&
-		E[1]->equal(&*S.E[1]) &&
-		E[2]->equal(&*S.E[2]) &&
-		E[3]->equal(&*S.E[3]) &&
-		E[4]->equal(&*S.E[4]);
+		equal_elements(E[0]._get(), S.E[0]._get()) &&
+		equal_elements(E[1]._get(), S.E[1]._get()) &&
+		equal_elements(E[2]._get(), S.E[2]._get()) &&
+		equal_elements(E[3]._get(), S.E[3]._get()) &&
+		equal_elements(E[4]._get(), S.E[4]._get());
 }
 
 BOOL Shader::equal(Shader* S)

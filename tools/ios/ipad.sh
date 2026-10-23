@@ -1,8 +1,9 @@
 #!/bin/zsh
 # Build-free helpers for the signed `anomaly` app on a USB-connected iPad (never the Simulator).
 #
-#   tools/ios/ipad.sh build [config]          xcodebuild the anomaly scheme (default config: RelWithDebInfo), signed
+#   tools/ios/ipad.sh build [config]          xcodebuild the anomaly scheme (default config: RelWithDebInfo), signed; XCODEBUILD_JOBS=n caps the jobs
 #   tools/ios/ipad.sh install                 install the built app over com.andriishafar.anomaly (Documents stay)
+#   tools/ios/ipad.sh install-app <anomaly.app>   install an app bundle built earlier (a saved copy of a build)
 #   tools/ios/ipad.sh run [app args...]       launch with --console (Ctrl-C detaches; the app keeps running)
 #   tools/ios/ipad.sh start [app args...]     launch without attaching the console
 #   tools/ios/ipad.sh script <file> [args]    copy a --script timeline to Documents/ and launch with it
@@ -10,6 +11,9 @@
 #   tools/ios/ipad.sh put <local> <Documents-relative path>
 #   tools/ios/ipad.sh get <path under the container> <local>
 #   tools/ios/ipad.sh shot <file.png>         screenshot of the iPad's screen (devicectl device capture)
+#   tools/ios/ipad.sh pid                     the app's process id on the device (empty when it is not running)
+#   tools/ios/ipad.sh signal [SIGTERM]        send a signal to the app
+#   tools/ios/ipad.sh front <bundle id>       launch another app in front of the game (com.apple.Preferences): the game is backgrounded
 #   tools/ios/ipad.sh kill                    terminate the app
 #
 # Options (before the subcommand): --device <udid|name>  (default $ANOMALY_IPAD_UDID, else the first connected iPad)
@@ -54,13 +58,18 @@ app_for() { echo "$build_dir/src/Platform/App/$1-iphoneos/anomaly.app"; }
 case $cmd in
     build)
         config=${1:-RelWithDebInfo}
+        # XCODEBUILD_JOBS=<n> caps the parallel jobs (the default is one per core)
+        jobs_args=(); [[ -n ${XCODEBUILD_JOBS:-} ]] && jobs_args=(-jobs $XCODEBUILD_JOBS)
         xcodebuild -project "$build_dir/AnomalyPort.xcodeproj" -scheme anomaly -configuration "$config" \
-            -destination 'generic/platform=iOS' -allowProvisioningUpdates build
+            -destination 'generic/platform=iOS' -allowProvisioningUpdates "${jobs_args[@]}" build
         ;;
     install)
         app=$(app_for ${ANOMALY_CONFIG:-RelWithDebInfo})
         [[ -d $app ]] || die "no $app (run: tools/ios/ipad.sh build)"
         dc device install app --device "$device" "$app"
+        ;;
+    install-app)
+        dc device install app --device "$device" "${1:?path to an anomaly.app}"
         ;;
     run)
         dc device process launch --device "$device" --terminate-existing --console "${launch_env[@]}" "$bundle" "$@"
@@ -95,6 +104,18 @@ case $cmd in
         ;;
     shot)
         dc device capture screenshot --device "$device" --destination "${1:?file.png}"
+        ;;
+    pid)
+        dc device info processes --device "$device" 2>/dev/null | awk '/anomaly\.app/ {print $1; exit}'
+        ;;
+    signal)
+        sig=${1:-SIGTERM}
+        pid=$(dc device info processes --device "$device" 2>/dev/null | awk '/anomaly\.app/ {print $1; exit}')
+        [[ -n $pid ]] && dc device process signal --device "$device" --pid "$pid" --signal "$sig" || echo "not running"
+        ;;
+    front)
+        # bring another app to the front (its bundle id, e.g. com.apple.Preferences): the game goes to the background
+        dc device process launch --device "$device" "${1:?bundle id}"
         ;;
     kill)
         pid=$(dc device info processes --device "$device" 2>/dev/null | awk '/anomaly\.app/ {print $1; exit}')

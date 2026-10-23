@@ -1,6 +1,7 @@
 // xrcore_smoke: headless check that xrCore works on Apple platforms against the real Anomaly game data.
 //
 //   xrcore_smoke [--game-dir <dir>] [--run-dir <dir>] [--crash-test segv|assert|abort]
+//   xrcore_smoke --log-race [seconds]      threads that log, flush and read the log while the core shuts down (for ThreadSanitizer)
 //
 // --crash-test skips the checks and, right after initialization, triggers a fault to exercise the crash reporting:
 // the process must print a stack trace, leave a report next to the log and die with the original signal (or exit 1 for
@@ -18,11 +19,19 @@
 #include "xrCore/xrCore.h"
 #include "xrCore/stream_reader.h"
 
+#include <atomic>
+#include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
 #include <string>
 #include <sys/stat.h>
+#include <thread>
+#include <vector>
+
+#ifndef XRCORE_SMOKE_OLD_LOG_API
+# include "xrCore/log_lines.h"
+#endif
 
 namespace
 {
@@ -132,6 +141,77 @@ u64 hash_of_stream(CStreamReader* r)
 	}
 	return hash;
 }
+// --log-race: what the engine does to the log while it runs and shuts down, with the threads it has: several that log (the
+// ALife/secondary thread, sound, workers), the freeze watchdog that flushes the log when the main thread is busy (it lives until the
+// process ends, also while Core._destroy() closes the log and frees the file system), the console that draws the last lines, and
+// clear_log. Run it under ThreadSanitizer (cmake --preset macos-arm64-tsan, target xrcore_smoke): a race is reported even when this
+// run does not crash.
+int log_race(int seconds)
+{
+	std::atomic<bool> stop_loggers{false}, stop_freeze{false};
+	std::vector<std::thread> threads;
+	for (int id = 0; id < 3; ++id)
+		threads.emplace_back([&, id] {
+			for (int i = 0; !stop_loggers.load(); ++i)
+			{
+				Msg("log-race logger %d line %d", id, i % 40);
+				if (i % 7 == 0)
+					Msg("log-race repeated line"); // the dedupe path: the last line is rewritten with a counter
+				if (i % 64 == 0)
+					std::this_thread::sleep_for(std::chrono::microseconds(200));
+			}
+		});
+	std::thread freeze([&] {
+		while (!stop_freeze.load())
+		{
+			FlushLog(); // mt_FreezeThread
+			std::this_thread::sleep_for(std::chrono::milliseconds(1));
+		}
+	});
+	threads.emplace_back([&] {
+		string1024 sink;
+		while (!stop_loggers.load())
+		{
+#ifdef XRCORE_SMOKE_OLD_LOG_API
+			// CConsole::OnRender before the log lock existed
+			u32 last = LogFile.size() - 1;
+			for (int i = last; i >= 0 && i + 40 > (int)last; --i)
+				xr_strcpy(sink, LogFile[i].c_str());
+#else
+			xr_vector<xr_string> lines;
+			const u32 first = LogCopyLines(LogLineCount() - 1, 40, lines);
+			for (size_t i = 0; i < lines.size(); ++i)
+				xr_strcpy(sink, lines[i].c_str());
+			(void)first;
+#endif
+			std::this_thread::sleep_for(std::chrono::microseconds(300));
+		}
+	});
+	threads.emplace_back([&] {
+		while (!stop_loggers.load())
+		{
+			std::this_thread::sleep_for(std::chrono::milliseconds(50));
+#ifdef XRCORE_SMOKE_OLD_LOG_API
+			LogFile.clear_not_free(); // the clear_log console command
+#else
+			ClearLog();
+#endif
+		}
+	});
+
+	std::this_thread::sleep_for(std::chrono::seconds(seconds));
+	// the engine's shutdown: the game and the renderer are gone and log their last lines; then Core._destroy() closes the log and
+	// deletes the file system while the freeze watchdog is still running
+	stop_loggers.store(true);
+	for (std::thread& t : threads)
+		t.join();
+	Core._destroy();
+	std::this_thread::sleep_for(std::chrono::milliseconds(50)); // the watchdog flushes into a file system that is gone
+	stop_freeze.store(true);
+	freeze.join();
+	printf("log-race: finished\n");
+	return 0;
+}
 } // namespace
 
 int main(int argc, char** argv)
@@ -140,6 +220,10 @@ int main(int argc, char** argv)
 	std::string game_dir = XRCORE_SMOKE_DEFAULT_GAME_DIR;
 	std::string run_dir = XRCORE_SMOKE_RUN_DIR;
 	std::string crash_test;
+	int log_race_seconds = 0;
+	for (int i = 1; i < argc; ++i)
+		if (!strcmp(argv[i], "--log-race"))
+			log_race_seconds = (i + 1 < argc && atoi(argv[i + 1]) > 0) ? atoi(argv[i + 1]) : 3;
 	if (const char* env = getenv("ANOMALY_GAME_DIR"))
 		game_dir = env;
 	for (int i = 1; i + 1 < argc; ++i)
@@ -168,6 +252,8 @@ int main(int argc, char** argv)
 	Debug._initialize(false);
 	// Params are taken from the command line; the generated fsgame.ltx is passed explicitly instead.
 	Core._initialize("xrcore_smoke", engine_log, TRUE, fsgame.c_str());
+	if (log_race_seconds)
+		return log_race(log_race_seconds);
 	if (!crash_test.empty())
 	{
 		printf("triggering '%s'\n", crash_test.c_str());

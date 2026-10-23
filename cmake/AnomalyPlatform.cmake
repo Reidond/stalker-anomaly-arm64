@@ -21,12 +21,19 @@ endif()
 # Sanitizers (macOS only), applied to every target defined after this file: the engine modules, the third-party libraries
 # built from external/, the shell and the `anomaly` app. Usage and the suppression files: docs/ios-port/SANITIZERS.md.
 #   cmake --preset macos-arm64-asan            # = -DANOMALY_SANITIZE="address;undefined" on the RelWithDebInfo build
+#   cmake --preset macos-arm64-tsan            # = -DANOMALY_SANITIZE="thread" (data races; cannot be combined with the others)
 set(ANOMALY_SANITIZE "" CACHE STRING "Sanitizers to build with, ';'-separated: address, undefined, thread (macOS only)")
 set(ANOMALY_SANITIZE_COMPILE_FLAGS "")
 set(ANOMALY_SANITIZE_LINK_FLAGS "")
 if(ANOMALY_SANITIZE)
     if(ANOMALY_IOS)
         message(FATAL_ERROR "ANOMALY_SANITIZE is for the macOS build; the iOS Simulator is not used and the device build is not sanitized.")
+    endif()
+    if("thread" IN_LIST ANOMALY_SANITIZE)
+        list(LENGTH ANOMALY_SANITIZE anomaly_sanitize_count)
+        if(NOT anomaly_sanitize_count EQUAL 1)
+            message(FATAL_ERROR "ANOMALY_SANITIZE=thread cannot be combined with other sanitizers (got '${ANOMALY_SANITIZE}').")
+        endif()
     endif()
     string(REPLACE ";" "," anomaly_sanitize_list "${ANOMALY_SANITIZE}")
     set(ANOMALY_SANITIZE_COMPILE_FLAGS "-fsanitize=${anomaly_sanitize_list}" -fno-omit-frame-pointer)
@@ -48,6 +55,14 @@ if(ANOMALY_SANITIZE)
         if(NOT "alignment" IN_LIST ANOMALY_SANITIZE)
             list(APPEND ANOMALY_SANITIZE_COMPILE_FLAGS -fno-sanitize=alignment)
         endif()
+    endif()
+    if("thread" IN_LIST ANOMALY_SANITIZE)
+        # ThreadSanitizer adds an unwind cleanup (the __tsan_func_exit call) to every function that calls something that may throw,
+        # and clang gives those the C personality routine: with gxx, objc (SDL, the DualSense code) and LuaJIT's interpreter
+        # that is four, one more than compact unwind can encode ("Too many personality routines"). The DWARF tables the
+        # interpreter carries are used instead, and LuaJIT is built with internal unwinding (cmake/deps/LuaJIT.cmake), which does
+        # not need any unwind info. A C++ exception that is really thrown cannot be unwound in this build: it terminates.
+        list(APPEND ANOMALY_SANITIZE_LINK_FLAGS -Wl,-no_compact_unwind)
     endif()
     message(STATUS "Sanitizers: ${anomaly_sanitize_list}")
     add_compile_options(${ANOMALY_SANITIZE_COMPILE_FLAGS})

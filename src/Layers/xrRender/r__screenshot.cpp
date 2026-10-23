@@ -27,11 +27,29 @@ struct AppleShot
 {
 	bool queued = false;
 	bool armed = false;
+	bool save = false; // the armed capture is a savegame thumbnail (name is the .dds path), not a screenshot
 	int delay = 0;
 	int waited = 0;
 	string_path name = "";
 } g_apple_shot;
+
+// A savegame thumbnail asked for while a screenshot is under way waits here for the swap chain to be free again.
+struct AppleSaveShot
+{
+	bool queued = false;
+	string_path name = "";
+} g_apple_save_shot;
 } // namespace
+
+// The savegame's preview (`<save>.dds`, the whole frame squeezed to GAMESAVE_SIZE square, BC1): taken from the frame being presented
+// like a screenshot; the Metal back buffer cannot be read from the game thread's next frame, which left the file black.
+static void AppleQueueGameSaveShot(LPCSTR name)
+{
+	if (!name || !name[0])
+		return;
+	g_apple_save_shot.queued = true;
+	xr_strcpy(g_apple_save_shot.name, sizeof(g_apple_save_shot.name), name);
+}
 
 void AppleQueueScreenshot(LPCSTR name, int delay)
 {
@@ -82,7 +100,7 @@ void AppleLoadScreenshot(int stage, int max_stage)
 // rt_dump <target> <file> [stage] [mode] [lo hi]
 //   target: a render target name ($user$accum, $user$position, ...), `depth` (the scene depth-stencil), `smap` (the shadow map)
 //   stage:  where in the frame: gbuffer (after the G-buffer and wallmarks), rain_patch, rain_end (inside the wet-surface layer),
-//           lit (before the post-process), frame_end (default)
+//           lit (before the post-process), fakescope (the inputs of the scope pass), frame_end (default)
 //   mode:   c = RGB (default), s = signed RGB, r/g/b/a = one channel as grey, d = depth, st = stencil; lo hi = the range for grey
 // The image goes to $screenshots$\<file>.png (8 bit); the log line has the format, size, min, max and mean.
 namespace
@@ -201,7 +219,19 @@ void AppleRTDumpHook(const char* stage)
 
 void AppleScreenshotBeforePresent()
 {
-	if (!g_apple_shot.queued || ps_r4_hdr10_on)
+	if (ps_r4_hdr10_on || g_apple_shot.armed)
+		return;
+	if (g_apple_save_shot.queued)
+	{
+		g_apple_save_shot.queued = false;
+		g_apple_shot.save = true;
+		g_apple_shot.armed = true;
+		g_apple_shot.waited = 0;
+		xr_strcpy(g_apple_shot.name, sizeof(g_apple_shot.name), g_apple_save_shot.name);
+		mtl_d3d11::RequestCapture(HW.m_pSwapChain);
+		return;
+	}
+	if (!g_apple_shot.queued)
 		return;
 	if (g_apple_shot.delay > 0)
 	{
@@ -210,6 +240,7 @@ void AppleScreenshotBeforePresent()
 	}
 	g_apple_shot.queued = false;
 	g_apple_shot.armed = true;
+	g_apple_shot.save = false;
 	g_apple_shot.waited = 0;
 	Msg("* screenshot: capturing '%s'", g_apple_shot.name);
 	mtl_d3d11::RequestCapture(HW.m_pSwapChain);
@@ -230,6 +261,26 @@ void AppleScreenshotAfterPresent()
 		return;
 	}
 	g_apple_shot.armed = false;
+	if (g_apple_shot.save)
+	{
+		g_apple_shot.save = false;
+		std::vector<uint8_t> dds;
+		if (!mtl_d3d11::EncodeThumbnailDDS(shot, GAMESAVE_SIZE, &dds))
+		{
+			Msg("! savegame preview: encoding failed");
+			return;
+		}
+		if (IWriter* fs = FS.w_open(g_apple_shot.name))
+		{
+			fs->w(dds.data(), (u32)dds.size());
+			FS.w_close(fs);
+			Msg("* savegame preview: %s (%ux%u frame -> %dx%d BC1, %u bytes)", g_apple_shot.name, shot.width, shot.height,
+			    GAMESAVE_SIZE, GAMESAVE_SIZE, (u32)dds.size());
+		}
+		else
+			Msg("! savegame preview: cannot write %s", g_apple_shot.name);
+		return;
+	}
 	const bool png = ps_r_screenshot_token != 0;
 	std::vector<uint8_t> encoded;
 	if (!mtl_d3d11::EncodeCapture(shot, png ? 1 : 0, &encoded))
@@ -306,6 +357,11 @@ void CRender::ScreenshotImpl(ScreenshotMode mode, LPCSTR name, CMemoryWriter* me
 	{
 	case IRender_interface::SM_FOR_GAMESAVE:
 		{
+#if defined(XR_PLATFORM_APPLE)
+			if (!memory_writer)
+				AppleQueueGameSaveShot(name);
+			break;
+#endif
 			ID3DTexture2D* pSrcSmallTexture;
 
 			D3D_TEXTURE2D_DESC desc;

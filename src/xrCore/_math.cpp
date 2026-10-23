@@ -167,7 +167,11 @@ namespace CPU
 	{
 		u64 _dest;
 		QueryPerformanceCounter((PLARGE_INTEGER)&_dest);
+#ifdef XR_PLATFORM_APPLE
+		__atomic_fetch_add(&qpc_counter, 1u, __ATOMIC_RELAXED); // called from every thread; the count is only for the stats
+#else
 		qpc_counter++;
+#endif
 		return _dest;
 	}
 

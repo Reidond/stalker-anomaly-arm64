@@ -22,6 +22,7 @@
 #include "restriction_space.h"
 #include "profiler.h"
 #include "mt_config.h"
+#include "script_perf.h"
 
 using namespace ALife;
 #ifdef	ENGINE_LUA_ALIFE_UPDAGE_MANAGER_CALLBACKS
@@ -91,6 +92,7 @@ float CALifeUpdateManager::shedule_Scale()
 
 void CALifeUpdateManager::update_switch()
 {
+	script_perf::Context perf_section(script_perf::ALife);
 	init_ef_storage();
 
 	START_PROFILE("ALife/switch")
@@ -101,6 +103,7 @@ void CALifeUpdateManager::update_switch()
 
 void CALifeUpdateManager::update_scheduled(bool init_ef)
 {
+	script_perf::Context perf_section(script_perf::ALife);
 	if (init_ef)
 		init_ef_storage();
 
@@ -112,6 +115,7 @@ void CALifeUpdateManager::update_scheduled(bool init_ef)
 
 void CALifeUpdateManager::update()
 {
+	script_perf::Context perf_section(script_perf::ALife);
 	update_switch();
 	update_scheduled(false);
 }

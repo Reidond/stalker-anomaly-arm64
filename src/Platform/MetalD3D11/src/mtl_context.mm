@@ -916,20 +916,7 @@ id<MTLFunction> Context::fragmentFunctionFor(VertexShader* vs, PixelShader* ps)
 
     std::vector<Interpolant> missing;
     std::vector<InterpolantPair> mismatched;
-    for (const Interpolant& in : ps->interpolants)
-    {
-        const Interpolant* written = nullptr;
-        for (const Interpolant& out : vs->interpolants)
-            if (out.location == in.location)
-            {
-                written = &out;
-                break;
-            }
-        if (!written)
-            missing.push_back(in);
-        else if (written->type != in.type)
-            mismatched.push_back({in, *written});
-    }
+    CompareInterpolants(vs->interpolants, ps->interpolants, &missing, &mismatched);
     id<MTLFunction> fn = ps->fn;
     if (!missing.empty() || !mismatched.empty())
     {
@@ -939,15 +926,17 @@ id<MTLFunction> Context::fragmentFunctionFor(VertexShader* vs, PixelShader* ps)
         NSString* src = [NSString stringWithUTF8String:text.c_str()];
         id<MTLLibrary> lib = dev_->newLibraryFromMsl(src, &err);
         id<MTLFunction> patched = lib ? [lib newFunctionWithName:[NSString stringWithUTF8String:ps->refl.entryPoint.c_str()]] : nil;
+        // D3D links a pixel input to a vertex output by semantic and component, Metal by location and type: a pair that packs
+        // differently (waterd, wmark/simple, ...) is the normal case, counted in the stats and not logged; only a pair that cannot be
+        // adapted is.
         if (patched)
         {
             fn = patched;
-            Log("pixel shader %s: %zu interpolant(s) that vertex shader %s does not write are zero-filled, %zu of another width adapted",
-                ps->debugName.c_str(), missing.size(), vs->debugName.c_str(), mismatched.size());
+            ++stats.linkAdaptedPairs;
         }
         else
-            Log("pixel shader %s: patching %zu unwritten and %zu mismatched input(s) failed: %s", ps->debugName.c_str(), missing.size(),
-                mismatched.size(), err ? err.localizedDescription.UTF8String : "?");
+            Log("pixel shader %s with vertex shader %s: adapting %zu unwritten and %zu mismatched input(s) failed: %s", ps->debugName.c_str(),
+                vs->debugName.c_str(), missing.size(), mismatched.size(), err ? err.localizedDescription.UTF8String : "?");
     }
     fragmentVariants_.emplace(key, fn);
     return fn;
@@ -1718,6 +1707,59 @@ void Context::uploadTexture(TextureCore* t, uint32_t mip, uint32_t slice, const 
     t->lastWriteSerial = serial_;
 }
 
+void Context::zeroInitialise(TextureCore* t)
+{
+    id<MTLTexture> tex = t->tex;
+    if (!tex || !(tex.usage & MTLTextureUsageRenderTarget) || tex.textureType == MTLTextureType3D)
+        return;
+    const MTLPixelFormat pf = tex.pixelFormat;
+    const bool stencilOnly = pf == MTLPixelFormatStencil8;
+    const bool hasDepth = pf == MTLPixelFormatDepth32Float || pf == MTLPixelFormatDepth16Unorm || pf == MTLPixelFormatDepth32Float_Stencil8;
+    const bool hasStencil = stencilOnly || pf == MTLPixelFormatDepth32Float_Stencil8;
+    const NSUInteger slices = tex.textureType == MTLTextureTypeCube        ? 6
+                              : tex.textureType == MTLTextureTypeCubeArray ? tex.arrayLength * 6
+                                                                           : tex.arrayLength;
+    endEncoder();
+    ensureCommandBuffer();
+    for (NSUInteger level = 0; level < tex.mipmapLevelCount; ++level)
+        for (NSUInteger slice = 0; slice < slices; ++slice)
+        {
+            MTLRenderPassDescriptor* pd = [MTLRenderPassDescriptor renderPassDescriptor];
+            if (hasDepth || hasStencil)
+            {
+                if (hasDepth)
+                {
+                    pd.depthAttachment.texture = tex;
+                    pd.depthAttachment.level = level;
+                    pd.depthAttachment.slice = slice;
+                    pd.depthAttachment.loadAction = MTLLoadActionClear;
+                    pd.depthAttachment.clearDepth = 0.0;
+                    pd.depthAttachment.storeAction = MTLStoreActionStore;
+                }
+                if (hasStencil)
+                {
+                    pd.stencilAttachment.texture = tex;
+                    pd.stencilAttachment.level = level;
+                    pd.stencilAttachment.slice = slice;
+                    pd.stencilAttachment.loadAction = MTLLoadActionClear;
+                    pd.stencilAttachment.clearStencil = 0;
+                    pd.stencilAttachment.storeAction = MTLStoreActionStore;
+                }
+            }
+            else
+            {
+                pd.colorAttachments[0].texture = tex;
+                pd.colorAttachments[0].level = level;
+                pd.colorAttachments[0].slice = slice;
+                pd.colorAttachments[0].loadAction = MTLLoadActionClear;
+                pd.colorAttachments[0].clearColor = MTLClearColorMake(0, 0, 0, 0);
+                pd.colorAttachments[0].storeAction = MTLStoreActionStore;
+            }
+            [[cb_ renderCommandEncoderWithDescriptor:pd] endEncoding];
+        }
+    t->lastWriteSerial = serial_;
+}
+
 void Context::UpdateSubresource(ID3D11Resource* res, UINT sub, const D3D11_BOX* box, const void* data, UINT rowPitch, UINT depthPitch)
 {
     ResourceCore* core = CoreOf(res);
@@ -2037,12 +2079,14 @@ HRESULT Context::GetData(ID3D11Asynchronous* pAsync, void* data, UINT size, UINT
     Query* q = static_cast<Query*>(static_cast<ID3D11Query*>(pAsync));
     if (!q)
         return E_INVALIDARG;
+    bool in_flight;
     {
         std::lock_guard<std::mutex> lk(dev_->queryMutex);
         if (!q->ended)
             return S_FALSE;
+        in_flight = !q->done && q->serial >= serial_; // done is set by the completion handler's thread, under this lock
     }
-    if (!q->done && q->serial >= serial_ && !(flags & D3D11_ASYNC_GETDATA_DONOTFLUSH))
+    if (in_flight && !(flags & D3D11_ASYNC_GETDATA_DONOTFLUSH))
         commit(false); // the query lives in the buffer being recorded: hand it to the GPU
     bool done;
     {

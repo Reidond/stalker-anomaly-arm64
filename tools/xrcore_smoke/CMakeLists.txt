@@ -20,6 +20,12 @@ if(NOT XRCORE_SMOKE_GAME_DIR)
     endforeach()
 endif()
 
+# --log-race against the log code before the log lock (log_lines.h) existed: for the "before" run of the TSan comparison
+option(XRCORE_SMOKE_OLD_LOG_API "xrcore_smoke --log-race reads LogFile directly (the code before log_lines.h)" OFF)
+if(XRCORE_SMOKE_OLD_LOG_API)
+    target_compile_definitions(xrcore_smoke PRIVATE XRCORE_SMOKE_OLD_LOG_API=1)
+endif()
+
 target_compile_definitions(xrcore_smoke PRIVATE
     XRCORE_SMOKE_DEFAULT_GAME_DIR="${XRCORE_SMOKE_GAME_DIR}"
     # everything the tool writes (generated fsgame.ltx, appdata, logs) goes here, never into the game directory

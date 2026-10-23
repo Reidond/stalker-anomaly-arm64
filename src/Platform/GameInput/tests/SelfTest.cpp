@@ -505,6 +505,11 @@ void TestFeedback()
     s.aiming = true;
     CHECK(SelectTriggerEffects(s).left.strength > TriggerEffect::MakeFeedback(0, 0.18f).strength);
     CHECK(SelectTriggerEffects(WeaponState()).left.type == T::Off && SelectTriggerEffects(WeaponState()).right.type == T::Off);
+    // the log line shows what DualSenseTriggers.mm passes to GameController: clamped, and a weapon effect ends past its start
+    CHECK(DescribeTriggerEffect(TriggerEffect::MakeOff()) == "off");
+    CHECK(DescribeTriggerEffect(TriggerEffect::MakeWeapon(0.4f, 0.62f, 0.55f)) == "weapon start 0.40 end 0.62 strength 0.55");
+    CHECK(DescribeTriggerEffect(TriggerEffect::MakeWeapon(1.5f, 0.1f, 2.0f)) == "weapon start 0.94 end 0.99 strength 1.00");
+    CHECK(DescribeTriggerEffect(TriggerEffect::MakeVibration(0.4f, 0.55f, 0.55f)) == "vibration start 0.40 amplitude 0.55 frequency 0.55");
     for (WeaponClass c : {WeaponClass::Pistol, WeaponClass::Smg, WeaponClass::AssaultRifle, WeaponClass::Lmg,
              WeaponClass::Shotgun, WeaponClass::Sniper, WeaponClass::Launcher})
     {

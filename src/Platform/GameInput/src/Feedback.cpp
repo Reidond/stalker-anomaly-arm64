@@ -1,6 +1,7 @@
 #include "GameInput/Feedback.h"
 
 #include <algorithm>
+#include <cstdio>
 #include <cmath>
 #include <cstdlib>
 #include <string>
@@ -158,6 +159,43 @@ const char* TriggerEffectName(const TriggerEffect& e)
     case TriggerEffect::Type::Slope: return "slope";
     }
     return "?";
+}
+
+std::string DescribeTriggerEffect(const TriggerEffect& e)
+{
+    // The same limits DualSenseTriggers.mm applies before it calls GameController.
+    const auto c01 = [](float v) { return std::min(1.0f, std::max(0.0f, v)); };
+    char buffer[128];
+    switch (e.type)
+    {
+    case TriggerEffect::Type::Off:
+        return "off";
+    case TriggerEffect::Type::Feedback:
+        std::snprintf(buffer, sizeof(buffer), "feedback start %.2f strength %.2f", c01(e.start), c01(e.strength));
+        break;
+    case TriggerEffect::Type::Weapon:
+    {
+        const float start = std::min(c01(e.start), 0.94f);
+        const float end = std::min(1.0f, std::max(c01(e.end), start + 0.05f));
+        std::snprintf(buffer, sizeof(buffer), "weapon start %.2f end %.2f strength %.2f", start, end, c01(e.strength));
+        break;
+    }
+    case TriggerEffect::Type::Vibration:
+        std::snprintf(buffer, sizeof(buffer), "vibration start %.2f amplitude %.2f frequency %.2f", c01(e.start), c01(e.amplitude),
+            c01(e.frequency));
+        break;
+    case TriggerEffect::Type::Slope:
+    {
+        const float start = std::min(c01(e.start), 0.94f);
+        const float end = std::min(1.0f, std::max(c01(e.end), start + 0.05f));
+        std::snprintf(buffer, sizeof(buffer), "slope start %.2f end %.2f strength %.2f end strength %.2f", start, end,
+            c01(e.strength), c01(e.end_strength));
+        break;
+    }
+    default:
+        return "?";
+    }
+    return buffer;
 }
 
 TriggerEffect RestingFireEffect(WeaponClass cls)

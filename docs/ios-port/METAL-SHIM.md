@@ -164,15 +164,17 @@ Engine assumptions (cbuffer index equals slot, original HLSL names, HLSL packing
     textures, `ClearUnorderedAccessView*` (buffer fill only), occlusion queries spanning a pass break, `Present` after
     `ResizeBuffers`, HDR.
 12. **Threading.** The context is single-threaded, like D3D. Resource creation is safe from other threads except a
-    `DEFAULT`+`RENDER_TARGET`/`UAV` texture created with initial data, which uses the context's upload path.
+    `DEFAULT`+`RENDER_TARGET`/`UAV` texture created with initial data, which uses the context's upload path, and a render target
+    or depth buffer created without data, which is cleared through the context (item 18).
 13. **Pixel inputs the vertex shader never writes, or reads with another width.** D3D reads zero for the first and links by
     semantic and component for the second; Metal refuses the pipeline in both cases. `Context::fragmentFunctionFor` compares the
     `[[user(locnN)]]` interpolants of the two MSL sources (`ParseInterpolants`) and builds the pixel function from MSL with the
     unwritten inputs as zero locals (`PatchFragmentInputs`) and the inputs of another width declared with the vertex shader's type
-    and a swizzled or zero-extended local (`AdaptFragmentInputs`), cached per vertex/pixel pair. The stock set has one
-    width mismatch (`waterd`, the water distortion pass) and no unwritten input with the default settings;
-    `tools/r4_shader_warmup` and `metal_d3d11_headless_test` exercise both patches. A pipeline that still fails is logged with
-    both shader names.
+    and a swizzled or zero-extended local (`AdaptFragmentInputs`), cached per vertex/pixel pair. The stock set has four
+    width mismatches with the default settings (`waterd`, `wmark` + `simple`, `stub_notransform_aa_AA` + `accum_sun_msaa` /
+    `accum_sun_nomsaa`) and no unwritten input; `tools/r4_shader_warmup` lists them and compiles each adapted variant, and with
+    `metal_d3d11_headless_test` exercises both patches. An adapted pair is normal and is not logged (it is counted in
+    `Stats::linkAdaptedPairs`); a pair that cannot be adapted, or a pipeline that still fails, is logged with both shader names.
 14. **Gamma ramps.** `IDXGIOutput::SetGammaControl` is accepted and ignored (0 control points); R4's gamma slider does nothing
     until a shader pass applies it.
 15. **Windows-isms outside D3D11** (D3D9 enums/structures, D3DX9 math, `DWORD`, `HWND` plumbing) are not in this library; see
@@ -183,6 +185,18 @@ Engine assumptions (cbuffer index equals slot, original HLSL names, HLSL packing
     and texture, render target and buffer memory. Used by `tools/render_harness` (RENDER-QA.md).
 17. **Screenshot capture** is a blit in the Present command buffer into a shared buffer with 256-byte aligned rows; its state is
     owned by the completion handler (`shared_ptr`), so it may outlive the swap chain, and a failed blit is logged, not published.
+18. **Render targets and depth buffers start zeroed.** D3D11 guarantees it; a private Metal texture holds whatever its memory did.
+    `Context::zeroInitialise` clears every level and slice of a `DEFAULT` render target or depth buffer created without initial data.
+    The fake scope's `$user$scopeRT` is only sampled (nothing in this engine draws into it) and read as magenta noise: the whole
+    screen of every scoped weapon, aimed.
+19. **Metal's relaxed math, not fast math.** vkd3d-shader keeps HLSL booleans as `0xFFFFFFFF` in float registers
+    (`as_type<float>(c ? 0xFFFFFFFFu : 0u)`, a NaN pattern, tested later with `as_type<uint>`); fast math assumes there are no NaNs.
+    Every aimed scope (`fakescope.ps`) came out solid magenta and purple in a run of 12 scenes under a heavy machine load with fast
+    math (load average 400), never with safe or relaxed math (4 runs), and no longer with fast math once the load fell (6 runs), so
+    the cause is not pinned down. `MTLCompileOptions.mathMode` is `Relaxed` (macOS 15, iOS 18): the same speed-ups with infs and NaNs
+    kept (GPU time of the Cordon scene 3.2 to 3.8 ms against 3.2 to 4.2 ms with fast math, 4.5 to 4.7 ms with safe math);
+    `MTL_MATH=safe|relaxed|fast` in the environment overrides it, `DeviceDesc::fastMath = false` means safe. Before macOS 15 and iOS 18
+    there is no relaxed mode and the library is compiled with safe math.
 
 ## Integration steps for R4
 

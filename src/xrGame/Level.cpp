@@ -1,4 +1,5 @@
 #include "pch_script.h"
+#include "script_perf.h"
 #include "xrEngine/FDemoRecord.h"
 #include "xrEngine/FDemoPlay.h"
 #include "xrEngine/Environment.h"
@@ -81,6 +82,12 @@ u32 lvInterpSteps = 0;
 BOOL spawn_antifreeze = TRUE;
 BOOL spawn_antifreeze_debug = FALSE;
 static HANDLE prefetch_thread_signal;
+// The prefetcher's life cycle. The flags are not members of CLevel: the thread reads them after ~CLevel() has started, and it used to
+// read a member (closeSignal) of a level that was already gone, and the queues it works on after they were deleted. ~CLevel() sets
+// close, wakes the thread and waits for finished before it frees anything the thread uses.
+static std::atomic<bool> g_prefetch_close{false};
+static std::atomic<bool> g_prefetch_finished{true};
+static std::atomic<bool> g_prefetch_started{false}; // the thread got as far as its first line (thread_spawn() can fail, silently)
 
 static void unpausePrefetchThreadSignal()
 {
@@ -274,6 +281,9 @@ CLevel::CLevel() :
     prefetched_models = xr_new<models_set>();
     auto events = new spawn_and_prefetch_events({ spawn_events, spawn_events_data, prefetch_events, prefetched_models, &closeSignal, &prefetch_lock });
     createPrefetchThreadSignal();
+    g_prefetch_close.store(false);
+    g_prefetch_started.store(false);
+    g_prefetch_finished.store(false);
     thread_spawn(ProcessPrefetchEvents, "Pre-Spawn Prefetcher Thread", 0, events);
     Msg("CLevel::CLevel() Spawn Antifreeze initialized");
 #endif
@@ -329,12 +339,26 @@ CLevel::~CLevel()
     xr_delete(game_events);
 
 #ifdef SPAWN_ANTIFREEZE
+    // Stop the prefetcher before anything it uses (the queues, the lock, the model pool) goes away: it may be in the middle of
+    // loading a model. This waits for as long as it takes, like a join: a thread that is left running keeps &prefetch_lock (a member
+    // of this level) and the renderer's model pool, both of which are gone once the destructor and the shutdown that follows go on.
+    closeSignal = true;
+    g_prefetch_close.store(true); // signal ProcessPrefetchEvents thread to exit
+    // (the event is set again on every turn: a thread that was between its wake-up and its ResetEvent() would miss a single one)
+    for (int waited_ms = 0; !g_prefetch_finished.load(); ++waited_ms)
+    {
+        if (!g_prefetch_started.load() && waited_ms > 5000)
+            break; // the thread was never created
+        unpausePrefetchThreadSignal();
+        Sleep(1);
+        if (waited_ms && waited_ms % 10000 == 0)
+            Msg("* CLevel::~CLevel: still waiting for the spawn prefetcher (%d s)", waited_ms / 1000);
+    }
+    closePrefetchThreadSignal(); // not by the thread: the loop above may still set the event until it has seen finished
     xr_delete(spawn_events);
     xr_delete(spawn_events_data);
     xr_delete(prefetch_events);
     xr_delete(prefetched_models);
-    closeSignal = true; // signal ProcessPrefetchEvents thread to exit
-    unpausePrefetchThreadSignal();
 #endif
 
     xr_delete(m_pBulletManager);
@@ -556,6 +580,7 @@ void CLevel::SortSpawnEventsQueue()
 
 void CLevel::ProcessPrefetchEvents(void* args)
 {
+    g_prefetch_started.store(true);
     auto events = reinterpret_cast<spawn_and_prefetch_events*>(args);
     auto spawn_events = events->spawn_events;
     auto spawn_events_data = events->spawn_events_data;
@@ -568,11 +593,11 @@ void CLevel::ProcessPrefetchEvents(void* args)
     {
         WaitForSingleObject(prefetch_thread_signal, INFINITE); // wait for prefetch queue event to be signaled
 
-        if (*closeSignal == true)
+        if (g_prefetch_close.load())
         {
             if (spawn_antifreeze_debug) Msg("[ProcessPrefetchEvents] closeSignal received, destroying thread");
-            closePrefetchThreadSignal();
             delete events;
+            g_prefetch_finished.store(true); // the last thing: ~CLevel() closes the event, frees the queues and the lock once it sees this
             return;
         }
 
@@ -978,6 +1003,7 @@ void CLevel::MakeReconnect()
 void CLevel::OnFrame()
 {
 	PROF_EVENT("CLevel::OnFrame()");
+	script_perf::frame();
 
 #ifdef DEBUG_MEMORY_MANAGER
     debug_memory_guard __guard__;
@@ -1192,6 +1218,7 @@ void CLevel::script_gc()
 	if (!(psLua_ParallelGC && Device.LuaGC))
 	{	
 		PROF_EVENT();	
+		script_perf::GcStep perf_gc;
 		lua_gc(ai().script_engine().lua(), LUA_GCSTEP, psLUA_GCSTEP);
 	}
 }
@@ -1209,6 +1236,7 @@ bool CLevel::Load(u32 dwNum)
 // demonized: called from Device, via Device.LuaGC pointer
 int CLevel::LuaGC()
 {
+    script_perf::GcStep perf_gc;
     return lua_gc(ai().script_engine().lua(), LUA_GCSTEP, psLua_ParallelGCStep);
 }
 void CLevel::LuaGCDebug()

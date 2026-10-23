@@ -27,7 +27,7 @@ struct DeviceDesc
     uint32_t framesInFlight = 3;        // command buffers the CPU may run ahead of the GPU
     uint32_t constantRingBytes = 8u << 20; // per-frame ring for DISCARD maps of small dynamic buffers
     uint32_t uploadRingBytes = 32u << 20;  // per-frame ring for UpdateSubresource / texture uploads
-    bool fastMath = true;                  // MTLCompileOptions.fastMathEnabled for MSL source payloads
+    bool fastMath = true;                  // MSL source payloads: Metal's relaxed math (fast, keeps NaNs: vkd3d keeps booleans as NaN bit patterns); false: safe math
 };
 
 HRESULT CreateDevice(const DeviceDesc* desc, ID3D11Device** ppDevice, ID3D11DeviceContext** ppImmediateContext);
@@ -74,6 +74,8 @@ bool PollCapture(IDXGISwapChain1* pSwapChain, CaptureResult* out);
 
 // Encodes a capture as JPEG (format 0) or PNG (format 1) with ImageIO.
 bool EncodeCapture(const CaptureResult& image, int format, std::vector<uint8_t>* out);
+// A capture as a savegame thumbnail: the whole frame squeezed to `size` x `size` (a multiple of 4), BC1 compressed, in a DDS file image.
+bool EncodeThumbnailDDS(const CaptureResult& image, uint32_t size, std::vector<uint8_t>* out);
 
 // Debug aid: the contents of mip 0 / slice 0 of a (non-multisampled) texture as an 8-bit image, to look at intermediate
 // render targets: float colour, signed normals, depth, stencil. Flushes the context first. Colour: RGB as they are;
@@ -106,6 +108,7 @@ struct Stats
     uint64_t dispatches = 0;
     uint64_t pipelineCreates = 0;
     uint64_t pipelineHits = 0;
+    uint64_t linkAdaptedPairs = 0;   // vertex/pixel pairs whose pixel inputs were widened, narrowed or zero-filled to match (not an error)
     uint64_t passBreaksByTargetChange = 0;
     uint64_t passBreaksByClear = 0;
     uint64_t passBreaksByCopy = 0;

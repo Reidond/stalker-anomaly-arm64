@@ -12,7 +12,6 @@ CPHCall::CPHCall(CPHCondition* condition, CPHAction* action)
 {
 	m_action = action;
 	m_condition = condition;
-	m_dead = false;
 }
 
 CPHCall::~CPHCall()
@@ -23,23 +22,21 @@ CPHCall::~CPHCall()
 
 bool CPHCall::obsolete()
 {
-	return m_dead || !m_action || m_action->obsolete() || !m_condition || m_condition->obsolete();
+	return !m_action || m_action->obsolete() || !m_condition || m_condition->obsolete();
 }
 
 void CPHCall::check()
 {
-	if (!m_dead && m_condition && m_condition->is_true() && !m_dead && m_action) m_action->run();
+	if (m_condition && m_condition->is_true() && m_action) m_action->run();
 }
 
 bool CPHCall::equal(CPHReqComparerV* cmp_condition, CPHReqComparerV* cmp_action)
 {
-	if (m_dead) return false;
 	return m_action->compare(cmp_action) && m_condition->compare(cmp_condition);
 }
 
 bool CPHCall::is_any(CPHReqComparerV* v)
 {
-	if (m_dead) return false;
 	return m_action->compare(v) || m_condition->compare(v);
 }
 
@@ -63,6 +60,12 @@ CPHCommander::~CPHCommander()
 
 void CPHCommander::clear()
 {
+	if (m_update_depth)
+	{
+		for (u32 i = 0; i < m_calls.size(); i++)
+			defer_call(m_calls[i]);
+		return;
+	}
 	while (m_calls.size())
 	{
 		remove_call(m_calls.end() - 1);
@@ -77,34 +80,50 @@ void CPHCommander::clear()
 	}
 }
 
+void CPHCommander::defer_call(CPHCall*& slot)
+{
+	if (!slot)
+		return;
+	m_deferred.push_back(slot);
+	slot = NULL;
+}
+
+void CPHCommander::end_update()
+{
+	if (--m_update_depth)
+		return;
+	m_calls.erase(std::remove(m_calls.begin(), m_calls.end(), (CPHCall*)NULL), m_calls.end());
+	while (m_deferred.size())
+	{
+		CPHCall* call = m_deferred.back();
+		m_deferred.pop_back();
+		delete_call(call); // (its destructor may remove calls too: m_deferred is read again each turn)
+	}
+}
+
 void CPHCommander::update()
 {
-	struct SUpdating
-	{
-		u32& depth;
-		explicit SUpdating(u32& d) : depth(d) { ++depth; }
-		~SUpdating() { --depth; }
-	} updating(m_updating);
+	++m_update_depth;
+	// The slot i is stable while the loop runs: nothing is erased from m_calls then (remove_call*() clear the slot and defer the
+	// deletion), a call added by an action is appended, and m_calls is indexed afresh each time because the append may move it.
 	for (u32 i = 0; i < m_calls.size(); i++)
 	{
+		if (!m_calls[i])
+			continue;
 		try
 		{
 			m_calls[i]->check();
 		}
 		catch (...)
 		{
-			remove_call(m_calls.begin() + i);
-			i--;
+			defer_call(m_calls[i]);
 			continue;
 		}
 
-		if (m_calls[i]->obsolete())
-		{
-			remove_call(m_calls.begin() + i);
-			i--;
-			continue;
-		}
+		if (m_calls[i] && m_calls[i]->obsolete())
+			defer_call(m_calls[i]);
 	}
+	end_update();
 }
 
 void CPHCommander::update_threadsafety()
@@ -145,6 +164,11 @@ void CPHCommander::remove_call(PHCALL_I i, PHCALL_STORAGE& cs)
 		//Msg(" const force removed: force: %f,  remove step: %d  world step: %d ,dir(%f,%f,%f) ", m, esc->step(), (u32)physics_world()->StepsNum(), f.x, f.y , f.z ); 
 	}
 #endif
+	if (deferring(cs))
+	{
+		defer_call(*i);
+		return;
+	}
 	delete_call(*i);
 	cs.erase(i);
 }
@@ -167,7 +191,7 @@ struct SFEqualPred
 
 	bool operator()(CPHCall* call)
 	{
-		return call->equal(cmp_condition, cmp_action);
+		return call && call->equal(cmp_condition, cmp_action);
 	}
 };
 
@@ -183,7 +207,7 @@ struct SFRemovePred2
 
 	bool operator()(CPHCall* call)
 	{
-		if (call->equal(cmp_condition, cmp_action))
+		if (call && call->equal(cmp_condition, cmp_action))
 		{
 			delete_call(call);
 			return true;
@@ -209,12 +233,12 @@ bool CPHCommander::has_call(CPHReqComparerV* cmp_condition, CPHReqComparerV* cmp
 
 void CPHCommander::remove_call(CPHReqComparerV* cmp_condition, CPHReqComparerV* cmp_action, PHCALL_STORAGE& cs)
 {
-	if (m_updating && &cs == &m_calls)
+	if (deferring(cs))
 	{
-		// from inside a call that update() is running (a script's own fastcall replacing itself): the running call and its
-		// condition are still executing, so they are marked and update() deletes them after they return
-		for (CPHCall* call : cs)
-			if (call->equal(cmp_condition, cmp_action)) call->mark_dead();
+		SFEqualPred match(cmp_condition, cmp_action);
+		for (u32 i = 0; i < cs.size(); i++)
+			if (match(cs[i]))
+				defer_call(cs[i]);
 		return;
 	}
 	cs.erase(
@@ -263,7 +287,7 @@ struct SRemoveRped
 
 	bool operator()(CPHCall* call)
 	{
-		if (call->is_any(cmp_object))
+		if (call && call->is_any(cmp_object))
 		{
 			delete_call(call);
 			return true;
@@ -275,11 +299,11 @@ struct SRemoveRped
 
 void CPHCommander::remove_calls(CPHReqComparerV* cmp_object, PHCALL_STORAGE& cs)
 {
-	if (m_updating && &cs == &m_calls)
+	if (deferring(cs))
 	{
-		// see remove_call: the call that is running right now may be the one a script removes
-		for (CPHCall* call : cs)
-			if (call->is_any(cmp_object)) call->mark_dead();
+		for (u32 i = 0; i < cs.size(); i++)
+			if (cs[i] && cs[i]->is_any(cmp_object))
+				defer_call(cs[i]);
 		return;
 	}
 	cs.erase(

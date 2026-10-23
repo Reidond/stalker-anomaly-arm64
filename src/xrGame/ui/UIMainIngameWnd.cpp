@@ -274,7 +274,11 @@ void CUIMainIngameWnd::Draw()
 	CActor* pActor = smart_cast<CActor*>(Level().CurrentViewEntity());
 
 	// show IO icon
+#ifdef XR_PLATFORM_APPLE
+	bool IOActive = (__atomic_load_n(&FS.dwOpenCounter, __ATOMIC_RELAXED) > 0);
+#else
 	bool IOActive = (FS.dwOpenCounter > 0);
+#endif
 	if (IOActive) UIStaticDiskIO_start_time = Device.fTimeGlobal;
 
 	if ((UIStaticDiskIO_start_time + 1.0f) < Device.fTimeGlobal) UIStaticDiskIO->Show(false);
@@ -284,7 +288,11 @@ void CUIMainIngameWnd::Draw()
 		UIStaticDiskIO->Show(true);
 		UIStaticDiskIO->SetTextureColor(color_rgba(255, 255, 255, alpha));
 	}
+#ifdef XR_PLATFORM_APPLE
+	__atomic_store_n(&FS.dwOpenCounter, 0u, __ATOMIC_RELAXED);
+#else
 	FS.dwOpenCounter = 0;
+#endif
 
     if (!IsGameTypeSingle())
     {

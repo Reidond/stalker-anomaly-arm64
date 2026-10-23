@@ -10,6 +10,7 @@
 
 #include "ai_space.h"
 #include "script_engine.h"
+#include "script_perf.h"
 
 IC bool compare_safe(const luabind::object& o1, const luabind::object& o2)
 {
@@ -108,6 +109,7 @@ public:
     template<typename... Args>
     TResult operator()(Args &&...args) const
     {
+        script_perf::Context perf_section(script_perf::Callback);
         try
         {
             try
