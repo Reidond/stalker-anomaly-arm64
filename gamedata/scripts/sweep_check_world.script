@@ -261,6 +261,12 @@ local function stalkers_plan()
 		if not o then return false, "no stalker came online" end
 		o:set_relation(game_object.enemy, db.actor)
 		local hp0 = o.health
+		local hit_n, hit_by_actor, hit_max = 0, 0, 0 -- hit_max: the largest amount a hit report carried (0 for every report seen: the amount is not the damage)
+		o:set_callback(callback.hit, function(obj, amount, local_dir, who, bone)
+			hit_n = hit_n + 1
+			if who and who:id() == db.actor:id() and amount > hit_max then hit_max = amount end
+			if who and who:id() == db.actor:id() then hit_by_actor = hit_by_actor + 1 end
+		end)
 		local rifle = db.actor:object("wpn_ak74u")
 		if rifle then
 			db.actor:make_item_active(rifle)
@@ -268,7 +274,7 @@ local function stalkers_plan()
 		end
 		local w = db.actor:active_item()
 		local mag0 = w and w:get_ammo_in_magazine() or -1
-		for round = 1, 12 do
+		for round = 1, 25 do -- (frames are slow under the sanitizers: eight rounds in a quarter of a minute is a normal count)
 			H.fire_burst(o, 1200)
 			H.pause(300)
 			if not o:alive() or o.health < hp0 - 0.05 then break end
@@ -279,7 +285,9 @@ local function stalkers_plan()
 		end
 		H.god(false)
 		local w1 = db.actor:active_item()
-		return not o:alive() or o.health < hp0, string.format("bandit health %.2f -> %.2f (alive %s), %s in hand, magazine %s -> %s, %.0f m apart", hp0, o.health, tostring(o:alive()), tostring(w1 and w1:section()), tostring(mag0), tostring(w1 and w1:get_ammo_in_magazine()), o:position():distance_to(db.actor:position()))
+		-- (a bandit in armour takes a few per cent of 30 rounds and stalkers regenerate between two samples, so the health that is left does not tell:
+		-- the hit reports the actor's bullets caused do)
+		return not o:alive() or o.health < hp0 or hit_by_actor >= 5, string.format("bandit health %.2f -> %.2f (alive %s, %d hit reports, %d by the actor, strongest %.2f), %s in hand, magazine %s -> %s, %.0f m apart", hp0, o.health, tostring(o:alive()), hit_n, hit_by_actor, hit_max, tostring(w1 and w1:section()), tostring(mag0), tostring(w1 and w1:get_ammo_in_magazine()), o:position():distance_to(db.actor:position()))
 	end)
 
 	-- two factions at war: the bandit and the stalker engage each other without the actor

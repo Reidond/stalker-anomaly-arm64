@@ -353,8 +353,12 @@ local function weapons()
 	mag1 = mag_after
 
 	-- run dry: the weapon stops, a reload fills it again
-	H.fire_burst(nil, 5000)
-	H.pause(1500)
+	-- (the burst is wall-clock time and a slow frame fires fewer rounds: burst again until the magazine is empty)
+	for _ = 1, 6 do
+		if ak:get_ammo_in_magazine() == 0 then break end
+		H.fire_burst(nil, 4000)
+		H.pause(800)
+	end
 	local mag3 = ak:get_ammo_in_magazine()
 	C.check("weapons", "empty", mag3 == 0, "magazine " .. mag3 .. " after firing it dry")
 	H.press(key_bindings.kWPN_RELOAD, 100)
@@ -406,7 +410,12 @@ local function weapons()
 	H.pause(4000)
 	if not db.actor:active_item() then db.actor:make_item_active(ak) H.pause(3000) end
 	local m4 = ak:get_ammo_in_magazine()
-	H.fire_burst(nil, 800)
+	-- (the rifle may still be coming up after restore_weapon on a slow frame: burst again, a few times, until it fires)
+	for _ = 1, 4 do
+		H.fire_burst(nil, 1000)
+		H.pause(500)
+		if ak:get_ammo_in_magazine() < m4 then break end
+	end
 	C.check("weapons", "silenced-fire", ak:get_ammo_in_magazine() < m4, string.format("magazine %d -> %d", m4, ak:get_ammo_in_magazine()))
 	db.actor:hide_weapon()
 	H.pause(2000)
