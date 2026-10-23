@@ -212,7 +212,7 @@ into a game folder, runs the game offscreen with a `--script` timeline, and has 
 | names in Windows case (`Scripts`, `Configs`, `Textures/UI`, `.PS`, `.DB0`, `GameData`, `DB/Addons`) | all of the above with these spellings, next to the lower-case folders the game made |
 
 Result on the case-sensitive volume, the whole sequence (baseline, install, new process, case variants, shader changed twice, removed): **every check passes**
-(21 to 28 per run), the shader translation counts are 1, 0, 1, 1, 0 as they should be, and removing the addons brings every file size back to the stock one.
+(21 to 28 per run), the shader translation count is 1 in each run that changes the shader or its include and 0 in every other run, and removing the addons brings every file size back to the stock one.
 Before the fix of `xr_native_path` / `_findfirst` (xrCore, `PlatformApple.cpp`) the same run failed 7 to 8 checks per run: every file of an addon folder spelled
 `Configs` while the game's own `configs` existed, the loose file over an archive's, and the `GameData` and `DB/Addons` roots. The new `xrcore_smoke --case-test <dir>` checks
 the path layer alone (12 checks on a case-sensitive volume, 8 of them fail on the old code).
