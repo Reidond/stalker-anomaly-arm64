@@ -179,7 +179,7 @@ void CRenderDevice::End(void)
 }
 
 
-volatile u32 mt_Thread_marker = 0x12345678;
+std::atomic<u32> mt_Thread_marker{0x12345678}; // written by the secondary thread, read by the primary one
 
 void mt_Thread(void* ptr)
 {
@@ -192,11 +192,11 @@ void mt_Thread(void* ptr)
 		// waiting for Device permission to execute
 		device.mt_csEnter.Enter();
 
-		if (device.mt_bMustExit)
+		if (device.mt_bMustExit.load(std::memory_order_acquire))
 		{
 			PROF_EVENT("Must exit");
 
-			device.mt_bMustExit = FALSE; // Important!!!
+			device.mt_bMustExit.store(FALSE, std::memory_order_release); // Important!!!
 			device.mt_csEnter.Leave(); // Important!!!
 			return;
 		}
@@ -394,11 +394,17 @@ extern int ps_framelimiter;
 extern u32 g_screenmode;
 
 CTimer FreezeTimer;
+// The freeze watchdog flushes the (buffered) log when the primary thread has not come round for a while, so the log shows where a
+// hang is. It is stopped by RunEnd() before the core and the log are torn down: it used to run for the life of the process and flush
+// into a file system that Core._destroy() was freeing.
+static std::atomic<bool> mt_freeze_stop{false};
+static std::atomic<bool> mt_freeze_running{false};
+
 void mt_FreezeThread(void *ptr) {
 	float freezetime = 0.f;
 	float repeatcheck = 500.f;
 
-	while (true)
+	while (!mt_freeze_stop.load())
 	{
 		PROF_EVENT();
 
@@ -417,8 +423,11 @@ void mt_FreezeThread(void *ptr) {
 		}
 		STOP_PROFILE;
 
-		Sleep(repeatcheck);
+		// in slices, so that RunEnd() does not wait for the whole interval
+		for (float waited = 0.f; waited < repeatcheck && !mt_freeze_stop.load(); waited += 20.f)
+			Sleep(20);
 	}
+	mt_freeze_running.store(false);
 }
 
 void CRenderDevice::on_idle()
@@ -725,7 +734,9 @@ void CRenderDevice::RunBegin()
 	// InitializeCriticalSection (&mt_csEnter);
 	// InitializeCriticalSection (&mt_csLeave);
 	mt_csEnter.Enter();
-	mt_bMustExit = FALSE;
+	mt_bMustExit.store(FALSE, std::memory_order_release);
+	mt_freeze_stop.store(false);
+	mt_freeze_running.store(true);
 	thread_spawn(mt_FreezeThread, "Freeze detecting thread", 0, 0);
 	thread_spawn(mt_Thread, "X-RAY Secondary thread", 0, this);
 #ifdef XR_USE_DISCORD
@@ -741,9 +752,13 @@ void CRenderDevice::RunEnd()
 {
 	seqAppEnd.Process(rp_AppEnd);
 	// Stop Balance-Thread
-	mt_bMustExit = TRUE;
+	mt_bMustExit.store(TRUE, std::memory_order_release);
 	mt_csEnter.Leave();
-	while (mt_bMustExit) Sleep(0);
+	while (mt_bMustExit.load(std::memory_order_acquire)) Sleep(0);
+	// Stop the freeze watchdog too (it flushes the log from its own thread); a stuck flush must not hold the quit for ever
+	mt_freeze_stop.store(true);
+	for (int waited_ms = 0; mt_freeze_running.load() && waited_ms < 3000; waited_ms += 5)
+		Sleep(5);
 	// DeleteCriticalSection (&mt_csEnter);
 	// DeleteCriticalSection (&mt_csLeave);
 }

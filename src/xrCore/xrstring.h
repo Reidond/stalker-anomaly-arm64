@@ -58,6 +58,16 @@ public:
 XRCORE_API extern str_container* g_pStringContainer;
 
 //////////////////////////////////////////////////////////////////////////
+// The count is changed from every thread that holds a shared_str (scripts, the secondary thread, the loaders): a plain ++/-- loses
+// updates, and a count that is too low is a string some owner still points at after the container frees it.
+#ifdef XR_PLATFORM_APPLE
+# define XR_STR_REF_INC(ref) ((void)__atomic_fetch_add(&(ref), 1u, __ATOMIC_RELAXED))
+# define XR_STR_REF_DEC(ref) (__atomic_sub_fetch(&(ref), 1u, __ATOMIC_ACQ_REL))
+#else
+# define XR_STR_REF_INC(ref) ((void)(++(ref)))
+# define XR_STR_REF_DEC(ref) (--(ref))
+#endif
+
 class shared_str
 {
 private:
@@ -67,15 +77,14 @@ protected:
 	void _dec()
 	{
 		if (0 == p_) return;
-		p_->dwReference--;
-		if (0 == p_->dwReference) p_ = 0;
+		if (0 == XR_STR_REF_DEC(p_->dwReference)) p_ = 0;
 	}
 
 public:
 	void _set(str_c rhs)
 	{
 		str_value* v = g_pStringContainer->dock(rhs);
-		if (0 != v) v->dwReference++;
+		if (0 != v) XR_STR_REF_INC(v->dwReference);
 		_dec();
 		p_ = v;
 	}
@@ -83,7 +92,7 @@ public:
 	void _set(shared_str const& rhs)
 	{
 		str_value* v = rhs.p_;
-		if (0 != v) v->dwReference++;
+		if (0 != v) XR_STR_REF_INC(v->dwReference);
 		_dec();
 		p_ = v;
 	}

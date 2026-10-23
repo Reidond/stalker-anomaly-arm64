@@ -1,4 +1,5 @@
 #include "pch_script.h"
+#include "../xrCore/log_lines.h"
 #include "../xrEngine/xr_ioconsole.h"
 #include "../xrEngine/xr_ioc_cmd.h"
 #include "../xrEngine/customhud.h"
@@ -1305,8 +1306,7 @@ public:
 
 	virtual void Execute(LPCSTR)
 	{
-		LogFile.clear_not_free();
-		FlushLog();
+		ClearLog();
 		Msg("* Log file has been cleaned successfully!");
 	}
 };

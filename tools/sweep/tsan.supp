@@ -1,0 +1,6 @@
+# ThreadSanitizer suppressions for the crash-sweep runs (docs/ios-port/SANITIZERS.md). Format: <kind>:<function or module pattern>.
+# Added only after the report was read and judged to be noise; every entry says why.
+
+# LuaJIT's assembly interpreter (lj_vm.S) and the JIT'ed machine code are not instrumented, and the VM is single-threaded by
+# contract (one lua_State at a time, the engine takes the script lock); what TSan sees of it is the C half racing with itself
+# across the engine's coroutine hand-offs.

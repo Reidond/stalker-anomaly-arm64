@@ -20,6 +20,9 @@
 #           --out <dir>         where the run's files go (default build/sweep-runs/<time>-<plan>)
 #           --state <dir>       the app's ANOMALY_STATE_ROOT (default build/sweep-state; keeps sweep_base between runs)
 #           --plain             no sanitizer environment (for a release build)
+#           --tsan              the ThreadSanitizer build (cmake --preset macos-arm64-tsan, default app build/macos-arm64-tsan/...) with
+#                               TSAN_OPTIONS and tools/sweep/tsan.supp instead of the ASan/UBSan environment; use --scale 3 and a
+#                               longer --timeout (the game runs 5 to 15 times slower)
 #           SWEEP_ASAN_EXTRA=<options> in the environment adds to ASAN_OPTIONS (e.g. quarantine_size_mb=3072 to keep freed blocks longer)
 #           --size WxH          window size in pixels (default 1280x720, the unattended default), --density <n> the display scale (2)
 #
@@ -41,19 +44,22 @@ timeout_s=1500
 out=""
 state=""
 plain=0
+tsan=0
+app_explicit=0
 plan=""
 size="1280x720"
 density=2
 
 while [ $# -gt 0 ]; do
     case "$1" in
-        --app) app="$2"; shift 2 ;;
+        --app) app="$2"; app_explicit=1; shift 2 ;;
         --data-root) data_root="$2"; shift 2 ;;
         --scale) scale="$2"; shift 2 ;;
         --timeout) timeout_s="$2"; shift 2 ;;
         --out) out="$2"; shift 2 ;;
         --state) state="$2"; shift 2 ;;
         --plain) plain=1; shift ;;
+        --tsan) tsan=1; shift ;;
         --size) size="$2"; shift 2 ;;
         --density) density="$2"; shift 2 ;;
         -h|--help) sed -n 2,27p "$0"; exit 0 ;;
@@ -62,6 +68,7 @@ while [ $# -gt 0 ]; do
     esac
 done
 [ -n "$plan" ] || { sed -n 2,27p "$0"; exit 2; }
+[ "$tsan" = 1 ] && [ "$app_explicit" = 0 ] && app="$repo/build/macos-arm64-tsan/src/Platform/App/anomaly.app"
 [ -d "$app" ] || { echo "no app at $app (build it: cmake --preset macos-arm64-asan && cmake --build --preset macos-arm64-asan --target anomaly)" >&2; exit 2; }
 
 if [ -z "$data_root" ]; then
@@ -132,7 +139,15 @@ hard_stop=$(( timeout_s - 60 ))
 # ---- environment ------------------------------------------------------------------------------------------------------
 # the overlay is read from the checkout, not from the bundle, so an edit of gamedata/ (the driver) needs no relink
 env_args=(--env "ANOMALY_STATE_ROOT=$state" --env "ANOMALY_SWEEP=$plan" --env "ANOMALY_OVERLAY=$repo/gamedata")
-if [ "$plain" = 0 ]; then
+if [ "$tsan" = 1 ]; then
+    # halt_on_error=0: keep going after a report; report_thread_leaks=0: the engine's detached threads (the freeze watchdog, the
+    # network sync) are never joined by design; report_signal_unsafe=0: the crash handlers log from a signal on purpose;
+    # history_size=5 keeps more of the first access's history (the second stack of a race is often long gone otherwise)
+    env_args+=(
+        --env "MallocNanoZone=0"
+        --env "TSAN_OPTIONS=suppressions=$here/tsan.supp:halt_on_error=0:report_thread_leaks=0:report_signal_unsafe=0:history_size=5:second_deadlock_stack=1:print_summary=1${SWEEP_TSAN_EXTRA:+:$SWEEP_TSAN_EXTRA}"
+    )
+elif [ "$plain" = 0 ]; then
     # container-overflow: the engine's own vectors are annotated, the system libc++'s are not (false positives);
     # halt_on_error=0: keep going after a report (the app is built with -fsanitize-recover), the reports are the product
     env_args+=(
@@ -149,6 +164,21 @@ cd "$out" || exit 2
 open -g -j -W -n "${env_args[@]}" --stdout "$out/stdout.txt" --stderr "$out/stderr.txt" "$app" \
     --args --data-root "$data_root" --script "$script" --exit-after "$hard_stop" --size "$size" -dbg &
 opid=$!
+if [ -n "${SWEEP_LLDB:-}" ]; then
+    # SWEEP_LLDB=1: attach lldb to the app as soon as it is up (batch mode: it continues, and on a stop, an exit() or an abort() prints
+    # every thread's stack to lldb.txt). For a run that ends with no report at all.
+    (
+        pid=""
+        for _ in $(seq 1 300); do
+            pid=$(pgrep -f -- "anomaly.app/Contents/MacOS/anomaly.*--script $script" | head -1)
+            [ -n "$pid" ] && break
+            sleep 0.2
+        done
+        [ -n "$pid" ] && lldb -b -p "$pid" -o 'process handle SIGBUS SIGSEGV SIGABRT SIGILL -n true -p true -s true' \
+            -o 'breakpoint set -n _exit' -o 'breakpoint set -n exit' -o 'breakpoint set -n abort' -o continue \
+            -o 'bt all' -o 'process status' -o 'process kill' > "$out/lldb.txt" 2>&1
+    ) &
+fi
 # the watchdog: `open -W` does not end by itself if the app hangs; find the app by its unique --script argument
 stop_app() { pkill -TERM -f -- "--script $script" 2>/dev/null; sleep 5; pkill -KILL -f -- "--script $script" 2>/dev/null; }
 trap 'stop_app; kill "$opid" 2>/dev/null; exit 130' INT TERM HUP

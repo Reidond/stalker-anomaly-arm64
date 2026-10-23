@@ -43,6 +43,14 @@ if(ANOMALY_SANITIZE_COMPILE_FLAGS)
     # assembly interpreter (lj_vm.S) cannot be.
     # TARGET_CFLAGS, not XCFLAGS: the host tools (minilua, buildvm) are not sanitized.
     list(APPEND luajit_xcflags -DLUAJIT_USE_SYSMALLOC)
+    if("thread" IN_LIST ANOMALY_SANITIZE)
+        # ThreadSanitizer makes the engine's C++ objects carry the C personality routine too, and the image then has four
+        # (gcc, gxx, objc and LuaJIT's external unwinder): the linker cannot encode that in compact unwind. Internal unwinding
+        # is what the iPad uses (no external unwinder there either), and the JIT is off as on the iPad: its machine code is not
+        # instrumented, so TSan cannot see what it does.
+        list(APPEND luajit_xcflags -DLUAJIT_UNWIND_INTERNAL -DLUAJIT_DISABLE_JIT)
+        string(APPEND luajit_variant "+tsan-interp") # the flags above are not in the hash below
+    endif()
     string(JOIN " " luajit_sanitize_cflags ${ANOMALY_SANITIZE_COMPILE_FLAGS})
     string(MD5 luajit_sanitize_id "${luajit_sanitize_cflags}")
     string(SUBSTRING "${luajit_sanitize_id}" 0 8 luajit_sanitize_id)
