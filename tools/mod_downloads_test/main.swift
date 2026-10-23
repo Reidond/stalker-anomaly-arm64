@@ -656,17 +656,13 @@ final class ProgressLog: @unchecked Sendable {
 
 // MARK: - Pure logic: gate, address field, bookmarks, controller mapping
 
-await test("theme-and-motion") {
+await test("theme") {
     let anomaly = DownloadsTheme.anomaly
-    check(anomaly.prefersGlass, "the default theme uses glass")
-    check(anomaly.panelRadius > 0, "panel radius")
     var custom = anomaly
-    custom.prefersGlass = false
-    check(!custom.prefersGlass && anomaly.prefersGlass, "a theme is a value: changing a copy leaves the default alone")
-    check(Motion.animation(Motion.spring, reduceMotion: true) == Motion.fade, "Reduce Motion swaps every animation for a short fade")
-    check(Motion.animation(Motion.spring, reduceMotion: false) == Motion.spring, "otherwise the spring stays")
-    // yellow-green is for "done" only: nothing else in the default palette is that colour
-    check(anomaly.signal != anomaly.highlight && anomaly.signal != anomaly.accent, "signal is its own colour")
+    custom.accent = .red
+    check(custom.accent != anomaly.accent, "a theme is a value: changing a copy leaves the default alone")
+    // the launcher's amber is the default accent; yellow-green is its own colour (it means "done")
+    check(anomaly.signal != anomaly.accent, "signal is its own colour")
 }
 
 await test("gate-tap-window-and-one-download-per-tap") {

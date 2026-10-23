@@ -137,14 +137,13 @@ struct ControllerLayer: View {
     let browser: BrowserModel
     @StateObject private var bridge = ControllerBridge()
     @Environment(\.downloadsTheme) private var theme
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         GeometryReader { geo in
             if bridge.cursorVisible {
-                // amber ring with a dark core: visible on a white page and on a black one
+                // accent ring with a dark core: visible on a white page and on a black one
                 Circle()
-                    .strokeBorder(theme.highlight, lineWidth: 3)
+                    .strokeBorder(theme.accent, lineWidth: 3)
                     .background(Circle().fill(Color.black.opacity(0.45)))
                     .frame(width: 28, height: 28)
                     .shadow(color: .black.opacity(0.5), radius: 3)
@@ -153,7 +152,7 @@ struct ControllerLayer: View {
             }
         }
         .allowsHitTesting(false)
-        .animation(Motion.animation(Motion.exit, reduceMotion: reduceMotion), value: bridge.cursorVisible)
+        .animation(.easeOut(duration: 0.15), value: bridge.cursorVisible)
         .onAppear { bridge.start(browser: browser) }
         .onDisappear { bridge.stop() }
     }

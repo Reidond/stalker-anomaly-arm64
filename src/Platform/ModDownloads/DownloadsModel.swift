@@ -29,8 +29,9 @@ final class DownloadsModel: NSObject, ObservableObject {
     let bookmarks: BookmarkStore
     @Published private(set) var items: [DownloadItem] = []
     @Published var notice: String?
-    /// The downloads list next to (or over) the page.
-    @Published var showPanel = true
+    @Published var noticeIsError = false
+    /// The downloads list (an inspector: beside the page on a wide screen, a sheet on a narrow one).
+    @Published var showPanel = false
 
     var onDownloaded: (URL) -> Void = { _ in }
     var onDownloadedFile: (DownloadedFile) -> Void = { _ in }
@@ -135,8 +136,9 @@ final class DownloadsModel: NSObject, ObservableObject {
 
     // MARK: Notices
 
-    func show(notice message: String) {
+    func show(notice message: String, isError: Bool = false) {
         notice = message
+        noticeIsError = isError
         noticeGeneration += 1
         let generation = noticeGeneration
         Task { [weak self] in
@@ -375,6 +377,7 @@ extension DownloadsModel: WKDownloadDelegate {
         let part = dir.appendingPathComponent(".wk-\(item.id.uuidString).part")
         try? FileManager.default.removeItem(at: part)
         item.partURL = part
+        show(notice: "Downloading \(item.fileName)")
         return part
     }
 

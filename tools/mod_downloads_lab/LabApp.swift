@@ -16,20 +16,17 @@ enum LabPaths {
 }
 
 struct LabRoot: View {
-    @State private var lastFile = "nothing downloaded yet"
-
     var body: some View {
-        VStack(spacing: 0) {
+        // the launcher shows the browser as a pushed screen of its NavigationStack, with the title set by the host: the same here
+        NavigationStack {
             DownloadsView(downloadsDir: LabPaths.downloads,
                           onDownloaded: { url in SelfTest.note("onDownloaded: \(url.lastPathComponent)") },
                           onDownloadedFile: { file in
                               SelfTest.note("onDownloadedFile: \(file.fileName) \(file.size) bytes sha256=\(file.sha256) kind=\(file.kind) final=\(file.finalURL.host ?? "")")
-                              lastFile = "\(file.fileName), \(file.size) bytes"
                           })
-            Text("Lab: \(lastFile)")
-                .font(.caption)
-                .padding(4)
+                .navigationTitle("Browse")
         }
+        .tint(DownloadsTheme.anomaly.accent)
         .task { await SelfTest.runIfRequested() }
     }
 }
