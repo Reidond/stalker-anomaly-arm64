@@ -1,14 +1,19 @@
 #!/bin/zsh
 # One check of the mod mounting on the iPad: a small generated mod (a script, a config, a data file, a replaced stock file) is copied to
-# Documents/Mods, the game runs a short scripted timeline in the main menu, and the engine and shell logs are read back. Then Documents/Mods
-# is emptied again. Needs the signed anomaly app installed (tools/ios/ipad.sh install) and the iPad unlocked; one session at a time may use it.
-# It refuses to run when Documents/Mods already holds something (a player's mods), because it replaces that folder's content.
+# Documents/Mods, the game runs a short scripted timeline in the main menu, and the engine and shell logs are read back. Needs the signed
+# anomaly app installed (tools/ios/ipad.sh install) and the iPad unlocked; one session at a time may use it ("IPAD GRANTED").
+#
+# Safety: it only ever adds or overwrites single files and folders below Documents/Mods (never `devicectl device copy to
+# --remove-existing-content`, which wipes a container), refuses to start when Documents/Mods already holds anything, and backs up
+# Library/Application Support/Anomaly/appdata first. devicectl cannot delete, so the app deletes its own test files: the last run's
+# timeline ends with `mods_clear` (main.cpp: removes every entry directly inside the mods root, nothing else), which leaves Documents/Mods
+# empty again. If a run dies before that, the script lists what is left.
 #
 #   tools/mods_check/run_ipad.sh [--device <udid|name>] [--out <dir>] [--big <files>]
 #
-#   --big <files>   also measure what mounting a big mod costs: the game itself writes a second mod of that many files (about 700 KB each, so
-#                   3000 files are 2 GB) into Documents/Mods/big (a script of the test mod does it, with io.open), and the next start mounts it
-#                   (the engine log line "* mod big: ... (n ms)"). Takes minutes: the writes are the slow part.
+#   --big <files>   also measure what mounting a mod of that many files costs: the game itself writes it (1 KB per file: the mount reads the
+#                   directory, never the files, so their size does not matter; the Mac measurement used 2 GB) into Documents/Mods/big, and
+#                   the next start mounts it (engine log line "* mod big: ... (n ms)").
 set -euo pipefail
 
 here=${0:A:h}
@@ -39,6 +44,9 @@ if print -r -- "$files" | grep -q "Documents/Mods/."; then
     print -r -- "$files" | grep "Documents/Mods/" | head -10 >&2
     exit 3
 fi
+echo "== backing up appdata (saves, user.ltx) to $out/appdata-backup"
+mkdir -p $out/appdata-backup
+$ipad $dev get "Library/Application Support/Anomaly/appdata" $out/appdata-backup >/dev/null 2>&1 || echo "(no appdata to back up yet)"
 
 # ---- the files --------------------------------------------------------------------------------------------------------
 printf '[test]\nvalue = from_ipad_mod\nwho = mod_ipad\n' > $m/configs/modtest.ltx
@@ -64,20 +72,24 @@ function ini_value()
     log("MODTEST ini value=" .. ini_file("modtest.ltx"):r_string("test", "value"))
 end
 
--- writes Documents/Mods/big/content/gamedata/textures/dirN/tex_I.dds, `files` files of `size` bytes (the start-up cost of a big mod is measured
--- at the next start; the files are never read)
-function make_big(files, size)
+-- writes <container>/Documents/Mods/big/content/gamedata/textures/dirN/tex_I.dds, `files` files of `size` bytes (the start-up cost of a big mod is
+-- measured at the next start; the files are never read). `base` replaces the container path (a test on another machine).
+function make_big(files, size, base)
     local lfs = require("lfs")
-    -- the virtual paths are lower case; xr_native_path puts the container's capitals back
-    local appdata = getFS():update_path("$app_data_root$", ""):gsub("\\", "/")
-    local at = appdata:lower():find("/library/", 1, true)
-    if not at then log("MODTEST make_big: no container path in " .. appdata) return end
-    local base = appdata:sub(1, at - 1)
+    if not base then
+        -- the virtual paths are lower case; xr_native_path puts the container's capitals back
+        local appdata = getFS():update_path("$app_data_root$", ""):gsub("\\", "/")
+        local at = appdata:lower():find("/library/", 1, true)
+        if not at then log("MODTEST make_big: no container path in " .. appdata) return end
+        base = appdata:sub(1, at - 1)
+    end
     local root = base .. "/Documents/Mods/big/content/gamedata/textures"
     local chunk = string.rep("x", size)
-    for _, d in ipairs({"/Documents/Mods/big", "/Documents/Mods/big/content", "/Documents/Mods/big/content/gamedata", "/Documents/Mods/big/content/gamedata/textures"}) do
+    for _, d in ipairs({"/Documents", "/Documents/Mods", "/Documents/Mods/big", "/Documents/Mods/big/content", "/Documents/Mods/big/content/gamedata", "/Documents/Mods/big/content/gamedata/textures"}) do
         lfs.mkdir(base .. d)
     end
+    local mj = io.open(base .. "/Documents/Mods/big/mod.json", "w")
+    if mj then mj:write('{"schema":1,"id":"big","name":"big test mod","version":"1"}') mj:close() end
     for i = 0, files - 1 do
         local dir = root .. "/dir" .. (i % 40)
         if i < 40 then lfs.mkdir(dir) end
@@ -102,25 +114,33 @@ echo '{"schema":1,"mods":[{"id":"ipadmod","enabled":true}]}' > $work/tree/modlis
     echo '12 console run_string if modtest_ipad then modtest_ipad.stock_override() else log("MODTEST stock override: mod missing") end'
     echo '13 console run_string if modtest_ipad then modtest_ipad.ini_value() else log("MODTEST ini: mod missing") end'
     if [[ $big -gt 0 ]]; then
-        echo "14 console run_string modtest_ipad.make_big($big, 716800)"
+        echo "14 console run_string modtest_ipad.make_big($big, 1024)"
         echo "$(( 14 + big / 10 + 20 )) quit"
     else
+        echo "15 mods_clear"
         echo "16 quit"
     fi
 } > $work/tree/.timeline
 
-copy_mods() { # <local dir> : replaces Documents/Mods on the iPad with it
-    xcrun devicectl device copy to --domain-type appDataContainer --domain-identifier $bundle $dev \
-        --source "$1" --destination Documents/Mods --remove-existing-content true
+put_path() { # <local file or folder> <path below the container>: adds or overwrites that one item
+    xcrun devicectl device copy to --domain-type appDataContainer --domain-identifier $bundle $dev --source "$1" --destination "$2"
 }
-cleanup() {
-    echo "== emptying Documents/Mods again"
-    copy_mods $work/empty >/dev/null 2>&1 || echo "could not empty Documents/Mods: do it in the Files app" >&2
+final() {
+    echo "== what is left in Documents/Mods"
+    left=$(xcrun devicectl device info files --domain-type appDataContainer --domain-identifier $bundle $dev 2>/dev/null | grep "Documents/Mods/" || true)
+    if [[ -z $left ]]; then
+        echo "nothing: Documents/Mods is empty again"
+    else
+        print -r -- "$left" | head -10
+        echo "(the run did not reach mods_clear: delete Documents/Mods/ipadmod, big, modlist.json and the .timeline* files in the Files app)"
+    fi
 }
-trap cleanup EXIT
+trap final EXIT
 
 echo "== copying the test mod to Documents/Mods"
-copy_mods $work/tree
+put_path $work/tree/ipadmod Documents/Mods/ipadmod
+put_path $work/tree/modlist.json Documents/Mods/modlist.json
+put_path $work/tree/.timeline Documents/Mods/.timeline
 
 run_game() { # <label> <args...>
     echo "== $1"
@@ -147,11 +167,9 @@ if [[ $big -gt 0 ]]; then
 import json, sys
 open(sys.argv[1], "w").write(json.dumps({"schema": 1, "mods": [{"id": "ipadmod", "enabled": True}, {"id": "big", "enabled": True}]}))
 PY
-    xcrun devicectl device copy to --domain-type appDataContainer --domain-identifier $bundle $dev \
-        --source $work/tree/modlist.json --destination Documents/Mods/modlist.json
-    printf '# generated by tools/mods_check/run_ipad.sh\n6 quit\n' > $work/tree/.timeline2
-    xcrun devicectl device copy to --domain-type appDataContainer --domain-identifier $bundle $dev \
-        --source $work/tree/.timeline2 --destination Documents/Mods/.timeline2
+    put_path $work/tree/modlist.json Documents/Mods/modlist.json
+    printf '# generated by tools/mods_check/run_ipad.sh\n6 mods_clear\n7 quit\n' > $work/tree/.timeline2
+    put_path $work/tree/.timeline2 Documents/Mods/.timeline2
     run_game "run with the big mod enabled (start-up cost)" --script Mods/.timeline2
     pull_logs $out/logs-big
 fi

@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <filesystem>
 #include <set>
 
 namespace AppleShell
@@ -278,5 +279,141 @@ std::vector<std::string> DescribeMods(const ModResolution& r)
     for (const std::string& n : r.notes)
         lines.push_back("mods: " + n);
     return lines;
+}
+} // namespace AppleShell
+
+namespace fs = std::filesystem;
+
+namespace
+{
+std::string g_mods_root; // Paths::mods_root as the shell resolved it (SetModsRoot)
+
+// The canonical mods root when removing from it is allowed; otherwise an empty path and the reason in `why`.
+fs::path RemovableRoot(std::string& why)
+{
+    std::error_code ec;
+    if (g_mods_root.empty())
+    {
+        why = "no mods root is set";
+        return {};
+    }
+    const fs::path root = fs::weakly_canonical(fs::path(g_mods_root), ec);
+    if (ec || !fs::is_directory(root, ec))
+    {
+        why = "the mods root is not a folder";
+        return {};
+    }
+    if (root.filename() != "Mods")
+    {
+        why = "the mods root is not a folder named Mods";
+        return {};
+    }
+    // the marker: modlist.json, or nothing but mod folders (each holds a mod.json), which includes an empty folder
+    if (fs::is_regular_file(root / "modlist.json", ec))
+        return root;
+    for (fs::directory_iterator it(root, ec), end; !ec && it != end; it.increment(ec))
+    {
+        const fs::path& entry = it->path();
+        std::error_code e2;
+        if (!fs::is_directory(fs::symlink_status(entry, e2)) || !fs::is_regular_file(entry / "mod.json", e2))
+        {
+            why = "the mods root has no modlist.json and holds something that is not a mod folder (" + entry.filename().string() + ")";
+            return {};
+        }
+    }
+    if (ec)
+    {
+        why = "the mods root cannot be listed";
+        return {};
+    }
+    return root;
+}
+
+// `entry` is directly inside `root`: its parent resolves to the root itself. The entry's own last component is not resolved, so a
+// symbolic link is judged (and removed) as a link.
+bool DirectlyInside(const fs::path& root, const fs::path& entry)
+{
+    std::error_code ec;
+    const fs::path parent = fs::weakly_canonical(entry.parent_path(), ec);
+    return !ec && parent == root && entry.filename() != "." && entry.filename() != ".." && !entry.filename().empty();
+}
+
+void RemoveEntry(const fs::path& root, const fs::path& entry, AppleShell::ModsRemoval& out)
+{
+    std::error_code ec;
+    if (!DirectlyInside(root, entry))
+    {
+        out.refused.push_back(entry.string() + ": not directly inside the mods root");
+        return;
+    }
+    if (!fs::exists(fs::symlink_status(entry, ec)))
+        return;
+    // remove_all does not follow symbolic links: a link inside a mod is removed as a link
+    fs::remove_all(entry, ec);
+    if (ec)
+        out.refused.push_back(entry.string() + ": " + ec.message());
+    else
+        out.removed.push_back(entry.string());
+}
+} // namespace
+
+namespace AppleShell
+{
+void SetModsRoot(const std::string& mods_root)
+{
+    g_mods_root = mods_root;
+}
+
+ModsRemoval RemoveModFolder(const std::string& id)
+{
+    ModsRemoval out;
+    std::string why;
+    const fs::path root = RemovableRoot(why);
+    if (root.empty())
+    {
+        out.refused.push_back(id + ": " + why);
+        return out;
+    }
+    if (id.empty() || id == "." || id == ".." || id.find_first_of("/\\") != std::string::npos)
+    {
+        out.refused.push_back("\"" + id + "\": not a plain folder name");
+        return out;
+    }
+    const fs::path entry = root / id;
+    std::error_code ec;
+    const fs::file_status status = fs::symlink_status(entry, ec);
+    if (!fs::exists(status))
+        return out;
+    if (!fs::is_directory(status))
+    {
+        out.refused.push_back(id + ": not a mod folder (a link or a file)");
+        return out;
+    }
+    if (!fs::is_regular_file(entry / "mod.json", ec))
+    {
+        out.refused.push_back(id + ": no mod.json, not a mod folder");
+        return out;
+    }
+    RemoveEntry(root, entry, out);
+    return out;
+}
+
+ModsRemoval ClearModsRoot()
+{
+    ModsRemoval out;
+    std::string why;
+    const fs::path root = RemovableRoot(why);
+    if (root.empty())
+    {
+        out.refused.push_back(why);
+        return out;
+    }
+    std::error_code ec;
+    std::vector<fs::path> entries;
+    for (fs::directory_iterator it(root, ec), end; !ec && it != end; it.increment(ec))
+        entries.push_back(it->path());
+    for (const fs::path& entry : entries)
+        RemoveEntry(root, entry, out);
+    return out;
 }
 } // namespace AppleShell

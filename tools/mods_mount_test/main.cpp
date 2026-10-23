@@ -93,17 +93,27 @@ std::string served(const char* alias, const char* name)
     return s;
 }
 
+// Every folder the tests make lives below a fresh mkdtemp folder (`base`) that carries a marker file; nothing is ever removed unless that
+// marker is there and the folder is the one this process made. No test passes or computes a parent path to a removal function.
+const char* const kMarker = ".made_by_mods_mount_test";
+
 struct Tree
 {
-    fs::path root, game, mods, run;
+    fs::path base, root, game, mods, run;
 };
 
 Tree make_tree(const std::string& tag)
 {
+    std::string pattern = std::string(getenv("TMPDIR") ? getenv("TMPDIR") : "/tmp") + "/mods_mount_test_XXXXXX";
+    if (!mkdtemp(pattern.data()))
+    {
+        printf("cannot make a temporary folder from %s\n", pattern.c_str());
+        exit(2);
+    }
     Tree t;
-    t.root = fs::path(getenv("TMPDIR") ? getenv("TMPDIR") : "/tmp") / ("mods_mount_test_" + tag + "_" + std::to_string(getpid()));
-    fs::remove_all(t.root);
-    t.root = fs::canonical((fs::create_directories(t.root), t.root));
+    t.base = fs::canonical(pattern);
+    write_file(t.base / kMarker, "made by mods_mount_test (pid " + std::to_string(getpid()) + ")");
+    t.root = t.base / tag; // the tag may have a space and a non-ASCII letter
     t.game = t.root / "game";
     t.mods = t.root / "Mods";
     t.run = t.root / "run";
@@ -111,6 +121,17 @@ Tree make_tree(const std::string& tag)
     fs::create_directories(t.mods);
     fs::create_directories(t.run / "appdata");
     return t;
+}
+
+void remove_tree(const Tree& t)
+{
+    const std::string name = t.base.filename().string();
+    if (name.rfind("mods_mount_test_", 0) != 0 || read_file(t.base / kMarker).find("made by mods_mount_test") != 0)
+    {
+        printf("not removing %s: it is not a folder this test made\n", t.base.c_str());
+        return;
+    }
+    fs::remove_all(t.base);
 }
 
 // An archive in the shell's own format (the Monolith overlay packer): the files of `src` appear below $fs_root$\gamedata\.
@@ -155,6 +176,8 @@ void make_common(const Tree& t)
     write_file(stock / "scripts/stock_script.script", "-- stock script");
     make_archive(stock, t.game / "db", "stock.db0");
 
+    for (const char* id : {"a", "b", "c", "case", "e"})
+        write_file(t.mods / id / "mod.json", std::string("{\"schema\":1,\"id\":\"") + id + "\"}");
     mod_file(t, "a", "gamedata/configs/shared.ltx", "mod a shared");
     mod_file(t, "a", "gamedata/configs/only_a.ltx", "mod a only");
     mod_file(t, "a", "gamedata/scripts/only_a.script", "-- mod a script");
@@ -276,7 +299,7 @@ int priority(bool reversed)
         FS.r_close(sr);
     }
     Core._destroy();
-    fs::remove_all(t.root);
+    remove_tree(t);
     return g_failures;
 }
 
@@ -293,7 +316,7 @@ int odd_paths()
     check(served("$game_config$", "archived.ltx") == "b archive", "... and so is the db archive in it");
     check(served("$game_scripts$", "only_a.script") == "-- mod a script", "... and a script");
     Core._destroy();
-    fs::remove_all(t.root);
+    remove_tree(t);
     return g_failures;
 }
 
@@ -310,7 +333,7 @@ int manual_wins()
     check(served("$game_config$", "loose_only.ltx") == "loose only", "a loose file with no mod involved");
     check(served("$game_config$", "only_a.ltx") == "mod a only", "mod files the manual install does not replace are served");
     Core._destroy();
-    fs::remove_all(t.root);
+    remove_tree(t);
     return g_failures;
 }
 
@@ -324,7 +347,7 @@ int disable(bool disable_b)
     check(served("$game_config$", "shared.ltx") == (disable_b ? "mod a shared" : "mod b shared"), "shared.ltx comes from the enabled one");
     check(served("$game_config$", disable_b ? "archived.ltx" : "only_a.ltx") == "<none>", "the disabled mod's files are absent");
     Core._destroy();
-    fs::remove_all(t.root);
+    remove_tree(t);
     return g_failures;
 }
 
@@ -341,7 +364,7 @@ int mixed_case()
     check(served("$game_scripts$", "mixedcase.script") == "-- mixed case", "GameData/Scripts/MixedCase.Script opens as mixedcase.script");
     check(served("$game_config$", "CASETEST.LTX") == "case ok", "... and as CASETEST.LTX");
     Core._destroy();
-    fs::remove_all(t.root);
+    remove_tree(t);
     return g_failures;
 }
 
@@ -366,7 +389,117 @@ int write_isolation()
     check(fs::exists(t.game / "gamedata/configs/only_a.ltx"), "the write went to the game folder's gamedata/ (not to the mod)");
     check(served("$game_config$", "only_a.ltx").find("written by the game") == 0, "and what was written is what the engine now reads");
     Core._destroy();
-    fs::remove_all(t.root);
+    remove_tree(t);
+    return g_failures;
+}
+
+// The folder the removal functions act on, the way the shell hands it over: ANOMALY_MODS_ROOT, then SetModsRoot
+void point_at(const fs::path& mods_root)
+{
+    setenv("ANOMALY_MODS_ROOT", mods_root.c_str(), 1);
+    AppleShell::SetModsRoot(getenv("ANOMALY_MODS_ROOT"));
+}
+
+// mods_delete / mods_clear: only the shell's mods root, only when it is named Mods and has a marker, only entries directly inside it,
+// symbolic links not followed
+int removal()
+{
+    Tree t = make_tree("remove");
+    make_common(t);
+    write_modlist(t, {{"a", true}, {"b", true}});
+    // something outside the mods root that a link inside a mod points to
+    const fs::path outside = t.root / "outside";
+    write_file(outside / "keep.txt", "must survive");
+    fs::create_directories(t.mods / "a/content");
+    fs::create_symlink(outside, t.mods / "a/content/link_to_outside");
+    fs::create_symlink(outside, t.mods / "link_entry");
+    write_file(t.mods / "plain_folder/readme.txt", "a folder without a mod.json");
+
+    AppleShell::SetModsRoot("");
+    auto r = AppleShell::ClearModsRoot();
+    check(r.removed.empty() && !r.refused.empty() && fs::exists(t.mods / "a"), "nothing is removed before the shell has set a mods root");
+
+    point_at(t.mods);
+    for (const char* bad : {"", ".", "..", "../outside", "a/content", "/etc", "a\\b", "outside/", "plain_folder", "link_entry"})
+    {
+        r = AppleShell::RemoveModFolder(bad);
+        check(r.removed.empty() && !r.refused.empty(), std::string("refused: \"") + bad + "\"");
+    }
+    check(fs::exists(outside / "keep.txt") && fs::exists(t.mods / "a") && fs::exists(t.mods / "plain_folder") && fs::is_symlink(t.mods / "link_entry"),
+          "nothing was touched by the refused ids");
+    r = AppleShell::RemoveModFolder("nowhere");
+    check(r.removed.empty() && r.refused.empty(), "an id that does not exist removes nothing and is no error");
+
+    r = AppleShell::RemoveModFolder("a");
+    check(r.removed.size() == 1 && !fs::exists(t.mods / "a"), "mod a (it has a mod.json) is removed");
+    check(read_file(outside / "keep.txt") == "must survive", "the link inside mod a was removed as a link: its target is untouched");
+    check(fs::exists(t.mods / "b") && fs::exists(t.mods / "modlist.json"), "the other entries are still there");
+
+    r = AppleShell::ClearModsRoot();
+    check(r.refused.empty() && fs::is_directory(t.mods) && fs::is_empty(t.mods), "mods_clear leaves an empty mods root: " + std::to_string(r.removed.size()) + " entries removed");
+    check(!fs::exists(t.mods / "link_entry") && fs::exists(outside / "keep.txt"), "... a link entry went as a link, its target stayed");
+    check(fs::exists(t.game / "db/stock.db0"), "the game folder is untouched");
+    r = AppleShell::ClearModsRoot();
+    check(r.removed.empty() && r.refused.empty(), "an empty mods root is a mods root: nothing to remove, no error");
+    remove_tree(t);
+    return g_failures;
+}
+
+// Folders that are not a mods root: the functions refuse and delete nothing
+int removal_refuses()
+{
+    Tree t = make_tree("refuse");
+    // 1. not named Mods, though it has a modlist.json
+    const fs::path other = t.root / "Stuff";
+    write_file(other / "modlist.json", "{}");
+    write_file(other / "precious.txt", "keep");
+    // 2. named Mods but no marker: no modlist.json, and something that is not a mod folder in it
+    const fs::path unmarked = t.root / "unmarked" / "Mods";
+    write_file(unmarked / "precious.txt", "keep");
+    write_file(unmarked / "a/mod.json", "{}");
+    // 3. named Mods, no modlist.json, a folder without mod.json
+    const fs::path half = t.root / "half" / "Mods";
+    write_file(half / "a/mod.json", "{}");
+    write_file(half / "docs/readme.txt", "keep");
+    // 4. named mods in lower case
+    const fs::path lower = t.root / "lower" / "mods";
+    write_file(lower / "modlist.json", "{}");
+    write_file(lower / "a/mod.json", "{}");
+    // 5. a link named Mods that points at a folder with no marker
+    const fs::path target = t.root / "linktarget";
+    write_file(target / "precious.txt", "keep");
+    fs::create_directories(t.root / "viaLink");
+    fs::create_symlink(target, t.root / "viaLink" / "Mods");
+    // 6. the mods root of the tree itself, to be sure the positive case works with the same code
+    write_modlist(t, {});
+
+    struct Case { const char* what; fs::path root; fs::path survivor; };
+    const Case cases[] = {
+        {"a folder not named Mods (with modlist.json)", other, other / "precious.txt"},
+        {"a Mods folder without modlist.json and with a non-mod entry", unmarked, unmarked / "precious.txt"},
+        {"a Mods folder where one folder has no mod.json", half, half / "docs/readme.txt"},
+        {"a folder named mods in lower case", lower, lower / "a/mod.json"},
+        {"a link named Mods to a folder without a marker", t.root / "viaLink" / "Mods", target / "precious.txt"},
+    };
+    for (const Case& c : cases)
+    {
+        point_at(c.root);
+        auto r = AppleShell::ClearModsRoot();
+        check(r.removed.empty() && !r.refused.empty() && fs::exists(c.survivor), std::string("mods_clear refuses: ") + c.what);
+        r = AppleShell::RemoveModFolder("a");
+        check(r.removed.empty() && fs::exists(c.survivor), std::string("mods_delete deletes nothing: ") + c.what);
+    }
+    // the same code does work on a real mods root
+    point_at(t.mods);
+    write_file(t.mods / "m/mod.json", "{}");
+    auto r = AppleShell::RemoveModFolder("m");
+    check(r.removed.size() == 1 && !fs::exists(t.mods / "m"), "a real mods root (modlist.json present): mods_delete removes a mod folder");
+    // a Mods folder with no modlist.json whose entries are all mod folders is a mods root too
+    fs::remove(t.mods / "modlist.json");
+    write_file(t.mods / "m2/mod.json", "{}");
+    r = AppleShell::ClearModsRoot();
+    check(r.removed.size() == 1 && fs::is_empty(t.mods), "... and so is one that holds only mod folders");
+    remove_tree(t);
     return g_failures;
 }
 
@@ -380,7 +513,7 @@ int mods_off()
     check(served("$game_config$", "shared.ltx") == "stock shared", "the stock file is served");
     check(served("$game_config$", "only_a.ltx") == "<none>", "no mod file is");
     Core._destroy();
-    fs::remove_all(t.root);
+    remove_tree(t);
     return g_failures;
 }
 
@@ -437,7 +570,7 @@ int bad_lists()
     write_file(t.mods / "modlist.json", R"({"schema":1,"mods":[{"id":"empty","enabled":true},{"id":"a","enabled":true}]})");
     r = AppleShell::ResolveMods(t.mods.string(), false);
     check(ids(r) == "a" && r.notes.size() == 1 && r.notes[0].find("no content/") != std::string::npos, "an enabled folder without content/ is skipped with a note");
-    fs::remove_all(t.root);
+    remove_tree(t);
     return g_failures;
 }
 
@@ -452,7 +585,7 @@ int bad_list_fs()
     check(served("$game_config$", "shared.ltx") == "stock shared", "the game starts with its stock files");
     check(served("$game_config$", "only_a.ltx") == "<none>", "and none of the mods");
     Core._destroy();
-    fs::remove_all(t.root);
+    remove_tree(t);
     return g_failures;
 }
 
@@ -488,7 +621,7 @@ int perf(int files, int mb)
     check(ids(mods) == "big", "mounted");
     check(FS.exist("$game_data$", "textures\\dir0\\tex_0.dds") != nullptr, "a texture of the mod is registered");
     Core._destroy();
-    fs::remove_all(t.root);
+    remove_tree(t);
     return g_failures;
 }
 } // namespace
@@ -506,6 +639,8 @@ int main(int argc, char** argv)
         {"case", mixed_case},
         {"write_isolation", write_isolation},
         {"mods_off", mods_off},
+        {"removal", removal},
+        {"removal_refuses", removal_refuses},
         {"bad_lists", bad_lists},
         {"bad_list_fs", bad_list_fs},
     };

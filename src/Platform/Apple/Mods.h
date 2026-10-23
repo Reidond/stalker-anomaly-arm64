@@ -43,6 +43,23 @@ ModResolution ResolveMods(const std::string& mods_root, bool mods_off);
 // takes the content folder (db/ archives like db\addons, gamedata/ files registered below $fs_root$\gamedata\).
 std::string ModFsGameLines(const ModResolution& resolution);
 
+// Removing mod folders, for the scripted test runs (`mods_delete`, `mods_clear` in main.cpp) and for the launcher. These take no path: they act
+// on the mods root the shell resolved (`SetModsRoot`, called by AppleShell::Init with Paths::mods_root) and on nothing else. They refuse unless
+//   - that folder's name is exactly "Mods", and
+//   - it has a marker: a regular file modlist.json, or it is empty, or everything in it is a mod folder (a folder holding a mod.json).
+// RemoveModFolder(id) also needs <root>/<id> to be a real folder (not a link) holding a mod.json. Entries are removed with remove_all, which
+// never follows a symbolic link: a link is removed as a link.
+struct ModsRemoval
+{
+    std::vector<std::string> removed; // full paths of the entries removed
+    std::vector<std::string> refused; // "<what>: <why>"
+};
+void SetModsRoot(const std::string& mods_root);
+// <mods root>/<id>: `id` must be a plain name (no separators, not "." / ".." / empty). Nothing happens when it does not exist.
+ModsRemoval RemoveModFolder(const std::string& id);
+// Every entry of the mods root (mod folders, modlist.json, .downloads, ...), leaving the mods root itself.
+ModsRemoval ClearModsRoot();
+
 // The load order and what each mod brings, for the shell log: a summary line, then one line per mount and per note.
 std::vector<std::string> DescribeMods(const ModResolution& resolution);
 } // namespace AppleShell

@@ -126,11 +126,11 @@ not the one that is appended to), which `cfg_file` hits only for a mod that ship
 
 ### Tests
 
-- `ctest -R mods_mount` (`tools/mods_mount_test`, Mac): 11 scenarios, each in its own process because xrCore initializes once. They generate a
+- `ctest -R mods_mount` (`tools/mods_mount_test`, Mac): 13 scenarios, each in its own process because xrCore initializes once. They generate a
   stock-like archive, mods and a manual install in a temporary folder, write the `fsgame.ltx` the shell would, start the real `CLocatorAPI` and read
   what it serves: list order and the later mod winning a file (also reversed), a mod replacing a stock file, a mod's archive and its loose files, the
   game folder's own `gamedata/` winning over every mod, a disabled mod, an unlisted folder and a removed one, `GameData/Configs/CaseTest.LTX` opened as
-  `casetest.ltx`, `--mods-off`, a mods folder with a space and a non-ASCII letter, `rs_open` of a mounted file, `file_list` of a mounted folder, the
+  `casetest.ltx`, `--mods-off`, `mods_delete` / `mods_clear` (below), a mods folder with a space and a non-ASCII letter, `rs_open` of a mounted file, `file_list` of a mounted folder, the
   engine log line per mod, writes that stay out of the mods folder, and 19 variants of `modlist.json` (empty, truncated, not JSON, array at the top, schema
   2, no `mods`, entries that are not objects, ids with a path or a dot, repeated ids, `enabled` that is not a boolean, ...). It also passes on a
   case-sensitive APFS volume (a disk image; `TMPDIR=<volume> mods_mount_test case`).
@@ -143,6 +143,26 @@ not the one that is appended to), which `cfg_file` hits only for a mod that ship
 - Caches: with `-lua_cache`, a first run stores 72 entries; a second run with the mods' scripts changed has 70 hits, 2 stale (the two mod scripts),
   and runs the new text. For the shader translations, a mod that replaces `shaders/r3/common.h` (one comment line added) makes 95 of the 137
   translations of the main menu run again (42 from the cache against 137 without the mod), and nothing stale is served.
+
+### Removing mods from a test run
+
+A device has no way to delete a file from outside, so the app does it: `AppleShell::RemoveModFolder(id)` and `ClearModsRoot()` (`Mods.mm`), exposed to
+`--script` timelines as `<t> mods_delete <id>` and `<t> mods_clear` (put it last: the engine still has the mounted mods open). The launcher can use the
+same functions to delete a mod.
+
+They are safe by construction, not by a path check: they take no path. They act on the mods root the shell resolved (`Paths::mods_root`, handed over by
+`Init` through `SetModsRoot`) and refuse unless
+
+- that folder's last component is exactly `Mods`, and
+- it has a marker: a regular file `modlist.json`, or it is empty, or everything in it is a mod folder (a real folder holding a `mod.json`).
+
+`RemoveModFolder(id)` also needs `id` to be a plain name (no separator, not `.`/`..`/empty) and `<root>/<id>` to be a real folder (not a link) with a `mod.json`.
+Entries go with `remove_all`, which never follows a symbolic link: a link is removed as a link. Each removal is logged (`anomaly: script: removed <path>`).
+
+The tests follow the same rule: `mods_mount_test` makes every folder inside a fresh `mkdtemp` folder that carries a marker file, points
+`ANOMALY_MODS_ROOT` at `.../Mods` inside it, never passes or computes a parent path, and only removes a tree whose marker it finds
+(`mods_mount_removal_refuses` runs the functions on folders that are not a mods root: another name, no marker, a folder without `mod.json`, lower case, a link;
+they refuse and delete nothing). `tools/mods_check/run_mac.sh` only removes an `--out` folder that holds the marker file of an earlier run of itself.
 
 ### Cost of a big mod
 

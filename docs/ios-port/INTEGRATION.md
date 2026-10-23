@@ -159,6 +159,8 @@ the time is seconds since the engine came up:
 <t> relmove <dx> <dy>
 <t> click <x> <y> [button]
 <t> log <text...>            a line in the shell log
+<t> mods_delete <id>         remove <mods root>/<id> (a plain folder name, directly inside the mods root; MOD-MANAGER.md)
+<t> mods_clear               remove every entry of the mods root (put it last)
 <t> quit                     leave through the engine's own disconnect path
 ```
 

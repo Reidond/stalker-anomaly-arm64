@@ -49,8 +49,20 @@ if [ -z "$data_root" ]; then
 fi
 [ -d "$data_root/db" ] || { echo "no game data at $data_root (--data-root)" >&2; exit 2; }
 [ -n "$out" ] || out="$repo/build/mods-check/$scenario"
-if [ "$keep" = 1 ]; then rm -rf "$out/game" "$out/state/Mods" "$out/stdout.txt" "$out/stderr.txt"; else rm -rf "$out"; fi
+# Nothing is removed unless it is a folder this script made: --out must not exist, be empty, or carry the marker file of an earlier run.
+marker=".mods_check_run"
+if [ -e "$out" ] && [ -n "$(ls -A "$out" 2>/dev/null)" ] && [ ! -f "$out/$marker" ]; then
+    echo "$out exists and was not made by this script (no $marker in it): not touching it, pass another --out" >&2
+    exit 2
+fi
+if [ "$keep" = 1 ]; then
+    [ -f "$out/$marker" ] || { echo "--keep needs the folder of an earlier run in $out" >&2; exit 2; }
+    rm -rf "$out/game" "$out/state/Mods" "$out/stdout.txt" "$out/stderr.txt"
+elif [ -f "$out/$marker" ]; then
+    rm -rf "$out"
+fi
 mkdir -p "$out"
+touch "$out/$marker"
 out="$(cd "$out" && pwd)"
 
 # the scratch game folder: the archives are the real ones, gamedata/ is empty and writable
@@ -100,6 +112,13 @@ function read_data()
     log("MODTEST io.open " .. (f and f:read("*l") or "nothing"))
     if f then f:close() end
 end
+
+-- the same with forward slashes in the path
+function read_data_slash()
+    local f = io.open((getFS():update_path("\$game_config\$", "") .. "modtest_data.txt"):gsub("\\\\", "/"), "r")
+    log("MODTEST io.open slash " .. (f and f:read("*l") or "nothing"))
+    if f then f:close() end
+end
 LUA
     printf '{"schema":1,"id":"%s","name":"Mod %s","version":"1","file_count":2}\n' "$id" "$id" > "$mods/$id/mod.json"
 }
@@ -137,8 +156,13 @@ cat > "$out/run.script" <<'EOF'
 8 console run_string if modtest_b then modtest_b.run() else log("MODTEST script of mod b missing") end
 9 console run_string if modtest_b then modtest_b.read_data() else log("MODTEST io.open nothing: mod b missing") end
 9.5 console lua_cache info
+9.2 console run_string if modtest_b then modtest_b.read_data_slash() else log("MODTEST io.open slash nothing: mod b missing") end
 10 quit
 EOF
+# MODTEST_CLEAR=1: the timeline also deletes mod a and then empties the mods root (the `mods_delete` / `mods_clear` steps), just before the quit
+if [ -n "${MODTEST_CLEAR:-}" ]; then
+    printf '9.6 mods_delete a\n9.8 mods_clear\n' >> "$out/run.script"
+fi
 
 # ---- the run ------------------------------------------------------------------------------------------------------------
 extra=()
@@ -155,6 +179,8 @@ echo "--- engine log (mods and MODTEST)"
 grep -a -i "\* ShaderXlat: [0-9]\|\* mod \|MODTEST\|using fs-ltx\|lua cache\|lua_cache\|script cache" "$engine_log" 2>/dev/null
 echo "--- files the game wrote into the scratch game folder"
 (cd "$scratch" && find gamedata -type f 2>/dev/null | grep -v modtest_probe.script)
+echo "--- shell log: mods_delete / mods_clear"
+grep -a "script: removed\|script: mods_" "$shell_log" 2>/dev/null
 echo "--- files in the mods folder that are not the generated ones"
 (cd "$mods" && find . -type f | sort | grep -v -e 'modtest\(_[ab]\)\?\.\(ltx\|script\)' -e mod.json -e modlist.json -e modtest_data.txt -e default_custom_data.ltx -e common.h)
 echo "run files: $out"
