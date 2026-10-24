@@ -578,9 +578,11 @@ open -g -j -W -n --env ANOMALY_STATE_ROOT=/tmp/state build/macos-arm64-release/s
   --args --launcher-script launcher.txt --exit-after 10 -nosound
 ```
 
-(`--launcher-script` on an unattended run keeps the launcher's window hidden; `snapshot` still draws it.) On the iPad, `tools/ios/ipad.sh
-put launcher.txt launcher.txt` and `tools/ios/ipad.sh start --launcher-script launcher.txt` do the same on the device, and the snapshots come
-back with `tools/ios/ipad.sh logs`.
+(`--launcher-script` on an unattended run keeps the launcher's window hidden; `snapshot` still draws it.) On the iPad,
+`tools/launcher_check/run_ipad.sh` does the same on the device in two runs: the launcher driven by the virtual pad with a screenshot of it after each
+step (`Documents/Mods/ipad-*.png`, pulled back), then the same plus Play, whose engine log must show only the mod that was left on; it only adds single
+files and folders under `Documents/Mods` (never `--remove-existing-content`), backs up `appdata` first and ends with `mods_clear`, so the app removes its
+own test files. `--dry-run` makes the files and stops before the iPad.
 ||||||| 2975c2eec
 
 ## Downloads
