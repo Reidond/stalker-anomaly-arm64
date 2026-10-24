@@ -20,6 +20,11 @@ You need the signing setup of [BUILDING.md](BUILDING.md) (Xcode 27, `CMakeUserPr
 Xcode, Developer Mode on the iPad) and the game data pushed into the app's `Documents/Anomaly` with
 `tools/ios/push_gamedata.sh` ([APP-SHELL.md](APP-SHELL.md); 67 archives, 16 GiB, about 10 minutes over USB). Installing over the existing app
 keeps `Documents`, so the data survives every update. **Never uninstall the app**: that deletes the data.
+**Never pass `--remove-existing-content` to `devicectl device copy to`** either. Copies only add or overwrite; `devicectl` has no delete. On 2026-10-23 a call
+with that option and an empty source folder against the app's `Documents/<folder>` failed with "Failed to retrieve the file node", and afterwards the whole
+app container was empty: the game data, the saves, the caches (a call with a non-empty source had behaved as a mirror just before; whether the `ipad.sh install`
+a minute earlier also had a part in it is not known). To delete a file on the device use the app's `--script` step `delete <path>`
+([INTEGRATION.md](INTEGRATION.md), `--script`), which removes one file or one empty folder below `gamedata` or `db`.
 
 ```bash
 git submodule update --init --depth 1 external/SDL external/openal-soft external/LuaJIT external/ogg external/vorbis external/theora external/SPIRV-Cross external/vkd3d external/sse2neon

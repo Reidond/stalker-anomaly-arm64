@@ -18,6 +18,10 @@
 #
 # Options (before the subcommand): --device <udid|name>  (default $ANOMALY_IPAD_UDID, else the first connected iPad)
 #                                  --build-dir <dir>     (default build/ios-arm64)
+#
+# Copies only add or overwrite files. devicectl has no delete, and **never pass `--remove-existing-content` to `devicectl device copy to`**: on
+# 2026-10-23 a call with it and an empty source folder failed ("Failed to retrieve the file node") and the app's whole container was empty afterwards
+# (game data, saves, caches). To remove a test file from the iPad let the app do it: the --script step `delete <path>` (docs/ios-port/IPAD.md).
 set -euo pipefail
 
 repo=${0:A:h:h:h}

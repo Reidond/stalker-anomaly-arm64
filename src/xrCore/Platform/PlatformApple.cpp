@@ -15,12 +15,14 @@
 #include <pwd.h>
 #include <sys/sysctl.h>
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
 #include <mutex>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 
@@ -30,8 +32,8 @@
 namespace
 {
 std::mutex g_dir_cache_lock;
-// native directory path -> (lower-cased entry name -> real entry name)
-std::unordered_map<std::string, std::unordered_map<std::string, std::string>> g_dir_cache;
+// native directory path -> (lower-cased entry name -> every real spelling; a case-sensitive volume can hold "Scripts" and "scripts" side by side)
+std::unordered_map<std::string, std::unordered_map<std::string, std::vector<std::string>>> g_dir_cache;
 
 std::string lower(const std::string& s)
 {
@@ -46,8 +48,8 @@ bool exists_exact(const std::string& path)
 	return lstat(path.c_str(), &st) == 0;
 }
 
-// Looks 'name' up in directory 'dir', ignoring case. 'rescan' forces a fresh listing.
-bool find_entry(const std::string& dir, const std::string& name, bool rescan, std::string& real)
+// Looks 'name' up in directory 'dir', ignoring case: every spelling it has there. 'rescan' forces a fresh listing.
+bool find_entries(const std::string& dir, const std::string& name, bool rescan, std::vector<std::string>& real)
 {
 	const std::string key = lower(name);
 	std::lock_guard<std::mutex> guard(g_dir_cache_lock);
@@ -59,7 +61,7 @@ bool find_entry(const std::string& dir, const std::string& name, bool rescan, st
 		if (DIR* d = opendir(dir.empty() ? "." : dir.c_str()))
 		{
 			while (dirent* e = readdir(d))
-				entries.emplace(lower(e->d_name), e->d_name);
+				entries[lower(e->d_name)].push_back(e->d_name);
 			closedir(d);
 		}
 		it = g_dir_cache.find(dir);
@@ -105,12 +107,95 @@ std::string restore_home_spelling(const std::string& native)
 	return native;
 }
 
+std::string join_path(const std::string& base, const std::string& name)
+{
+	if (base.empty()) return name;
+	return base.back() == '/' ? base + name : base + "/" + name;
+}
+
+// The spellings of 'comp' that exist in 'base': the exact one first, then the other case variants ("Scripts" next to "scripts").
+void spellings(const std::string& base, const std::string& comp, std::vector<std::string>& out)
+{
+	out.clear();
+	if (comp == "." || comp == "..")
+	{
+		out.push_back(comp);
+		return;
+	}
+	if (exists_exact(join_path(base, comp))) out.push_back(comp);
+	std::vector<std::string> real;
+	if (!find_entries(base, comp, false, real)) find_entries(base, comp, true, real);
+	for (const std::string& r : real)
+		if (r != comp) out.push_back(r);
+	if (out.size() < 2) return;
+	// A case-insensitive volume lists the entry under its stored spelling while the spelling asked for exists as well: one
+	// entry, two names. Keep one name per inode.
+	std::vector<std::string> unique;
+	std::vector<std::pair<dev_t, ino_t>> ids;
+	for (const std::string& n : out)
+	{
+		struct stat st;
+		if (lstat(join_path(base, n).c_str(), &st) != 0) continue;
+		const std::pair<dev_t, ino_t> id(st.st_dev, st.st_ino);
+		if (std::find(ids.begin(), ids.end(), id) != ids.end()) continue;
+		ids.push_back(id);
+		unique.push_back(n);
+	}
+	out.swap(unique);
+}
+
+// Every existing path that spells 'comps[i..]' below 'base' (up to 'limit' of them, the exact spelling first).
+void walk(const std::vector<std::string>& comps, size_t i, const std::string& base, size_t limit, std::vector<std::string>& found)
+{
+	if (found.size() >= limit) return;
+	if (i == comps.size())
+	{
+		found.push_back(base);
+		return;
+	}
+	std::vector<std::string> names;
+	spellings(base, comps[i], names);
+	for (const std::string& n : names)
+	{
+		walk(comps, i + 1, join_path(base, n), limit, found);
+		if (found.size() >= limit) return;
+	}
+}
+
+// Every existing spelling of 'native' ('/'-separated), at most 'limit'. A path that exists as spelled is the only one asked for.
+void resolve_all(const std::string& native_in, size_t limit, std::vector<std::string>& found)
+{
+	const std::string native = restore_home_spelling(native_in);
+	found.clear();
+	if (native.empty()) return;
+	std::vector<std::string> comps;
+	size_t pos = native[0] == '/' ? 1 : 0;
+	while (pos <= native.size())
+	{
+		size_t next = native.find('/', pos);
+		if (next == std::string::npos) next = native.size();
+		if (next > pos) comps.push_back(native.substr(pos, next - pos));
+		pos = next + 1;
+	}
+	if (limit == 1 && exists_exact(native))
+	{
+		found.push_back(native);
+		return;
+	}
+	walk(comps, 0, native[0] == '/' ? "/" : "", limit, found);
+}
+
 // Resolves 'native' (already '/'-separated) component by component, ignoring case where the exact spelling does not
-// exist. Components that do not exist at all (files about to be created) are kept as given.
+// exist. If a folder exists in several spellings ("Scripts" and "scripts", which only a case-sensitive volume allows) the
+// one that holds the file is taken. Components that do not exist at all (files about to be created) are kept as given.
 std::string resolve_case(const std::string& native_in)
 {
 	const std::string native = restore_home_spelling(native_in);
 	if (native.empty() || exists_exact(native)) return native;
+
+	std::vector<std::string> found;
+	resolve_all(native, 1, found);
+	if (!found.empty()) return found[0];
 
 	std::string out;
 	size_t pos = 0;
@@ -132,12 +217,12 @@ std::string resolve_case(const std::string& native_in)
 		if (!candidate.empty() && candidate.back() != '/') candidate += '/';
 		if (!missing && comp != "." && comp != "..")
 		{
-			std::string real;
-			if (exists_exact(candidate + comp))
-				real = comp;
-			else if (!find_entry(out, comp, false, real) && !find_entry(out, comp, true, real))
+			std::vector<std::string> names;
+			spellings(out, comp, names);
+			if (names.empty())
 				missing = true;
-			if (!missing) comp = real;
+			else
+				comp = names[0];
 		}
 		out = candidate + comp;
 	}
@@ -152,12 +237,19 @@ std::string to_native(const char* virtual_path)
 	return resolve_case(s);
 }
 
-// _findfirst state
+// _findfirst state. A folder that exists in several spellings is listed as one: the entries of all of them, with a
+// subfolder (which the engine finds again by its lower-case path, and so by all spellings) returned once.
 struct FindState
 {
-	DIR* dir;
+	struct Dir
+	{
+		DIR* dir;
+		int fd;
+	};
+	std::vector<Dir> dirs;
+	size_t current = 0;
 	std::string pattern;
-	int dir_fd;
+	std::unordered_set<std::string> subfolders;
 };
 
 bool match_all(const std::string& pattern) { return pattern == "*.*" || pattern == "*"; }
@@ -272,16 +364,25 @@ BOOL SetFileAttributes(const char* path, DWORD attr)
 // ---------------------------------------------------------------------------------------------
 static bool next_entry(FindState* state, _finddata_t* data)
 {
-	while (dirent* e = readdir(state->dir))
+	while (state->current < state->dirs.size())
 	{
+		const FindState::Dir& dir = state->dirs[state->current];
+		dirent* e = readdir(dir.dir);
+		if (!e)
+		{
+			++state->current;
+			continue;
+		}
 		if (!match_all(state->pattern) && fnmatch(state->pattern.c_str(), e->d_name, FNM_CASEFOLD) != 0) continue;
 
 		struct stat st;
-		if (fstatat(state->dir_fd, e->d_name, &st, 0) != 0)
+		if (fstatat(dir.fd, e->d_name, &st, 0) != 0)
 		{
 			// dangling symlink or a race with a delete: skip it
 			continue;
 		}
+		const bool is_dot = strcmp(e->d_name, ".") == 0 || strcmp(e->d_name, "..") == 0;
+		if (S_ISDIR(st.st_mode) && !is_dot && !state->subfolders.insert(lower(e->d_name)).second) continue;
 		memset(data, 0, sizeof(*data));
 		strncpy(data->name, e->d_name, sizeof(data->name) - 1);
 		data->size = (_fsize_t)st.st_size;
@@ -291,7 +392,7 @@ static bool next_entry(FindState* state, _finddata_t* data)
 		if (S_ISDIR(st.st_mode)) data->attrib |= _A_SUBDIR;
 		if (!(st.st_mode & S_IWUSR)) data->attrib |= _A_RDONLY;
 		// dot files (.DS_Store, AppleDouble "._x" files) play the role of Windows' hidden attribute
-		if (e->d_name[0] == '.' && strcmp(e->d_name, ".") != 0 && strcmp(e->d_name, "..") != 0)
+		if (e->d_name[0] == '.' && !is_dot)
 			data->attrib |= _A_HIDDEN;
 		return true;
 	}
@@ -305,16 +406,21 @@ intptr_t _findfirst(const char* pattern, _finddata_t* data)
 	std::string dir = (slash == std::string::npos) ? "." : p.substr(0, slash + 1);
 	std::string mask = (slash == std::string::npos) ? p : p.substr(slash + 1);
 
-	DIR* d = opendir(to_native(dir.c_str()).c_str());
-	if (!d)
+	for (char& c : dir)
+		if (c == '\\') c = '/';
+	std::vector<std::string> paths;
+	resolve_all(dir, 16, paths);
+	if (paths.empty()) paths.push_back(to_native(dir.c_str()));
+
+	FindState* state = new FindState;
+	state->pattern = mask;
+	for (const std::string& path : paths)
+		if (DIR* d = opendir(path.c_str()))
+			state->dirs.push_back({d, dirfd(d)});
+	if (state->dirs.empty() || !next_entry(state, data))
 	{
-		errno = ENOENT;
-		return -1;
-	}
-	FindState* state = new FindState{d, mask, dirfd(d)};
-	if (!next_entry(state, data))
-	{
-		closedir(d);
+		for (const FindState::Dir& d : state->dirs)
+			closedir(d.dir);
 		delete state;
 		errno = ENOENT;
 		return -1;
@@ -330,7 +436,8 @@ int _findnext(intptr_t handle, _finddata_t* data)
 int _findclose(intptr_t handle)
 {
 	FindState* state = reinterpret_cast<FindState*>(handle);
-	closedir(state->dir);
+	for (const FindState::Dir& d : state->dirs)
+		closedir(d.dir);
 	delete state;
 	return 0;
 }

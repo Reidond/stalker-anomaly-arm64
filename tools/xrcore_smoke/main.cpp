@@ -2,6 +2,8 @@
 //
 //   xrcore_smoke [--game-dir <dir>] [--run-dir <dir>] [--crash-test segv|assert|abort]
 //   xrcore_smoke --log-race [seconds]      threads that log, flush and read the log while the core shuts down (for ThreadSanitizer)
+//   xrcore_smoke --case-test <dir>         path layer on folders that differ only in case (needs no game data; <dir> should be on a
+//                                          case-sensitive volume, otherwise only the mixed-case lookups are checked)
 //
 // --crash-test skips the checks and, right after initialization, triggers a fault to exercise the crash reporting:
 // the process must print a stack trace, leave a report next to the log and die with the original signal (or exit 1 for
@@ -19,6 +21,7 @@
 #include "xrCore/xrCore.h"
 #include "xrCore/stream_reader.h"
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cstdio>
@@ -212,6 +215,111 @@ int log_race(int seconds)
 	printf("log-race: finished\n");
 	return 0;
 }
+
+// ---------------------------------------------------------------------------------------------------------------------
+// --case-test: what a player's unzip produces on a case-sensitive volume: "Scripts" next to "scripts", "Gamedata" next to "gamedata".
+// The engine keeps lower-case virtual paths, so enumeration must list every spelling and opening must find the file in whichever
+// one holds it.
+bool write_file(const std::string& native, const char* text)
+{
+	make_dirs(native.substr(0, native.rfind('/')));
+	std::ofstream f(native, std::ios::binary | std::ios::trunc);
+	f << text;
+	return bool(f);
+}
+
+std::vector<std::string> list_virtual(const std::string& virtual_pattern)
+{
+	std::vector<std::string> names;
+	_finddata_t fd;
+	intptr_t h = _findfirst(virtual_pattern.c_str(), &fd);
+	if (h == -1)
+		return names;
+	do
+	{
+		if (!strcmp(fd.name, ".") || !strcmp(fd.name, ".."))
+			continue;
+		std::string n = fd.name;
+		for (char& c : n)
+			c = (char)tolower((unsigned char)c);
+		names.push_back(n + ((fd.attrib & _A_SUBDIR) ? "\\" : ""));
+	} while (_findnext(h, &fd) == 0);
+	_findclose(h);
+	std::sort(names.begin(), names.end());
+	return names;
+}
+
+bool readable(const std::string& virtual_path)
+{
+	struct stat st;
+	return stat(xr_native_path(virtual_path.c_str()), &st) == 0 && S_ISREG(st.st_mode);
+}
+
+int case_test(std::string dir)
+{
+	dir = with_trailing_slash(dir);
+	system(("rm -rf '" + dir + "case_test'").c_str());
+	const std::string root = dir + "case_test/";
+	make_dirs(root);
+	// can the volume keep "A" and "a" apart?
+	make_dirs(root + "probe_dir");
+	const bool sensitive = write_file(root + "probe_dir/A", "1") && write_file(root + "probe_dir/a", "2") && [&]
+	{
+		struct stat s1, s2;
+		return stat((root + "probe_dir/A").c_str(), &s1) == 0 && stat((root + "probe_dir/a").c_str(), &s2) == 0 && s1.st_ino != s2.st_ino;
+	}();
+	printf("case-test: %s is on a case-%s volume\n", root.c_str(), sensitive ? "sensitive" : "insensitive");
+
+	if (sensitive)
+	{
+		write_file(root + "Gamedata/Scripts/a.script", "a");
+		write_file(root + "gamedata/scripts/b.script", "b");
+		write_file(root + "gamedata/Scripts/c.script", "c");
+		write_file(root + "GAMEDATA/SCRIPTS/D.SCRIPT", "d");
+		write_file(root + "gamedata/Configs/only_here.ltx", "e");
+		write_file(root + "Db/Addons/x.db0", "f");
+		write_file(root + "db/patches/y.db0", "g");
+	}
+	else
+	{
+		write_file(root + "Gamedata/Scripts/a.script", "a");
+		write_file(root + "gamedata/scripts/b.script", "b");
+		write_file(root + "gamedata/Configs/only_here.ltx", "e");
+		write_file(root + "Db/Addons/x.db0", "f");
+	}
+	string_path virtual_root;
+	xr_virtual_path(root.c_str(), virtual_root, sizeof(virtual_root));
+	std::string v = virtual_root;
+	for (char& c : v)
+		c = (char)tolower((unsigned char)c);
+
+	// opening: lower-case virtual paths, the file lives in whichever spelling of the folder holds it
+	check(readable(v + "gamedata\\scripts\\a.script"), "opens gamedata\\scripts\\a.script (Gamedata/Scripts)");
+	check(readable(v + "gamedata\\scripts\\b.script"), "opens gamedata\\scripts\\b.script (gamedata/scripts)");
+	check(readable(v + "gamedata\\configs\\only_here.ltx"), "opens gamedata\\configs\\only_here.ltx (gamedata/Configs)");
+	check(readable(v + "db\\addons\\x.db0"), "opens db\\addons\\x.db0 (Db/Addons)");
+	if (sensitive)
+	{
+		check(readable(v + "gamedata\\scripts\\c.script"), "opens gamedata\\scripts\\c.script (gamedata/Scripts)");
+		check(readable(v + "gamedata\\scripts\\d.script"), "opens gamedata\\scripts\\d.script (GAMEDATA/SCRIPTS/D.SCRIPT)");
+	}
+	check(!readable(v + "gamedata\\scripts\\nothing.script"), "a file that is nowhere does not open");
+
+	// enumeration: one entry per folder, all the files of every spelling, none twice
+	std::vector<std::string> top = list_virtual(v + "*.*");
+	check(top == std::vector<std::string>({"db\\", "gamedata\\", "probe_dir\\"}), "root lists db, gamedata, probe_dir once each");
+	std::vector<std::string> gd = list_virtual(v + "gamedata\\*.*");
+	check(gd == std::vector<std::string>({"configs\\", "scripts\\"}), "gamedata lists configs and scripts once each");
+	std::vector<std::string> scripts = list_virtual(v + "gamedata\\scripts\\*.*");
+	std::vector<std::string> want_scripts = sensitive ? std::vector<std::string>{"a.script", "b.script", "c.script", "d.script"} : std::vector<std::string>{"a.script", "b.script"};
+	check(scripts == want_scripts, "gamedata\\scripts lists the files of every spelling, once each");
+	check(list_virtual(v + "db\\addons\\*.db*") == std::vector<std::string>({"x.db0"}), "db\\addons\\*.db* finds the archive in Db/Addons");
+	check(list_virtual(v + "nothing_here\\*.*").empty(), "a folder that is nowhere lists nothing");
+
+	system(("rm -rf '" + dir + "case_test'").c_str());
+	printf("\ncase-test: %s\n", g_failures ? "FAILED" : "passed");
+	return g_failures ? 1 : 0;
+}
 } // namespace
 
 int main(int argc, char** argv)
@@ -221,6 +329,9 @@ int main(int argc, char** argv)
 	std::string run_dir = XRCORE_SMOKE_RUN_DIR;
 	std::string crash_test;
 	int log_race_seconds = 0;
+	for (int i = 1; i + 1 < argc; ++i)
+		if (!strcmp(argv[i], "--case-test"))
+			return case_test(argv[i + 1]);
 	for (int i = 1; i < argc; ++i)
 		if (!strcmp(argv[i], "--log-race"))
 			log_race_seconds = (i + 1 < argc && atoi(argv[i + 1]) > 0) ? atoi(argv[i + 1]) : 3;

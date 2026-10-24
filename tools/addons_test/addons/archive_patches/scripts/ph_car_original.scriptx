@@ -1,0 +1,1 @@
+-- addons_test: db\patches archive, replaces the stock scripts\ph_car_original.scriptx (nothing loads a .scriptx file)

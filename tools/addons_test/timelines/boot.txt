@@ -1,0 +1,6 @@
+# addons_test: boot to the main menu and stop. The main menu has no game scripts running (axr_main calls on_game_start only when a game starts), so the probe is run
+# from the console (needs -dbg) and logs its ADDON_TEST lines.
+2 console r_screenshot_mode png
+10 console run_string zzz_addon_probe.run()
+20 console screenshot addons_menu
+26 quit

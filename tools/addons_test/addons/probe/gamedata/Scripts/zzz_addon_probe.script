@@ -1,0 +1,116 @@
+-- Test harness of tools/addons_test (named zzz_ so that axr_main runs its on_game_start after every other script's). Checks, once the game scripts are up, what the installed addons did and compares it with
+-- what zz_addon_expect.script says should be there (the push script writes that file for each scenario). Every check logs
+--   ADDON_TEST <id> PASS|FAIL <detail>
+-- to the engine log; the last line is ADDON_TEST_SUMMARY. The probe itself is a script addon: axr_main calls on_game_start().
+
+local LOOSE = 4294967295 -- fs_file.vfs of a file that lies in a folder and not in an archive
+
+local pass, fail = 0, 0
+
+local function report(id, ok, detail)
+	if ok then pass = pass + 1 else fail = fail + 1 end
+	printf("%s", string.format("ADDON_TEST %s %s %s", id, ok and "PASS" or "FAIL", tostring(detail or "")))
+end
+
+-- check(id, expected, fn): fn returns a boolean (or a boolean and a detail); the check passes when it equals `expected`
+local function check(id, expected, fn)
+	local ok, actual, detail = pcall(fn)
+	if not ok then
+		report(id, false, "error: " .. tostring(actual))
+		return
+	end
+	report(id, (actual and true or false) == (expected and true or false), "got " .. tostring(actual) .. ", wanted " .. tostring(expected) .. (detail and (" " .. tostring(detail)) or ""))
+end
+
+-- the registry entry of a virtual file: size and where it is read from
+local function entry(alias, path)
+	local f = getFS():exist(alias, path)
+	if not f then return nil end
+	return { size = f.size_real, loose = f.vfs == LOOSE }
+end
+
+-- size_check(id, alias, path, size, loose): the file must have exactly this size (nil: the file must not exist)
+local function size_check(id, alias, path, size, loose)
+	local e = entry(alias, path)
+	local got = e and e.size or nil
+	local ok = got == size and (size == nil or e.loose == (loose and true or false))
+	report(id, ok, string.format("%s%s size %s (%s), wanted %s (%s)", alias, path, tostring(got), e and (e.loose and "loose" or "archive") or "-", tostring(size), loose and "loose" or "archive"))
+end
+
+local function layer(path)
+	local ini = ini_file(path)
+	if ini:section_exist("layer") and ini:line_exist("layer", "name") then
+		return ini:r_string("layer", "name")
+	end
+	return nil
+end
+
+function run()
+	local want = zz_addon_expect.want
+	printf("%s", "ADDON_TEST_BEGIN scenario=" .. zz_addon_expect.scenario)
+
+	-- a run that starts from nothing: forget the value an earlier run stored (the page itself is not installed in that scenario)
+	if want.mcm_reset then
+		axr_main.config:remove_line("mcm_zz_addon", "volume")
+		axr_main.config:save()
+	end
+
+	-- script addon: a new script; once a game has started (axr_main calls every script's on_game_start): its on_game_start ran
+	-- and the monkey-patched stock function does its own thing for "ZZ_" strings and passes everything else through
+	check("script_new", want.script, function() return _G.zz_addon_script ~= nil end)
+	if want.game then
+		check("script_start", want.script, function() local m = _G.zz_addon_script; return m ~= nil and m.start_called == true end)
+		check("script_patch", want.script, function() return trim("ZZ_x") == "ZZ_patched" end)
+		check("script_stock_passthrough", true, function() return trim("  a ") == "a" end)
+	end
+
+	-- config addon: DLTX mod files (lower case and capitals), a safe override of a stock section, a plain ltx, a string table
+	check("cfg_dltx_new", want.config, function() local s = system_ini(); return s:section_exist("zz_addon_dltx") and s:r_string("zz_addon_dltx", "value") == "from_dltx" end)
+	check("cfg_dltx_upper", want.config, function() local s = system_ini(); return s:section_exist("zz_addon_dltx_upper") and s:r_string("zz_addon_dltx_upper", "value") == "from_upper_case_file" end)
+	check("cfg_dltx_override", want.config, function() local s = system_ini(); return s:line_exist("wpn_ak74", "zz_addon_marker") and s:r_string("wpn_ak74", "zz_addon_marker") == "1" end)
+	check("cfg_dltx_stock_intact", true, function() local s = system_ini(); return s:section_exist("wpn_ak74") and s:line_exist("wpn_ak74", "ammo_class") end)
+	check("cfg_plain_ltx", want.config, function() local i = ini_file("zz_addon\\plain_loose.ltx"); return i:section_exist("plain") end)
+	check("cfg_text", want.config, function() return game.translate_string("zz_addon_title") == "ZZ Addon Title" end)
+
+	-- texture and shader addons: the registry entry is the loose file (its size is the generated one), removed: the stock size
+	size_check("tex_override", "$game_textures$", "ui\\ui_actor_main_menu.dds", want.size.main_menu_tex, want.texture)
+	size_check("tex_new", "$game_textures$", "ui\\ui_zz_addon_new.dds", want.size.new_tex, true)
+	size_check("shader_override", "$game_shaders$", "r3\\distort.ps", want.size.distort_ps, want.shader)
+	size_check("shader_overlay_override", "$game_shaders$", "r3\\hud_font.ps", want.size.hud_font_ps, want.shader)
+	size_check("shader_header", "$game_shaders$", "r3\\zz_addon_tint.h", want.size.tint_h, true)
+
+	-- MCM page: found by the host, default or stored value, a write that reaches axr_options.ltx
+	check("mcm_page", want.mcm, function() return zz_addon_mcm_host.pages()["zz_addon"] ~= nil end)
+	if want.mcm then
+		check("mcm_value", true, function() local v = zz_addon_mcm_host.get("zz_addon", "volume"); return v == want.mcm_expect, v end)
+		if want.mcm_write then
+			zz_addon_mcm_host.set("zz_addon", "volume", want.mcm_write)
+			local f = entry("$game_config$", "axr_options.ltx")
+			report("mcm_saved", f ~= nil and f.loose, string.format("axr_options.ltx %s", f and (f.loose and "loose, " .. f.size .. " bytes" or "in an archive") or "missing"))
+		end
+	end
+
+	-- the layers: stock < overlay < db\patches < db\addons < loose gamedata
+	size_check("layer_overlay_over_stock", "$game_scripts$", "axr_main.script", want.size.axr_main, false)
+	size_check("layer_patches_over_stock", "$game_scripts$", "ph_car_original.scriptx", want.size.ph_car, false)
+	size_check("layer_patches_over_overlay", "$game_scripts$", "ipad_debug.script", want.size.ipad_debug, false)
+	check("layer_only_patches", true, function() local l = layer("zz_addon\\only_patches.ltx"); return l == want.layer.only_patches, l end)
+	check("layer_only_addons", true, function() local l = layer("zz_addon\\only_addons.ltx"); return l == want.layer.only_addons, l end)
+	check("layer_addons_over_patches", true, function() local l = layer("zz_addon\\prio_both.ltx"); return l == want.layer.prio_both, l end)
+	check("layer_loose_over_addons", true, function() local l = layer("zz_addon\\prio_loose.ltx"); return l == want.layer.prio_loose, l end)
+
+	-- spelling: files under GameData/ and DB/Addons/ next to gamedata/ and db/addons (two folders on a case-sensitive volume)
+	check("case_root_script", want.variants, function() return _G.zz_case_script ~= nil and zz_case_script.loaded == true end)
+	check("case_root_archive", true, function() local l = layer("zz_addon\\case_pack.ltx"); return l == want.layer.case_pack, l end)
+
+	printf("%s", string.format("ADDON_TEST_SUMMARY scenario=%s pass=%d fail=%d", zz_addon_expect.scenario, pass, fail))
+end
+
+-- in a game (want.game) axr_main calls this at the start; in the main menu the timeline runs run() from the console
+function on_game_start()
+	if not zz_addon_expect.want.game then return end
+	local ok, err = pcall(run)
+	if not ok then
+		printf("%s", "ADDON_TEST_ERROR " .. tostring(err))
+	end
+end

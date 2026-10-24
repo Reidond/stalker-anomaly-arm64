@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="windows-1251"?>
+<string_table>
+	<string id="ui_mcm_zz_addon_title">
+		<text>ZZ Addon</text>
+	</string>
+	<string id="ui_mcm_zz_addon_enabled">
+		<text>Enabled</text>
+	</string>
+	<string id="ui_mcm_zz_addon_volume">
+		<text>Volume</text>
+	</string>
+</string_table>

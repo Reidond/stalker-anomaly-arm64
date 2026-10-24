@@ -50,6 +50,9 @@
 //   <t> ballast <MB>                allocate and touch that much memory (to provoke the memory warnings), in 64 MB chunks
 //   <t> unballast                   free it again
 //   <t> log <text...>               a line in the shell log
+//   <t> delete <path>               remove one file, or one empty folder, below the game folder (the data root): a relative path with no `..`, whose
+//                                   first part is gamedata or db (any case); links are not followed, nothing is removed recursively. For test
+//                                   runs that leave the game folder as they found it (tools/addons_test): a device has no way to delete a file from outside
 //   <t> mods_delete <id>            remove <mods root>/<id> (only a plain folder name directly inside the mods root; symlinks are not followed)
 //   <t> mods_clear                  remove every entry of the mods root; put it last, the mounted mods are still in use by the engine
 //   <t> quit                        leave the app
@@ -57,6 +60,8 @@
 #define SDL_MAIN_USE_CALLBACKS 1
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_main.h>
+
+#include <filesystem>
 
 #include <Platform/Apple/FramePacer.h>
 #include <Platform/Apple/GraphicsProfile.h>
@@ -626,6 +631,33 @@ bool RunScript(App& app)
         }
         else if (step.command == "log")
             AppleShell::Log("anomaly: script: %s", step.args.c_str());
+        else if (step.command == "delete")
+        {
+            namespace fs = std::filesystem;
+            const fs::path rel(step.args);
+            bool allowed = !step.args.empty() && rel.is_relative();
+            for (const fs::path& part : rel)
+                if (part == ".." || part == ".")
+                    allowed = false;
+            std::string top = allowed && !rel.empty() ? rel.begin()->string() : std::string();
+            for (char& c : top)
+                c = char(tolower((unsigned char)c));
+            if (top != "gamedata" && top != "db")
+                allowed = false;
+            const fs::path target = fs::path(AppleShell::GetPaths().data_root) / rel;
+            std::error_code ec;
+            const fs::file_status status = fs::symlink_status(target, ec);
+            if (!allowed)
+                AppleShell::Log("anomaly: script: delete '%s' refused: a relative path below gamedata or db is required", step.args.c_str());
+            else if (ec || !fs::exists(status))
+                AppleShell::Log("anomaly: script: delete %s: not there", step.args.c_str());
+            else if (fs::is_symlink(status))
+                AppleShell::Log("anomaly: script: delete %s refused: a link", step.args.c_str());
+            else if (fs::remove(target, ec))
+                AppleShell::Log("anomaly: script: removed %s", step.args.c_str());
+            else
+                AppleShell::Log("anomaly: script: kept %s: %s", step.args.c_str(), ec ? ec.message().c_str() : "not removed");
+        }
         else if (step.command == "mods_delete" || step.command == "mods_clear")
         {
             // test runs that leave the mods folder as they found it (the iPad has no way to delete a file from outside): these act on the

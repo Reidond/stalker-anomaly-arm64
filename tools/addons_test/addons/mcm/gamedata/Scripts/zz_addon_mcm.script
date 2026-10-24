@@ -1,0 +1,15 @@
+-- Test addon "mcm": an option page in the layout MCM addons use (a *_mcm script whose on_mcm_load() returns the page).
+-- The page host is the real MCM mod on a player's install; here zz_addon_mcm_host.script (the probe addon) stands in for it.
+-- Values are stored under [mcm_zz_addon] in axr_options.ltx (gamedata\configs), the file the stock options also use.
+
+function on_mcm_load()
+	return {
+		id = "zz_addon",
+		sh = true,
+		gr = {
+			{ id = "title", type = "slide", link = "ui_options_slider_player", text = "ui_mcm_zz_addon_title", size = { 512, 50 }, spacing = 20 },
+			{ id = "enabled", type = "check", val = 1, def = true },
+			{ id = "volume", type = "track", val = 2, min = 0, max = 100, step = 1, def = 7 },
+		},
+	}
+end
