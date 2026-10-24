@@ -59,6 +59,7 @@ final class LauncherHost {
         guard let parent = window.rootViewController else { return false }
         let host = UIHostingController(rootView: root)
         host.view.backgroundColor = .systemBackground
+        host.view.tintColor = UIColor(Theme.accent)   // the amber is the one thing of the game's in the system look
         host.view.frame = parent.view.bounds
         host.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         parent.addChild(host)

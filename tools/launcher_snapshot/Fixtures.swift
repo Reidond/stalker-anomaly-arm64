@@ -36,7 +36,10 @@ enum Fixtures {
     @discardableResult
     static func build(into root: URL, mods: [FixtureMod] = Fixtures.mods) throws -> URL {
         let manager = FileManager.default
-        try? manager.removeItem(at: root)
+        // never deletes anything: the folder is new, or empty
+        if let existing = try? manager.contentsOfDirectory(atPath: root.path), !existing.isEmpty {
+            throw CocoaError(.fileWriteFileExists, userInfo: [NSFilePathErrorKey: root.path, NSLocalizedDescriptionKey: "\(root.path) is not empty: give a new folder"])
+        }
         try manager.createDirectory(at: root, withIntermediateDirectories: true)
         for mod in mods {
             let folder = root.appendingPathComponent(mod.id)

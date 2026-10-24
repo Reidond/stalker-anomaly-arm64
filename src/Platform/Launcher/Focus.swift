@@ -150,34 +150,28 @@ final class FocusStore: ObservableObject {
 
 // MARK: view side
 
-/// Where the pad's focus is, on glass: an amber ring with a glow (it holds against the bright and the dark parts of the backdrop) and
-/// a small lift. Moving the focus is as frequent as pressing a key, so the change is nearly instant; Reduce Motion drops the lift.
+/// Where the pad's focus is, drawn the way the system draws a focused row: the accent color around it (2 pt, inside the row) and a light
+/// tint behind it in a list. It shows only while a pad or a keyboard is in use.
 struct PadFocusModifier: ViewModifier {
     @EnvironmentObject private var focus: FocusStore
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let id: String
-    var radius: CGFloat
-    var ring: Color
 
     func body(content: Content) -> some View {
         let focused = focus.isFocused(id)
         content
             .overlay {
-                RoundedRectangle(cornerRadius: radius, style: .continuous)
-                    .strokeBorder(ring, lineWidth: 3)
-                    .shadow(color: ring.opacity(0.5), radius: 10)
-                    .opacity(focused ? 1 : 0)
-                    .allowsHitTesting(false)
+                if focused {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .strokeBorder(.tint, lineWidth: 2)
+                        .padding(1)
+                        .allowsHitTesting(false)
+                }
             }
-            .scaleEffect(focused && !reduceMotion ? 1.02 : 1)
-            .animation(LauncherMotion(reduced: reduceMotion).focus, value: focused)
+            .listRowBackground(focused ? Rectangle().fill(.tint.opacity(0.16)) : nil)
             .id(id)
     }
 }
 
 extension View {
-    /// `ring`: amber on glass; white on the amber prominent buttons, where an amber ring would vanish.
-    func padFocus(_ id: String, radius: CGFloat = Theme.rowRadius, ring: Color = Theme.amber) -> some View {
-        modifier(PadFocusModifier(id: id, radius: radius, ring: ring))
-    }
+    func padFocus(_ id: String) -> some View { modifier(PadFocusModifier(id: id)) }
 }

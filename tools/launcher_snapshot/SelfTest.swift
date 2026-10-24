@@ -30,6 +30,8 @@ enum SelfTest {
     static func ids(_ model: LauncherModel) -> [String] { model.mods.map(\.id) }
 
     static func run(root: URL, logo: String?) throws -> Int32 {
+        // a fresh folder of its own inside the one given (nothing is deleted, here or after)
+        let root = try makeTemporaryFolder("selftest", in: root)
         let mods = root.appendingPathComponent("mods")
         try Fixtures.build(into: mods)
         let config = LauncherConfig(modsRoot: mods.path, downloadsDir: nil, version: "test", platform: "ios", allowQuit: false, logoPath: logo,

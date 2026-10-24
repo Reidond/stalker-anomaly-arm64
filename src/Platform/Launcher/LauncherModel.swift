@@ -17,7 +17,6 @@ struct LauncherConfig: Decodable {
     var platform = "macos"
     var allowQuit = true
     var logoPath: String?
-    var backdropPath: String?
     var deviceLine: String?
     var notices: [String] = []
     var autoPlayMs: Int?
@@ -146,9 +145,6 @@ final class LauncherModel: ObservableObject {
     }
     /// Bumped when Cross is pressed on the link row: the view puts the keyboard in the field.
     @Published private(set) var linkFocusRequest = 0
-
-    /// Home plays its entrance once per launch, not each time the player comes back to it.
-    var homeShown = false
 
     /// Re-reads the game data (the shell's validation). nil in the snapshot tool.
     var dataProvider: (() -> DataStatus)?

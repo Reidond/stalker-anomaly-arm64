@@ -30,9 +30,15 @@ public final class LinkDownloader {
     public func download(_ url: URL, to dir: URL, progress: @escaping (Double) -> Void) async throws -> URL {
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let (temporary, response) = try await URLSession.shared.download(from: url)
-        let suggested = response.suggestedFilename ?? url.lastPathComponent
-        let target = dir.appendingPathComponent(suggested.isEmpty ? "download" : suggested)
-        try? FileManager.default.removeItem(at: target)
+        // a name that is free: an existing file is never replaced
+        let suggested = ((response.suggestedFilename ?? url.lastPathComponent) as NSString).lastPathComponent
+        let name = suggested.isEmpty ? "download" : suggested
+        var target = dir.appendingPathComponent(name)
+        var counter = 1
+        while FileManager.default.fileExists(atPath: target.path) {
+            counter += 1
+            target = dir.appendingPathComponent("\(counter)-\(name)")
+        }
         try FileManager.default.moveItem(at: temporary, to: target)
         progress(1)
         return target

@@ -188,7 +188,12 @@ final class ImportCoordinator: ObservableObject {
             self.scopedURL = nil
         }
         if let temporaryFile {
-            try? FileManager.default.removeItem(at: temporaryFile)
+            // only a plain file of the downloads folder: a download that turned out to be a folder, or lies elsewhere, is left alone
+            let values = try? temporaryFile.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
+            let inDownloads = temporaryFile.standardizedFileURL.path.hasPrefix(downloadsDir.standardizedFileURL.path + "/")
+            if values?.isRegularFile == true, values?.isSymbolicLink != true, inDownloads {
+                try? FileManager.default.removeItem(at: temporaryFile)
+            }
             self.temporaryFile = nil
         }
     }
