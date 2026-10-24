@@ -189,6 +189,17 @@ def patched_distort(stock_ps, version, nonce):
     return text.encode("latin-1")
 
 
+def patched_hud_font(overlay_ps, version, nonce):
+    """The Monolith overlay's r3\\hud_font.ps (it draws every UI text, so the tint shows wherever the menus are drawn) with the text tinted."""
+    text = overlay_ps.decode("latin-1")
+    if "common.h" not in text or not re.search(r"r\.rgb\s*=\s*I\.Color\s*;", text):
+        raise SystemExit("the overlay's hud_font.ps is not what this test expects")
+    text = re.sub(r'(#include\s+"common\.h"[^\n]*)', lambda m: m.group(1) + '\n#include "zz_addon_tint.h"', text, count=1)
+    text = re.sub(r"r\.rgb\s*=\s*I\.Color\s*;", "r.rgb = I.Color.rgb * ZZ_ADDON_TINT;", text, count=1)
+    text += f"\n// addons_test run {nonce}{' v3' if version == 3 else ''}\n"
+    return text.encode("latin-1")
+
+
 def stage(scenario, out, game_dir, xrdb_unpack, mode="boot", nonce="0"):
     if scenario not in SCENARIOS:
         raise SystemExit(f"unknown scenario {scenario}; known: {', '.join(SCENARIOS)}")
@@ -206,6 +217,7 @@ def stage(scenario, out, game_dir, xrdb_unpack, mode="boot", nonce="0"):
         "ph_car": stock.size("db/configs/scripts.db0", "scripts/ph_car_original.scriptx"),
         "axr_main": os.path.getsize(os.path.join(REPO, "gamedata", "scripts", "axr_main.script")),
         "ipad_debug": os.path.getsize(os.path.join(REPO, "gamedata", "scripts", "ipad_debug.script")),
+        "hud_font_ps": os.path.getsize(os.path.join(REPO, "gamedata", "shaders", "r3", "hud_font.ps")),
     }
     layer = {}
 
@@ -232,6 +244,8 @@ def stage(scenario, out, game_dir, xrdb_unpack, mode="boot", nonce="0"):
         v = cfg["shader"]
         ps = patched_distort(stock.read("db/shaders.db0", "shaders/r3/distort.ps"), v, nonce)
         sizes["distort_ps"] = write(os.path.join(gamedata, "Shaders", "R3", "Distort.PS"), ps)
+        with open(os.path.join(REPO, "gamedata", "shaders", "r3", "hud_font.ps"), "rb") as f:
+            sizes["hud_font_ps"] = write(os.path.join(gamedata, "Shaders", "R3", "HUD_Font.PS"), patched_hud_font(f.read(), v, nonce))
         header = f"// test addon \"shader\": tint of the main menu's image pass (version {v}, run {nonce})\n#define ZZ_ADDON_TINT {TINTS[v]}\n"
         sizes["tint_h"] = write(os.path.join(gamedata, "Shaders", "R3", "ZZ_Addon_Tint.H"), header)
 

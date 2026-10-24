@@ -3,12 +3,11 @@
 Test addons that mirror real Anomaly addon layouts, a script that puts them into the game folder the way the Files app does, and a
 check that each one took effect, in the right layer. The player guide is [docs/ios-port/ADDONS.md](../../docs/ios-port/ADDONS.md).
 
-Nothing third-party is in this folder: the addons are written for the test, the textures are generated, and the shader is the stock
-`r3\distort.ps` read out of your own `shaders.db0` with one line changed.
+Nothing third-party is in this folder: the addons are written for the test, the textures are generated, and the shaders are the stock
+`r3\distort.ps` read out of your own `shaders.db0` and the overlay's `hud_font.ps`, each with one line changed.
 
-**Status.** The whole sequence passes on the Mac (case-sensitive volume, `--target mac`). The iPad target of `run.sh` (push with `ipad.sh put`, run with
-`ipad.sh script`, removal with the app's `delete` step) is written but was not run to the end: the iPad dropped off the network before the first scenario.
-What was checked on the iPad itself: the volume is case-sensitive, and how `devicectl copy to` creates files and folders.
+**Status.** The whole sequence passes on the iPad (iPad Air 13-inch M3) and on a Mac with a case-sensitive volume (`--target mac`). On the iPad `run.sh` pushes with
+`ipad.sh put`, runs with `ipad.sh script` and removes with the app's `delete` step.
 
 ## The addons
 
@@ -17,7 +16,7 @@ What was checked on the iPad itself: the volume is case-sensitive, and how `devi
 | `script` | `Scripts/ZZ_Addon_Script.script`: a new script with `on_game_start`, two callbacks, and a monkey-patch of the stock `trim()` | module loaded, `on_game_start` ran, `trim("ZZ_x")` is the patched answer and `trim("  a ")` still the stock one; in a game `actor_on_first_update` and `actor_on_update` fire |
 | `config` | DLTX `mod_system_*.ltx` (one in capitals, `.LTX` too), a safe override (`@[wpn_ak74]`) of a stock section, a plain `.ltx`, a string table (`Configs/Text/Eng/*.XML`) | `system_ini()` sees the sections and the added line, the stock line is still there, `game.translate_string` |
 | texture (generated) | `Textures/UI/UI_Actor_Main_Menu.DDS` replaces the main menu background (a 2048x1024 DXT1 test card), `ui_zz_addon_new.dds` is new | registry entry is loose and has the generated size |
-| shader (generated) | `Shaders/R3/Distort.PS` is the stock `distort.ps` (the main menu's image pass, translated at start-up) tinted through a new include `ZZ_Addon_Tint.H` | registry entry; ShaderXlat translates it (and again when the include or the shader changes) |
+| shader (generated) | `Shaders/R3/Distort.PS` is the stock `distort.ps` (the main menu's image pass, translated at start-up) and `HUD_Font.PS` the Monolith overlay's `hud_font.ps` (every UI text), both tinted through a new include `ZZ_Addon_Tint.H` | registry entries; the menu text is tinted in the screenshot; ShaderXlat translates both (and again when the include or a shader changes) |
 | `mcm` | `zz_addon_mcm.script`, an option page in the layout of MCM pages (`on_mcm_load()` returns it), its strings | page found by the host, default read, value written to `gamedata\configs\axr_options.ltx` and read back by a new process |
 | `archive_patches` | packed into `db/patches/ZZ_Addon_Patches.DB0` (LZO entries, `entry_point = gamedata`) | its files are served; it overrides a stock file and a Monolith overlay file |
 | `archive_addons` | packed into `db/addons/ZZ_Addon_Pack.db0` (`entry_point = $fs_root$\gamedata\`) | its files are served; it wins over `db/patches` |
@@ -34,10 +33,10 @@ File and folder names are spelled the way a Windows zip has them (`Scripts`, `Co
 `addons.py scenarios` lists them; `run.sh sequence` runs them in this order:
 
 1. `removed` (boot): the baseline. Only the probe is installed. Stock sizes everywhere, stock shaders translated and cached.
-2. `installed` (game): every addon. One shader translated (the changed `distort.ps`). MCM value written.
+2. `installed` (game): every addon. Two shaders translated (the changed `distort.ps` and `hud_font.ps`). MCM value written.
 3. `installed_again` (boot): a new process. All addons still there, **no** shader translated, MCM value read back from the file.
 4. `shader_v2` / `shader_v3` (boot): the include / the shader itself changed: translated again.
-5. `removed` (boot): the addons are gone. Every size is the stock one again, the original `distort` translation comes from the cache.
+5. `removed` (boot): the addons are gone. Every size is the stock one again, the original translations come from the cache.
 
 Not in the sequence: `broken` (game) and `texpack` (boot), run them with `run.sh check <scenario> <mode>`.
 

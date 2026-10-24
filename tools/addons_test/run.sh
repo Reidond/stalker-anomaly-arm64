@@ -112,14 +112,16 @@ ipad_device() {
 }
 ipad_sh() { "${ADDONS_TEST_IPAD_SH:-$repo/tools/ios/ipad.sh}" "${device_args[@]}" "$@"; }   # ADDONS_TEST_IPAD_SH: a stand-in for a dry run
 
-# copies the scenario's files one by one (devicectl creates the folders); what the scenario no longer has is removed after
+# What an earlier scenario left and this one does not have is removed first, by a short run of the game (below): that run starts the renderer, so it
+# must see the old files; if it ran after the new files were in place it would translate a changed shader and the real run would find it cached.
+# Then the scenario's files are copied one by one (devicectl creates the folders and replaces a file whatever its size and date).
 ipad_push() {
     local scenario=$1 manifest=$2; shift 2
+    (( $# )) && ipad_remove "$@"
     local f
     for f in "${(@f)$(<$manifest)}"; do
         ipad_sh put "$out/stage/$scenario/$f" "Anomaly/${f#*/}" > /dev/null
     done
-    (( $# )) && ipad_remove "$@"
     return 0
 }
 
