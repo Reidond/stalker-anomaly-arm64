@@ -124,6 +124,11 @@ final class LauncherModel: ObservableObject {
     @Published var path: [Screen] = [] {
         didSet { scheduleFocusRefresh() }
     }
+    /// The in-app browser on the iPad: a full-screen cover with its own NavigationStack (pushed onto the launcher's stack it makes
+    /// SwiftUI drop the stack's pushed screens). On the Mac it is a pushed screen (`path`).
+    @Published var showBrowser = false {
+        didSet { scheduleFocusRefresh() }
+    }
     @Published private(set) var library: ModLibrary?
     @Published private(set) var libraryError: String?
     @Published private(set) var data = DataStatus() {
@@ -157,7 +162,7 @@ final class LauncherModel: ObservableObject {
     private var conflictTask: Task<Void, Never>?
     private var focusTask: Task<Void, Never>?
 
-    var screen: Screen { path.last ?? .home }
+    var screen: Screen { showBrowser ? .browse : (path.last ?? .home) }
     var downloadsDir: URL {
         URL(fileURLWithPath: config.downloadsDir ?? (config.modsRoot as NSString).appendingPathComponent(".downloads"))
     }
@@ -265,10 +270,14 @@ final class LauncherModel: ObservableObject {
 
     func push(_ next: Screen) {
         guard next != screen, next != .home else { return }
+        #if os(iOS)
+        if next == .browse { showBrowser = true; return }
+        #endif
         path.append(next)
     }
 
     func pop() {
+        if showBrowser { showBrowser = false; return }
         if !path.isEmpty { path.removeLast() }
     }
 

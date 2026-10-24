@@ -27,13 +27,14 @@ struct HomeView: View {
                 Button { model.play() } label: {
                     Label("Play", systemImage: "play.fill")
                         .font(.title3.weight(.semibold))
+                        .foregroundStyle(.white)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 8)
                 }
                 .prominentButton()
                 .controlSize(.large)
                 .disabled(!model.canPlay)
-                .padFocus("home.play")
+                .padFocus("home.play", radius: 26)
                 .listRowBackground(Color.clear)
                 .listRowInsets(EdgeInsets())
             } footer: {
@@ -49,18 +50,18 @@ struct HomeView: View {
                     }
                 }
                 .disabled(model.library == nil)
-                .padFocus("home.mods")
+                .padFocus("home.mods", inList: true)
                 NavigationLink(value: Screen.add) {
                     Label("Add Mod", systemImage: "plus.circle.fill")
                 }
                 .disabled(model.library == nil)
-                .padFocus("home.add")
+                .padFocus("home.add", inList: true)
             }
 
             if model.config.allowQuit {
                 Section {
                     Button(role: .destructive) { model.quit() } label: { Label("Quit", systemImage: "power") }
-                        .padFocus("home.quit")
+                        .padFocus("home.quit", inList: true)
                 }
             }
         }
@@ -88,7 +89,7 @@ struct HomeView: View {
                 .symbolRenderingMode(.multicolor)
                 .font(.headline)
             Button { model.rescan() } label: { Label("Rescan", systemImage: "arrow.clockwise") }
-                .padFocus("home.rescan")
+                .padFocus("home.rescan", inList: true)
         } header: {
             Text("Game data")
         } footer: {

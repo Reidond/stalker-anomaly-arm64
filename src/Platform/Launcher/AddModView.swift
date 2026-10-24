@@ -33,11 +33,15 @@ struct AddModView: View {
                 Button { model.showFilePicker = true } label: {
                     row("Files", detail: "A zip, 7z or rar archive, or a folder, from the Files app", systemImage: "folder.fill")
                 }
-                .padFocus("add.files")
-                NavigationLink(value: Screen.browse) {
-                    row("Browse", detail: "ModDB and GitHub in the built-in browser", systemImage: "globe")
+                .padFocus("add.files", inList: true)
+                Button { model.push(.browse) } label: {
+                    HStack {
+                        row("Browse", detail: "ModDB and GitHub in the built-in browser", systemImage: "globe")
+                        Spacer()
+                        Image(systemName: "chevron.right").font(.footnote.weight(.semibold)).foregroundStyle(.tertiary)
+                    }
                 }
-                .padFocus("add.browse")
+                .padFocus("add.browse", inList: true)
             } footer: {
                 Text("Nothing is overwritten: each mod is kept in its own folder and loaded in the order you choose.")
             }
@@ -52,12 +56,12 @@ struct AddModView: View {
                     #endif
                     .submitLabel(.go)
                     .onSubmit { model.startLinkDownload() }
-                    .padFocus("add.link")
+                    .padFocus("add.link", inList: true)
                 Button { model.pasteLink() } label: { Label("Paste", systemImage: "doc.on.clipboard") }
-                    .padFocus("add.paste")
+                    .padFocus("add.paste", inList: true)
                 Button { linkFocused = false; model.startLinkDownload() } label: { Label("Download", systemImage: "arrow.down.circle.fill") }
                     .disabled(model.linkURL == nil)
-                    .padFocus("add.download")
+                    .padFocus("add.download", inList: true)
             }
         }
         .onChange(of: model.linkFocusRequest) { _, _ in linkFocused = true }
@@ -81,10 +85,19 @@ struct BrowseView: View {
     @EnvironmentObject private var model: LauncherModel
 
     var body: some View {
-        DownloadsView(downloadsDir: model.downloadsDir) { file in
-            model.pop()
-            model.imports.begin(url: file, temporary: true)
-        }
-        .launcherScreen("Browse", inline: true)
+        #if os(iOS)
+        // the cover's own NavigationStack holds it (see LauncherModel.showBrowser): a Done button leaves it
+        DownloadsView(downloadsDir: model.downloadsDir, onDownloaded: finished)
+            .navigationTitle("Browse")
+            .toolbar { ToolbarItem(placement: .topBarLeading) { Button("Done") { model.pop() } } }
+        #else
+        DownloadsView(downloadsDir: model.downloadsDir, onDownloaded: finished)
+            .launcherScreen("Browse", inline: true)
+        #endif
+    }
+
+    private func finished(_ file: URL) {
+        model.pop()
+        model.imports.begin(url: file, temporary: true)
     }
 }

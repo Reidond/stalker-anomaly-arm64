@@ -37,22 +37,22 @@ struct DetailsView: View {
             conflictSections(mod, entry: entry)
 
             Section {
-                Toggle(isOn: model.binding(for: mod)) { Label("On", systemImage: "power") }
+                Toggle(isOn: model.binding(for: mod)) { Label("Enabled", systemImage: "power") }
                     .toggleStyle(.switch)
-                    .padFocus("details.toggle")
+                    .padFocus("details.toggle", inList: true)
                 Button { model.move(mod.id, by: 1) } label: { Label("Load Later", systemImage: "arrow.down.circle") }
                     .disabled(model.mods.last?.id == mod.id)
-                    .padFocus("details.later")
+                    .padFocus("details.later", inList: true)
                 Button { model.move(mod.id, by: -1) } label: { Label("Load Earlier", systemImage: "arrow.up.circle") }
                     .disabled(model.mods.first?.id == mod.id)
-                    .padFocus("details.earlier")
+                    .padFocus("details.earlier", inList: true)
             } footer: {
                 Text("Mods lower in the list load later and win when two mods change the same file. Changes apply the next time the game starts.")
             }
 
             Section {
                 Button(role: .destructive) { model.removalCandidate = mod.id } label: { Label("Remove Mod…", systemImage: "trash") }
-                    .padFocus("details.remove")
+                    .padFocus("details.remove", inList: true)
             }
         }
         .launcherScreen(mod.name, inline: true)

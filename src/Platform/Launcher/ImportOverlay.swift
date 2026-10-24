@@ -73,9 +73,9 @@ struct ImportSheet: View {
                     Button { imports.continueImport(plan) } label: {
                         Label(plan.fomod == nil ? "Add Anyway" : "Continue", systemImage: plan.fomod == nil ? "square.and.arrow.down" : "arrow.right")
                     }
-                        .padFocus("import.install")
+                        .padFocus("import.install", inList: true)
                     Button { imports.cancel() } label: { Label("Cancel", systemImage: "xmark") }
-                        .padFocus("import.cancel")
+                        .padFocus("import.cancel", inList: true)
                 }
             }
         case .fomod(let plan):

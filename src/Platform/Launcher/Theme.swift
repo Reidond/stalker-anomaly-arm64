@@ -8,7 +8,10 @@ enum Theme {
 
 enum Format {
     static func bytes(_ value: Int64) -> String {
-        ByteCountFormatter.string(fromByteCount: max(value, 0), countStyle: .binary)
+        let formatter = ByteCountFormatter()
+        formatter.countStyle = .binary
+        formatter.allowsNonnumericFormatting = false
+        return formatter.string(fromByteCount: max(value, 0))
     }
 
     static func count(_ value: Int, _ noun: String) -> String {
@@ -52,10 +55,24 @@ struct LauncherForm<Content: View>: View {
 
     var body: some View {
         #if os(macOS)
-        Form { content() }.formStyle(.grouped)
+        Form { content() }.formStyle(.grouped).readableColumn()
         #else
-        List { content() }.listStyle(.insetGrouped)
+        List { content() }.listStyle(.insetGrouped).scrollContentBackground(.hidden).readableColumn()
         #endif
+    }
+}
+
+extension View {
+    /// A column of the width the system gives a grouped list in a regular-width window (the hosting view inside the SDL window does not
+    /// get that from the system, and a list would run edge to edge on a 13-inch iPad), on the grouped background.
+    func readableColumn() -> some View {
+        frame(maxWidth: 760)
+            .frame(maxWidth: .infinity)
+            #if os(iOS)
+            .background(Color(uiColor: .systemGroupedBackground).ignoresSafeArea())
+            #else
+            .background(Color(nsColor: .windowBackgroundColor).ignoresSafeArea())
+            #endif
     }
 }
 

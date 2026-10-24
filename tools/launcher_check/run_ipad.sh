@@ -31,7 +31,19 @@ while [[ ${1:-} == --* ]]; do
         *) echo "unknown option: $1" >&2; exit 2 ;;
     esac
 done
-dev=(); [[ -n $device ]] && dev=(--device $device)
+if [[ -z $device ]]; then
+    # the first connected iPad, as tools/ios/ipad.sh finds it
+    device=$(xcrun devicectl list devices --json-output - 2>/dev/null | python3 -I -c '
+import json, sys
+for dev in json.load(sys.stdin)["result"]["devices"]:
+    hw = dev.get("hardwareProperties", {})
+    cp = dev.get("connectionProperties", {})
+    if hw.get("deviceType") == "iPad" and hw.get("reality") == "physical" and cp.get("tunnelState") == "connected":
+        print(hw.get("udid") or dev["identifier"]); break
+')
+    [[ -n $device ]] || { echo "no connected iPad found (connect it, unlock it, or pass --device)" >&2; exit 1; }
+fi
+dev=(--device $device)
 # a new folder of our own, never an existing one
 [[ -n $out ]] || out=$(mktemp -d "${TMPDIR:-/tmp}/launcher-check-ipad-XXXXXX")
 [[ -z $(ls -A $out 2>/dev/null) ]] || { echo "$out is not empty: give a new folder" >&2; exit 2; }
@@ -127,6 +139,9 @@ for name in ipad-home ipad-mods ipad-b-off ipad-details; do
     $ipad $dev get Documents/Mods/$name.png $out/shots/$name.png >/dev/null 2>&1 || echo "(no $name.png)"
 done
 echo "shots: $out/shots"
+
+# run 1 switched mod b off and the launcher saved that; run 2 starts again from both on
+put_path $work/modlist.json Documents/Mods/modlist.json
 
 run_game "run 2: the same, then Play: the engine must see only mod a" --launcher-script Mods/.launcher2 --script Mods/.timeline -dbg
 $ipad $dev logs $out/logs >/dev/null 2>&1 || true
