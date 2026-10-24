@@ -24,7 +24,7 @@ keeps `Documents`, so the data survives every update. **Never uninstall the app*
 with that option and an empty source folder against the app's `Documents/<folder>` failed with "Failed to retrieve the file node", and afterwards the whole
 app container was empty: the game data, the saves, the caches (a call with a non-empty source had behaved as a mirror just before; whether the `ipad.sh install`
 a minute earlier also had a part in it is not known). To delete a file on the device use the app's `--script` step `delete <path>`
-([INTEGRATION.md](INTEGRATION.md), `--script`), which removes one file or one empty folder below `gamedata` or `db`.
+([INTEGRATION.md](INTEGRATION.md), `--script`), which removes one file or one empty folder below `gamedata`, `db/addons` or `db/patches` (never a stock archive).
 
 ```bash
 git submodule update --init --depth 1 external/SDL external/openal-soft external/LuaJIT external/ogg external/vorbis external/theora external/SPIRV-Cross external/vkd3d external/sse2neon
