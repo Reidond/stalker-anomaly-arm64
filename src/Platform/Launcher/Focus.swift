@@ -150,28 +150,50 @@ final class FocusStore: ObservableObject {
 
 // MARK: view side
 
-/// Where the pad's focus is, drawn the way the system draws a focused row: the accent color around it (2 pt, inside the row) and a light
-/// tint behind it in a list. It shows only while a pad or a keyboard is in use.
+/// Where the pad's focus is, drawn the way the system draws a focused row: the accent color (2 pt) with a light tint behind it. In a list
+/// on the iPad the ring belongs to the row's background (the whole cell: the row's own content is smaller than the cell, and a ring
+/// around it would cut through the text); elsewhere, and on the Mac, it is drawn around the view. It shows only while a pad or a keyboard
+/// is in use.
 struct PadFocusModifier: ViewModifier {
     @EnvironmentObject private var focus: FocusStore
     let id: String
+    var inList = false
+    var radius: CGFloat = 12
+
+    private func listBackground(_ focused: Bool) -> AnyView? {
+        guard focused else { return nil }
+        return AnyView(ZStack {
+            Rectangle().fill(.tint.opacity(0.16))
+            Rectangle().strokeBorder(.tint, lineWidth: 2)
+        })
+    }
 
     func body(content: Content) -> some View {
         let focused = focus.isFocused(id)
-        content
-            .overlay {
-                if focused {
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .strokeBorder(.tint, lineWidth: 2)
-                        .padding(1)
-                        .allowsHitTesting(false)
-                }
-            }
-            .listRowBackground(focused ? Rectangle().fill(.tint.opacity(0.16)) : nil)
-            .id(id)
+        #if os(iOS)
+        if inList {
+            content.listRowBackground(listBackground(focused)).id(id)
+        } else {
+            content.overlay { ring(focused) }.id(id)
+        }
+        #else
+        content.overlay { ring(focused) }.id(id)
+        #endif
+    }
+
+    @ViewBuilder
+    private func ring(_ focused: Bool) -> some View {
+        if focused {
+            RoundedRectangle(cornerRadius: radius, style: .continuous)
+                .strokeBorder(.tint, lineWidth: 2)
+                .padding(1)
+                .allowsHitTesting(false)
+        }
     }
 }
 
 extension View {
-    func padFocus(_ id: String) -> some View { modifier(PadFocusModifier(id: id)) }
+    func padFocus(_ id: String, inList: Bool = false, radius: CGFloat = 12) -> some View {
+        modifier(PadFocusModifier(id: id, inList: inList, radius: radius))
+    }
 }

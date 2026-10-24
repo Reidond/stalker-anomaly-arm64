@@ -25,10 +25,12 @@ struct ModsView: View {
                 }
                 Section {
                     NavigationLink(value: Screen.add) { Label("Add Mod", systemImage: "plus.circle.fill") }
-                        .padFocus("mods.add")
+                        .padFocus("mods.add", inList: true)
                 }
             }
             .launcherListStyle()
+            .scrollContentBackground(.hidden)
+            .readableColumn()
             #if os(iOS)
             .environment(\.editMode, $editMode)
             #endif
@@ -92,7 +94,7 @@ struct ModRow: View {
             Toggle(mod.name, isOn: model.binding(for: mod)).labelsHidden().toggleStyle(.switch)
         }
         .opacity(mod.enabled ? 1 : 0.6)
-        .padFocus("mod:\(mod.id)")
+        .padFocus("mod:\(mod.id)", inList: true)
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
             Button(role: .destructive) { model.removalCandidate = mod.id } label: { Label("Remove", systemImage: "trash") }
         }

@@ -33,11 +33,11 @@ struct AddModView: View {
                 Button { model.showFilePicker = true } label: {
                     row("Files", detail: "A zip, 7z or rar archive, or a folder, from the Files app", systemImage: "folder.fill")
                 }
-                .padFocus("add.files")
+                .padFocus("add.files", inList: true)
                 NavigationLink(value: Screen.browse) {
                     row("Browse", detail: "ModDB and GitHub in the built-in browser", systemImage: "globe")
                 }
-                .padFocus("add.browse")
+                .padFocus("add.browse", inList: true)
             } footer: {
                 Text("Nothing is overwritten: each mod is kept in its own folder and loaded in the order you choose.")
             }
@@ -52,12 +52,12 @@ struct AddModView: View {
                     #endif
                     .submitLabel(.go)
                     .onSubmit { model.startLinkDownload() }
-                    .padFocus("add.link")
+                    .padFocus("add.link", inList: true)
                 Button { model.pasteLink() } label: { Label("Paste", systemImage: "doc.on.clipboard") }
-                    .padFocus("add.paste")
+                    .padFocus("add.paste", inList: true)
                 Button { linkFocused = false; model.startLinkDownload() } label: { Label("Download", systemImage: "arrow.down.circle.fill") }
                     .disabled(model.linkURL == nil)
-                    .padFocus("add.download")
+                    .padFocus("add.download", inList: true)
             }
         }
         .onChange(of: model.linkFocusRequest) { _, _ in linkFocused = true }
