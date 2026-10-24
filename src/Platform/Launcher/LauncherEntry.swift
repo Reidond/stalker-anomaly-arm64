@@ -4,6 +4,7 @@
 // released before the engine creates its own window.
 import Foundation
 import SwiftUI
+import ModDownloads
 #if canImport(UIKit)
 import UIKit
 #elseif canImport(AppKit)
@@ -102,6 +103,8 @@ final class LauncherHost {
         hostingView?.removeFromSuperview()
         hostingView = nil
         #endif
+        // the browser's web view and its content process hold memory the engine is about to need: free them (and cancel what is downloading)
+        DownloadsView.releaseSharedState()
     }
 
     // MARK: input

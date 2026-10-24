@@ -496,7 +496,9 @@ maps SDL gamepad events (and, on the iPad, key events) onto the launcher's butto
 
 When Play is pressed the launcher only sets its result. `SDL_AppIterate` sees it, calls `anomaly_launcher_close` (the hosting view
 controller or view is removed and the model released: timers and tasks stopped), destroys the window, and calls `StartEngine`, which
-creates the engine's own window exactly as in a start without the launcher. Before that the shell's `WriteFsGameLtx()` runs once more: it
+creates the engine's own window exactly as in a start without the launcher. `anomaly_launcher_close` also calls
+`DownloadsView.releaseSharedState()`, which frees the browser's web view and its content process (and cancels what is downloading) before the
+engine needs the memory. Before that the shell's `WriteFsGameLtx()` runs once more: it
 re-reads `modlist.json` and writes the enabled mods into the generated `fsgame.ltx`, which is what the engine mounts (see Mounting). This happens from the SDL callback, not inside a SwiftUI
 action, so the engine's start never runs inside a UIKit or AppKit event handler. Gamepads the launcher opened are closed first (and the
 background-events hint it set is reset); the game's input layer enumerates the connected pads itself.
