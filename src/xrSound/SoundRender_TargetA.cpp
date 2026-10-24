@@ -4,6 +4,14 @@
 #include "soundrender_TargetA.h"
 #include "soundrender_emitter.h"
 #include "soundrender_source.h"
+#include "SoundStats.h"
+
+// what the last play or queue call left in OpenAL's error flag (it is read only here: release builds do not check AL calls otherwise)
+static inline void snd_count_al_error()
+{
+	if (alGetError() != AL_NO_ERROR)
+		++g_sound_counters.al_errors;
+}
 
 xr_vector<u8> g_target_temp_data;
 xr_vector<u8> g_target_temp_data_16;
@@ -79,6 +87,7 @@ void CSoundRender_TargetA::render()
 		fill_block(pBuffers[buf_idx]);
 
 	A_CHK(alSourceQueueBuffers(pSource, sdef_target_count, pBuffers));
+	snd_count_al_error();
 	if (Slot != u32(-1) && !m_pEmitter->bIntro)
 	{
 		A_CHK(alSource3i(pSource, AL_AUXILIARY_SEND_FILTER, Slot, 0, AL_FILTER_NULL));
@@ -89,6 +98,8 @@ void CSoundRender_TargetA::render()
 		A_CHK(alSource3i(pSource, AL_AUXILIARY_SEND_FILTER, AL_EFFECTSLOT_NULL, 0, NULL));
 	}
 	A_CHK(alSourcePlay(pSource));
+	++g_sound_counters.sources_played;
+	snd_count_al_error();
 
 	inherited::render();
 }
@@ -97,6 +108,7 @@ void CSoundRender_TargetA::stop()
 {
 	if (rendering)
 	{
+		++g_sound_counters.targets_stopped;
 		A_CHK(alSourceStop(pSource));
 		A_CHK(alSourcei (pSource, AL_BUFFER, NULL));
 		A_CHK(alSourcei (pSource, AL_SOURCE_RELATIVE, TRUE));
@@ -114,6 +126,8 @@ void CSoundRender_TargetA::rewind()
 		fill_block(pBuffers[buf_idx]);
 	A_CHK(alSourceQueueBuffers (pSource, sdef_target_count, pBuffers));
 	A_CHK(alSourcePlay (pSource));
+	++g_sound_counters.sources_rewound;
+	snd_count_al_error();
 }
 
 void CSoundRender_TargetA::update()
@@ -150,6 +164,8 @@ void CSoundRender_TargetA::update()
 		{
 			//			Log		("Queuing underrun detected.");
 			A_CHK(alSourcePlay(pSource));
+			++g_sound_counters.underruns;
+			snd_count_al_error();
 		}
 	}
 }

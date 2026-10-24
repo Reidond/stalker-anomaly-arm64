@@ -1,6 +1,8 @@
 #include "stdafx.h"
 #pragma hdrstop
 
+#include "SoundStats.h"
+
 #include "cl_intersect.h"
 #include "SoundRender_Core.h"
 #include "SoundRender_Emitter.h"
@@ -44,6 +46,24 @@ void CSoundRender_Core::update(const Fvector& P, const Fvector& D, const Fvector
 		switch_device(snd_device_name.c_str());
 	}
 #endif
+
+	// the counters of SoundStats.h, to the log every 10 s
+	{
+		static float last_report = 0.f;
+		const float now = Timer.GetElapsed_sec();
+		if (now - last_report >= 10.f)
+		{
+			last_report = now;
+			u32 rendering = 0;
+			for (u32 i = 0; i < s_targets.size(); i++)
+				if (s_targets[i]->get_Rendering())
+					rendering++;
+			Msg("snd: emitters started %u, sources played %u (rewound %u, restarted after an underrun %u), stopped %u, rendering %u of %u, emitters alive %u, AL errors %u",
+				g_sound_counters.emitters_started.load(), g_sound_counters.sources_played.load(), g_sound_counters.sources_rewound.load(),
+				g_sound_counters.underruns.load(), g_sound_counters.targets_stopped.load(), rendering, u32(s_targets.size()), u32(s_emitters.size()),
+				g_sound_counters.al_errors.load());
+		}
+	}
 
 	bLocked = TRUE;
 	float new_tm = Timer.GetElapsed_sec();

@@ -2799,7 +2799,10 @@ extern "C" void dJointSetFixedQuaternionPos (dxJointFixed *joint,dQuaternion qua
       // set joint->qrel to the transpose of the first body's q
       joint->qrel[0] = quaternion[0];//joint->node[0].body->q[0];
       for (i=1; i<4; i++) joint->qrel[i] = -quaternion[i];//-joint->node[0].body->q[i];
-      for (i=0; i<4; i++) joint->offset[i] = pos[i];//joint->node[0].body->pos[i];
+      // The engine passes the address of an Fvector (3 floats), not a dVector3 (4: the last is padding): reading pos[3] was a stack
+      // buffer overflow of `mc` in CPhysicsShellAnimator::OnFrame (AddressSanitizer, the systems check's level chain).
+      for (i=0; i<3; i++) joint->offset[i] = pos[i];//joint->node[0].body->pos[i];
+      joint->offset[3] = 0;
     }
   }
 }

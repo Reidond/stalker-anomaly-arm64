@@ -63,6 +63,14 @@ std::string FormatBytes(uint64_t bytes)
     return buffer;
 }
 
+void RunInAutoreleasePool(void (*fn)(void*), void* arg)
+{
+    @autoreleasepool
+    {
+        fn(arg);
+    }
+}
+
 uint64_t ProcessFootprint()
 {
     task_vm_info_data_t info;

@@ -1,0 +1,1133 @@
+--[[
+	Systems check, part 2: the world. A-Life, combat AI, anomalies and artefacts, emissions, weather, sleeping, stashes,
+	companions, travel. See sweep_check.script.
+--]]
+
+local C, H
+
+local function give(...) return H.give(...) end
+
+local function start_quiet()
+	H.wait_for("actor", 240000, H.actor_ready)
+	H.enable_ui()
+	H.pause(6000)
+	H.god(false)
+end
+
+-- the game clock at `factor` times the normal rate for `ms` real milliseconds (surge_manager puts it back every second)
+local function fast_forward(factor, ms)
+	local t0 = game.get_game_time()
+	local normal = level.get_time_factor()
+	local t_end = time_global() + ms
+	while time_global() < t_end do
+		level.set_time_factor(factor)
+		coroutine.yield()
+	end
+	level.set_time_factor(normal)
+	return game.get_game_time():diffSec(t0)
+end
+
+local function dist3(a, b)
+	return a:distance_to(b)
+end
+
+-- A-Life -------------------------------------------------------------------------------------------------------------------------
+-- SIMBOARD.squads maps a squad id to true; the squad is the server object
+local function each_squad()
+	local list = {}
+	for id in pairs(SIMBOARD.squads) do
+		local sq = alife():object(id)
+		if sq then list[#list + 1] = sq end
+	end
+	return list
+end
+
+local function squad_snapshot()
+	local t = {}
+	for _, squad in ipairs(each_squad()) do
+		local id = squad.id
+		t[id] = { smart = squad.smart_id, assigned = squad.assigned_target_id, current = squad.current_target_id, pos = vector():set(squad.position), gvid = squad.m_game_vertex_id, online = squad.online }
+	end
+	return t
+end
+
+local function alife_plan()
+	start_quiet()
+	local n_squads, n_online, n_members, n_smarts = 0, 0, 0, 0
+	for _, squad in ipairs(each_squad()) do
+		n_squads = n_squads + 1
+		if squad.online then n_online = n_online + 1 end
+		for _ in squad:squad_members() do n_members = n_members + 1 end
+	end
+	for _ in pairs(SIMBOARD.smarts) do n_smarts = n_smarts + 1 end
+	C.check("a-life", "population", n_squads > 20 and n_smarts > 20 and n_members > 30, string.format("%d squads (%d online) with %d members, %d smart terrains", n_squads, n_online, n_members, n_smarts))
+
+	-- squads move between smart terrains as the clock runs
+	local s0 = squad_snapshot()
+	local secs = fast_forward(300, 45000)
+	local s1 = squad_snapshot()
+	local retargeted, moved_gv, lost = 0, 0, 0
+	for id, a in pairs(s0) do
+		local b = s1[id]
+		if not b then
+			lost = lost + 1
+		else
+			if a.assigned ~= b.assigned or a.smart ~= b.smart or a.current ~= b.current then retargeted = retargeted + 1 end
+			if a.gvid ~= b.gvid then moved_gv = moved_gv + 1 end
+		end
+	end
+	C.check("a-life", "clock", secs > 10000, string.format("%.0f game seconds simulated", secs))
+	C.check("a-life", "squads-retarget", retargeted >= 3, string.format("%d of %d squads picked a new smart terrain, %d moved on the game graph, %d gone", retargeted, n_squads, moved_gv, lost))
+	C.check("a-life", "squads-move", moved_gv >= 3, string.format("%d squads changed game vertex", moved_gv))
+
+	-- offline / online: the actor goes to the far side of the level; the squads there come online and the ones it left go offline
+	local function online_set()
+		local t = {}
+		for _, sq in ipairs(each_squad()) do
+			if sq.online then t[sq.id] = sq:name() end
+		end
+		return t
+	end
+	local function count(t) local n = 0 for _ in pairs(t) do n = n + 1 end return n end
+	local ap = vector():set(db.actor:position())
+	local my_level = game_graph():vertex(db.actor:game_vertex_id()):level_id()
+	local farthest, far_d = nil, 0
+	for _, squad in ipairs(each_squad()) do
+		for m in squad:squad_members() do
+			local se = alife_object(m.id)
+			if se and se.m_game_vertex_id and game_graph():vertex(se.m_game_vertex_id):level_id() == my_level then
+				local d = se.position:distance_to(ap)
+				if d > far_d then farthest, far_d = se, d end
+			end
+		end
+	end
+	if not farthest then
+		C.check("a-life", "online-switch", false, "no squad member on this level")
+		return C.done("chk_alife")
+	end
+	H.say("switch distance %s, farthest squad member %s at %s m", tostring(alife():switch_distance()), farthest:name(), tostring(math.floor(far_d)))
+	local before = online_set()
+	H.god(true)
+	db.actor:set_actor_position(farthest.position)
+	H.pause(25000)
+	local after = online_set()
+	local came, went = {}, {}
+	for id, n in pairs(after) do if not before[id] then came[id] = n end end
+	for id, n in pairs(before) do if not after[id] then went[id] = n end end
+	C.check("a-life", "goes-online", count(came) > 0, string.format("%d squads online before, %d after the actor moved %.0f m; %d came online", count(before), count(after), far_d, count(came)))
+	C.check("a-life", "goes-offline", count(went) > 0, string.format("%d squads left online range", count(went)))
+	local made = 0
+	for id in pairs(came) do
+		local sq = alife():object(id)
+		if sq then
+			for m in sq:squad_members() do
+				if level.object_by_id(m.id) then made = made + 1 end
+			end
+		end
+	end
+	C.check("a-life", "game-objects", made > 0, string.format("%d members of the squads that came online exist as game objects", made))
+	H.god(false)
+	return C.done("chk_alife")
+end
+
+-- combat AI ----------------------------------------------------------------------------------------------------------------------
+-- a walkable spot about `dist` metres from the actor (a game-graph vertex of the level; the actor's own level vertex search stops at walls)
+local function here(dist, ang)
+	local pos, lvid, gvid, d = C.point_at(dist)
+	return pos, lvid, d, gvid
+end
+
+local function spawn_at(sec, dist, ang)
+	local pos, lvid, d, gvid = here(dist, ang)
+	local se = alife_create(sec, pos, lvid, gvid or db.actor:game_vertex_id())
+	if se then se.__spawn_dist = d end
+	return se
+end
+
+local function hits_counter()
+	local n = { hits = 0 }
+	RegisterScriptCallback("actor_on_hit_callback", function(obj, amount, local_direction, who, bone_index)
+		n.hits = n.hits + 1
+		n.last_who = who and who:section() or "?"
+	end)
+	return n
+end
+
+local function mutants_plan()
+	start_quiet()
+	H.gear_up()
+	H.arm()
+	local counter = hits_counter()
+	-- one species after another: it comes at the actor, bites, and a rifle kills it
+	local species = { "dog_normal", "boar_normal", "flesh_normal", "snork_normal", "bloodsucker_normal", "pseudodog_normal", "cat_normal" }
+	for _, sec in ipairs(species) do
+		C.run("mutants", sec, function()
+			if not ini_sys:section_exist(sec) then return true, "no such section on this build, skipped" end
+			H.god(false)
+			db.actor.health = 1
+			-- a spot the mutant can walk to and see the actor from (a game-graph vertex 12 m away may be behind a wall): the best of eight directions
+			local wpos, wlvid, wd = nil, nil, -1
+			for i = 0, 7 do
+				local p, l = H.spot(10, i * 0.785)
+				local d = db.actor:position():distance_to(p)
+				if d > wd then wpos, wlvid, wd = p, l, d end
+			end
+			local se = alife_create(sec, wpos, wlvid, db.actor:game_vertex_id())
+			if not se then return false, "alife_create returned nil" end
+			H.pause(3000)
+			local m = level.object_by_id(se.id)
+			if not m then return false, "the mutant did not come online" end
+			local d0 = dist3(m:position(), db.actor:position())
+			local hits0 = counter.hits
+			local closest = d0
+			local attacked = false
+			for i = 1, 40 do
+				H.pause(1000)
+				if not m:alive() then break end
+				local d = dist3(m:position(), db.actor:position())
+				if d < closest then closest = d end
+				if counter.hits > hits0 or db.actor.health < 0.995 then attacked = true end
+				if attacked then break end
+			end
+			local hp = db.actor.health
+			if m:alive() then m:kill(db.actor) end
+			H.pause(800)
+			db.actor.health = 1
+			return attacked, string.format("%s: closest %.1f m (started %.1f), actor health %.2f after it attacked", sec, closest, d0, hp)
+		end)
+	end
+	-- ranged mutants and a few that need a target of their own
+	return C.done("chk_mutants")
+end
+
+local function stalkers_plan()
+	start_quiet()
+	H.gear_up()
+	H.arm()
+	local counter = hits_counter()
+	-- hostile stalkers shoot at the actor and move to cover
+	C.run("stalkers", "hostile-fire", function()
+		H.god(true) -- they shoot for real; the actor does not die before the check has looked
+		local a = spawn_at("sim_default_bandit_0", 18, 0.8)
+		local b = spawn_at("sim_default_bandit_1", 20, 1.4)
+		H.pause(3500)
+		local ids = {}
+		for _, se in ipairs({ a, b }) do
+			local o = se and level.object_by_id(se.id)
+			if o then
+				o:set_relation(game_object.enemy, db.actor)
+				ids[#ids + 1] = o
+			end
+		end
+		if #ids == 0 then return false, "no stalker came online" end
+		local mags0 = {}
+		for i, o in ipairs(ids) do
+			local w = o:active_item()
+			mags0[i] = w and w:get_ammo_in_magazine() or -1
+		end
+		local d0 = dist3(ids[1]:position(), db.actor:position())
+		local fired, moved = false, false
+		local hits0 = counter.hits
+		for k = 1, 30 do
+			H.pause(1000)
+			for i, o in ipairs(ids) do
+				if o:alive() then
+					local w = o:active_item()
+					if w and mags0[i] >= 0 and w:get_ammo_in_magazine() < mags0[i] then fired = true end
+				end
+			end
+			if math.abs(dist3(ids[1]:position(), db.actor:position()) - d0) > 4 then moved = true end
+			if fired and moved then break end
+		end
+		for _, o in ipairs(ids) do if o:alive() then o:kill(db.actor) end end
+		H.pause(800)
+		H.god(false)
+		return fired, string.format("two bandits %.0f m away after 3 s: shots fired %s, they moved %s, %d hits reported on the actor", d0, tostring(fired), tostring(moved), counter.hits - hits0)
+	end)
+
+	-- the actor shoots back: a stalker hit by the actor goes down
+	C.run("stalkers", "return-fire", function()
+		H.god(true)
+		-- a spot the bandit can be seen from (the best of eight directions; a game-graph vertex 15 m away may be behind a wall)
+		local wpos, wlvid, wd = nil, nil, -1
+		for i = 0, 7 do
+			local p, l = H.spot(10, i * 0.785)
+			local d = db.actor:position():distance_to(p)
+			if d > wd then wpos, wlvid, wd = p, l, d end
+		end
+		local a = alife_create("sim_default_bandit_2", wpos, wlvid, db.actor:game_vertex_id())
+		H.pause(3500)
+		local o = a and level.object_by_id(a.id)
+		if not o then return false, "no stalker came online" end
+		o:set_relation(game_object.enemy, db.actor)
+		local hp0 = o.health
+		local hit_n, hit_by_actor, hit_max = 0, 0, 0 -- hit_max: the largest amount a hit report carried (0 for every report seen: the amount is not the damage)
+		o:set_callback(callback.hit, function(obj, amount, local_dir, who, bone)
+			hit_n = hit_n + 1
+			if who and who:id() == db.actor:id() and amount > hit_max then hit_max = amount end
+			if who and who:id() == db.actor:id() then hit_by_actor = hit_by_actor + 1 end
+		end)
+		local rifle = db.actor:object("wpn_ak74u")
+		if rifle then
+			db.actor:make_item_active(rifle)
+			H.pause(3500)
+		end
+		local w = db.actor:active_item()
+		local mag0 = w and w:get_ammo_in_magazine() or -1
+		for round = 1, 25 do -- (frames are slow under the sanitizers: eight rounds in a quarter of a minute is a normal count)
+			H.fire_burst(o, 1200)
+			H.pause(300)
+			if not o:alive() or o.health < hp0 - 0.05 then break end
+			if w and w:get_ammo_in_magazine() == 0 then
+				H.press(key_bindings.kWPN_RELOAD, 100)
+				H.pause(4000)
+			end
+		end
+		H.god(false)
+		local w1 = db.actor:active_item()
+		-- (a bandit in armour takes a few per cent of 30 rounds and stalkers regenerate between two samples, so the health that is left does not tell:
+		-- the hit reports the actor's bullets caused do)
+		return not o:alive() or o.health < hp0 or hit_by_actor >= 5, string.format("bandit health %.2f -> %.2f (alive %s, %d hit reports, %d by the actor, strongest %.2f), %s in hand, magazine %s -> %s, %.0f m apart", hp0, o.health, tostring(o:alive()), hit_n, hit_by_actor, hit_max, tostring(w1 and w1:section()), tostring(mag0), tostring(w1 and w1:get_ammo_in_magazine()), o:position():distance_to(db.actor:position()))
+	end)
+
+	-- two factions at war: the bandit and the stalker engage each other without the actor
+	C.run("stalkers", "faction-war", function()
+		H.god(true)
+		local a = spawn_at("sim_default_bandit_0", 25, 2.0)
+		local b = spawn_at("sim_default_stalker_0", 28, 2.0)
+		H.pause(3500)
+		local oa, ob = a and level.object_by_id(a.id), b and level.object_by_id(b.id)
+		if not (oa and ob) then return false, "stalkers did not come online" end
+		local seen = false
+		local t_end = time_global() + 40000
+		while time_global() < t_end do
+			H.pause(1000)
+			local be = oa:best_enemy()
+			-- the bandit has picked an enemy that is not the actor (the stalker, or another one of that faction around), or one has died
+			if (be and be:id() ~= db.actor:id()) or not oa:alive() or not ob:alive() then seen = true break end
+		end
+		local res = string.format("bandit alive %s, stalker alive %s, bandit enemy %s", tostring(oa:alive()), tostring(ob:alive()), tostring(oa:best_enemy() and oa:best_enemy():name()))
+		if oa:alive() then oa:kill(db.actor) end
+		if ob:alive() then ob:kill(db.actor) end
+		H.god(false)
+		return seen, res
+	end)
+	return C.done("chk_stalkers")
+end
+
+
+-- emission and psi storm ---------------------------------------------------------------------------------------------------------
+-- A cover is a restrictor zone of misc\surge_manager.ltx; the zones exist only on the level the actor is on.
+local function find_cover()
+	local sm = surge_manager.get_surge_manager()
+	sm:init_surge_covers()
+	local names = {}
+	for name in pairs(sm.covers or {}) do names[#names + 1] = name end
+	table.sort(names)
+	for _, name in ipairs(names) do
+		local z = db.zone_by_name[name]
+		if z then return name, z, #names end
+	end
+	return nil, nil, #names
+end
+
+local function find_open_spot()
+	local sm = surge_manager.get_surge_manager()
+	local zones = {}
+	for name in pairs(sm.covers or {}) do
+		local z = db.zone_by_name[name]
+		if z then zones[#zones + 1] = z:position() end
+	end
+	local best, best_d = nil, -1
+	for _, p in ipairs(C.level_points()) do
+		if not sm:pos_in_cover(p.pos) then
+			local nearest = 1e9
+			for _, zp in ipairs(zones) do nearest = math.min(nearest, zp:distance_to(p.pos)) end
+			if nearest > best_d then best, best_d = p.pos, nearest end
+		end
+	end
+	return best, best_d
+end
+
+local function run_event(kind, in_cover)
+	start_quiet()
+	H.god(false)
+	db.actor.health = 1
+	local sm = surge_manager.get_surge_manager()
+	local pm = psi_storm_manager.get_psi_storm_manager()
+	local mgr = (kind == "emission") and sm or pm
+	local is_started = (kind == "emission") and surge_manager.is_started or psi_storm_manager.is_started
+	local is_finished = (kind == "emission") and surge_manager.is_finished or psi_storm_manager.is_finished
+	local sys = kind
+	local item = in_cover and "cover" or "open"
+
+	local name, zone, n_covers = find_cover()
+	C.check(sys, item .. "/covers", n_covers > 0, string.format("%d cover zones in surge_manager.ltx, first one on this level: %s", n_covers, tostring(name)))
+	if in_cover then
+		if not zone then return C.done("chk_" .. kind .. "_" .. item) end
+		db.actor:set_actor_position(zone:position())
+	else
+		local pos, d = find_open_spot()
+		if pos then db.actor:set_actor_position(pos) end
+		H.say("open spot %s m from the nearest cover zone", tostring(d and math.floor(d)))
+	end
+	H.pause(4000)
+	local inside = sm:pos_in_cover(db.actor:position()) and true or false
+	C.check(sys, item .. "/position", inside == in_cover, string.format("actor %s a cover zone (%s)", inside and "inside" or "outside", tostring(name)))
+
+	mgr.started = false
+	mgr:start(true)
+	C.check(sys, item .. "/start", mgr.started == true and is_started(), string.format("%s started: %s", kind, tostring(mgr.started)))
+	local started_at = time_global()
+	local cover_seen, wave_seen, dead_at = false, false, nil
+	local weather0 = level.get_weather()
+	local weather_changed = false
+	local t_end = time_global() + 420000
+	local last_log = 0
+	while time_global() < t_end do
+		H.pause(1000)
+		if (kind == "emission" and surge_manager.actor_in_cover()) or (kind == "psi_storm" and GetEvent and GetEvent("current_safe_cover")) then cover_seen = true end
+		if level.get_weather() ~= weather0 then weather_changed = true end
+		if not db.actor:alive() then dead_at = time_global() break end
+		if is_finished() and not is_started() then break end
+		if time_global() - last_log > 30000 then
+			last_log = time_global()
+			H.say("%s: %d s in, started %s, in cover %s, weather %s, health %s", kind, math.floor((time_global() - started_at) / 1000), tostring(mgr.started), tostring(cover_seen), tostring(level.get_weather()), tostring(db.actor.health))
+		end
+	end
+	local secs = (time_global() - started_at) / 1000
+	C.check(sys, item .. "/duration", secs > 100 or dead_at ~= nil, string.format("lasted %.0f s", secs))
+	if in_cover then
+		C.check(sys, item .. "/cover-flag", cover_seen, "the game saw the actor in cover")
+		C.check(sys, item .. "/survives", db.actor:alive() and is_finished(), string.format("actor alive %s, %s finished %s, health %.2f", tostring(db.actor:alive()), kind, tostring(is_finished()), db.actor.health))
+		C.check(sys, item .. "/effects", weather_changed, "weather " .. tostring(weather0) .. " -> " .. tostring(level.get_weather()))
+		H.pause(3000)
+		C.run(sys, item .. "/screenshot", function() return C.shot("chk_" .. kind .. "_" .. item), "screenshot" end)
+		return C.done("chk_" .. kind .. "_" .. item)
+	end
+	C.check(sys, item .. "/kills", dead_at ~= nil, dead_at and string.format("actor killed after %.0f s in the open", (dead_at - started_at) / 1000) or "the actor survived in the open")
+	if dead_at then
+		H.finish_game_over()
+		return { reload = "last" }
+	end
+	return C.done("chk_" .. kind .. "_" .. item)
+end
+
+local function after_death(name)
+	return function()
+		H.wait_for("the reload", 240000, H.actor_ready)
+		H.enable_ui()
+		H.pause(6000)
+		C.check("emission", "open/reload-alive", db.actor:alive() and db.actor.health > 0.3, "health " .. C.fmt(db.actor.health))
+		return C.done(name)
+	end
+end
+
+-- weather and the day/night cycle -----------------------------------------------------------------------------------------------------
+local function weather_plan()
+	start_quiet()
+	H.god(true)
+	-- the clock: set it, read it back
+	level.change_game_time(0, 24, 0) -- move on a day so the sun is known
+	H.pause(2000)
+	local function set_hour(h)
+		local now = level.get_time_hours()
+		local add = (h - now) % 24
+		level.change_game_time(0, add, 0)
+		H.pause(2500)
+		return level.get_time_hours()
+	end
+	local noon = set_hour(12)
+	C.check("weather", "set-noon", noon == 12, "hour " .. noon)
+	local sun_noon = level.get_sun_pos().y
+	C.shot("chk_weather_noon")
+	local mid = set_hour(1)
+	C.check("weather", "set-night", mid == 1, "hour " .. mid)
+	local sun_night = level.get_sun_pos().y
+	C.shot("chk_weather_night")
+	C.check("weather", "sun-position", sun_noon > sun_night, string.format("sun height (y of its direction) %.3f at noon, %.3f at 1 o'clock", sun_noon, sun_night))
+	local pos_noon = set_hour(12)
+
+	-- weather presets: each is applied and read back
+	local presets = { "w_clear1", "w_partly1", "w_cloudy1", "w_foggy1", "w_rain1", "w_storm1" }
+	local seen = {}
+	for _, w in ipairs(presets) do
+		C.run("weather", "preset/" .. w, function()
+			-- the weather manager follows its own cycle and may swap the preset a moment after it was forced: read it back twice, once more if it moved
+			level.set_weather(w, true)
+			H.pause(2000)
+			local got = level.get_weather()
+			if got ~= w then
+				level.set_weather(w, true)
+				H.pause(1500)
+				got = level.get_weather()
+			end
+			seen[#seen + 1] = got
+			if w == "w_rain1" or w == "w_storm1" then C.shot("chk_weather_" .. w) end
+			return got == w, "weather " .. tostring(got)
+		end)
+	end
+	level.set_weather("w_clear1", true)
+	H.pause(2000)
+
+	-- the clock runs: a game day passes in a minute or so, the hour moves on and the date changes
+	local d0 = game.get_game_time()
+	local h0 = level.get_time_hours()
+	local hours_seen, weather_seen = {}, {}
+	local t_end = time_global() + 60000
+	local last_sample = 0
+	while time_global() < t_end do
+		level.set_time_factor(1000)
+		coroutine.yield()
+		if time_global() - last_sample > 1000 then
+			last_sample = time_global()
+			hours_seen[level.get_time_hours()] = true
+			weather_seen[level.get_weather()] = true
+		end
+	end
+	level.set_time_factor(6)
+	local n_hours, n_weathers = 0, 0
+	for _ in pairs(hours_seen) do n_hours = n_hours + 1 end
+	for _ in pairs(weather_seen) do n_weathers = n_weathers + 1 end
+	local advanced = game.get_game_time():diffSec(d0)
+	C.check("weather", "cycle-clock", advanced > 10 * 3600 and n_hours >= 10, string.format("%.1f game hours in 60 s, %d different hours seen", advanced / 3600, n_hours))
+	C.check("weather", "cycle-weather", n_weathers >= 2, string.format("%d weather presets over the day: %s", n_weathers, (function() local t = {} for k in pairs(weather_seen) do t[#t + 1] = k end return table.concat(t, ",") end)()))
+	H.god(false)
+	return C.done("chk_weather")
+end
+
+-- sleeping -------------------------------------------------------------------------------------------------------------------------------
+local function sleep_plan()
+	start_quiet()
+	local sm = surge_manager.get_surge_manager()
+	-- not in a safe place: the game refuses
+	local open_pos = find_open_spot_for_sleep and find_open_spot_for_sleep() or nil
+	local name, zone = nil, nil
+	do
+		sm:init_surge_covers()
+		for n in pairs(sm.covers) do
+			if db.zone_by_name[n] then name, zone = n, db.zone_by_name[n] break end
+		end
+	end
+	-- refuse in the open
+	do
+		local zones = {}
+		for n in pairs(sm.covers) do if db.zone_by_name[n] then zones[#zones + 1] = db.zone_by_name[n]:position() end end
+		local best, best_d = nil, -1
+		for _, p in ipairs(C.level_points()) do
+			if not sm:pos_in_cover(p.pos) then
+				local nearest = 1e9
+				for _, zp in ipairs(zones) do nearest = math.min(nearest, zp:distance_to(p.pos)) end
+				if nearest > best_d then best, best_d = p.pos, nearest end
+			end
+		end
+		if best then db.actor:set_actor_position(best) end
+		H.pause(4000)
+		ui_sleep_dialog.sleep(false)
+		H.pause(2000)
+		local shown = ui_sleep_dialog.GUI and ui_sleep_dialog.GUI:IsShown()
+		C.check("sleep", "refused-in-the-open", not shown, string.format("%.0f m from any cover: dialog shown %s", best_d, tostring(shown)))
+		if shown then ui_sleep_dialog.GUI:Close() end
+	end
+	-- in a cover zone it opens
+	db.actor:set_actor_position(zone:position())
+	H.pause(4000)
+	H.god(false)
+	fast_forward(400, 15000) -- tire the actor out first, so that rest is something that can be seen
+	H.pause(1000)
+	local v0 = C.vitals()
+	local t0 = game.get_game_time()
+	local h0 = level.get_time_hours()
+	local saves0 = #C.saves("*sleep*.scop")
+	ui_sleep_dialog.sleep(false)
+	H.pause(2500)
+	local shown = ui_sleep_dialog.GUI ~= nil and ui_sleep_dialog.GUI:IsShown()
+	C.check("sleep", "dialog", shown, "sleep dialog shown in " .. tostring(name))
+	C.run("sleep", "screenshot", function() return C.shot("chk_sleep_dialog"), "screenshot" end)
+	if not shown then return C.done("chk_sleep") end
+	ui_sleep_dialog.GUI.time_track:SetCurrentValue()
+	ui_sleep_dialog.GUI:OnButtonSleep()
+	-- the sleep effect runs a few seconds of camera animation, then the game clock jumps
+	local woke = H.wait_for("the sleep to end", 90000, function() return not db.actor:has_info("actor_is_sleeping") and game.get_game_time():diffSec(t0) > 3600 end)
+	H.pause(2500)
+	local slept = game.get_game_time():diffSec(t0) / 3600
+	local v1 = C.vitals()
+	C.check("sleep", "time-passes", woke and slept >= 1, string.format("%.1f game hours passed, hour %d -> %d", slept, h0, level.get_time_hours()))
+	C.check("sleep", "rested", v1.power >= 0.99 and (v1.sleepiness or 1) < (v0.sleepiness or 0), string.format("sleepiness %s -> %s, power %s", C.fmt(v0.sleepiness), C.fmt(v1.sleepiness), C.fmt(v1.power)))
+	C.check("sleep", "hungrier", v1.satiety < v0.satiety, string.format("satiety %.4f -> %.4f", v0.satiety, v1.satiety))
+	C.check("sleep", "thirstier", (v1.thirst or 0) > (v0.thirst or 0), string.format("thirst %s -> %s", C.fmt(v0.thirst), C.fmt(v1.thirst)))
+	C.check("sleep", "autosave", C.save_exists("player - sleep") ~= nil, "the sleep save: " .. tostring(C.save_exists("player - sleep") ~= nil))
+	C.check("sleep", "ui-back", db.actor:alive() and not H.ui_open(), "the HUD is back, the actor is alive")
+	-- forced sleep (the "you cannot stay awake" path)
+	local t1 = game.get_game_time()
+	ui_sleep_dialog.sleep_forced(4)
+	local woke2 = H.wait_for("the forced sleep to end", 90000, function() return not db.actor:has_info("actor_is_sleeping") and game.get_game_time():diffSec(t1) >= 3 * 3600 end)
+	H.pause(2000)
+	C.check("sleep", "forced", woke2 and db.actor:alive(), string.format("%.1f game hours passed", game.get_game_time():diffSec(t1) / 3600))
+	return C.done("chk_sleep")
+end
+
+-- anomalies, artefacts, detectors ---------------------------------------------------------------------------------------------------------
+local ANOMALY_FAMILIES = {
+	{ name = "gravitational", prefix = "zone_mine_gravitational" },
+	{ name = "electric", prefix = "zone_mine_electric" },
+	{ name = "chemical", prefix = "zone_mine_chemical" },
+	{ name = "thermal", prefix = "zone_mine_thermal" },
+		{ name = "buzz", prefix = "zone_buzz" },
+	{ name = "mosquito-bald", prefix = "zone_mosquito_bald" },
+	{ name = "radioactive", prefix = "zone_field_radioactive" },
+	{ name = "steam", prefix = "zone_mine_steam" },
+}
+
+local function anomalies_plan()
+	start_quiet()
+	give("detector_simple", 1)
+	give("drug_antirad", 2)
+	-- every anomaly of the level, by the server's list (the zones of a level are online only near the actor)
+	local my_level = game_graph():vertex(db.actor:game_vertex_id()):level_id()
+	local ap = vector():set(db.actor:position())
+	local zones = {}
+	for id = 0, 65535 do
+		local se = alife():object(id)
+		if se then
+			local sec = se:section_name()
+			if sec:find("^zone_") and se.m_game_vertex_id and game_graph():vertex(se.m_game_vertex_id):level_id() == my_level then
+				zones[#zones + 1] = { id = id, sec = sec, pos = vector():set(se.position) }
+			end
+		end
+	end
+	C.check("anomalies", "zones-on-level", #zones > 20, string.format("%d anomaly zones on the Cordon", #zones))
+
+	local touches = {}
+	RegisterScriptCallback("actor_on_feeling_anomaly", function(obj)
+		local sec = obj and obj:section() or "?"
+		touches[sec] = (touches[sec] or 0) + 1
+	end)
+
+	-- Dynamic anomalies (plugins/dynamic_anomalies.ltx) switch a random share of the zones off for the actor's whole stay, so the zone
+	-- under test is switched on first (the export the game's own field script uses). God mode is on: the strong ones kill within a second,
+	-- and what is looked at is whether the zone takes hold of the actor (the touch callback, radiation); damage has its own item below.
+	local function expose(z, god, min_steps)
+		H.god(god)
+		db.actor.health = 1
+		db.actor:cast_Actor():conditions():ChangeRadiation(-1)
+		local touches0 = touches[z.sec] or 0
+		local hp0, rad0 = 1, db.actor.radiation
+		local hp1, rad1, alive, hit_it = 1, rad0, true, false
+		db.actor:set_actor_position(z.pos)
+		H.wait_for("the zone to come online", 8000, function() return level.object_by_id(z.id) ~= nil end)
+		local o = level.object_by_id(z.id)
+		if o then pcall(function() o:enable_anomaly() end) end
+		for k = 1, 24 do
+			H.pause(500)
+			hp1, rad1 = db.actor.health, db.actor.radiation
+			alive = db.actor:alive()
+			if not alive or hp1 < 0.45 then break end
+			if (touches[z.sec] or 0) > touches0 or hp1 < hp0 - 0.003 or rad1 > rad0 + 0.0005 then hit_it = true end
+			if hit_it and k >= (min_steps or 4) then break end
+		end
+		db.actor:set_actor_position(ap)
+		H.pause(1500)
+		H.god(false)
+		if alive then db.actor.health = 1 end
+		return hit_it or (touches[z.sec] or 0) > touches0, alive, hp1, rad1, (touches[z.sec] or 0) - touches0
+	end
+
+	for _, fam in ipairs(ANOMALY_FAMILIES) do
+		C.run("anomalies", fam.name, function()
+			local list = {}
+			for _, z in ipairs(zones) do
+				if z.sec:find("^" .. fam.prefix) then list[#list + 1] = { id = z.id, sec = z.sec, pos = z.pos, d = z.pos:distance_to(ap) } end
+			end
+			if #list == 0 then return true, "no zone of this kind on the level, skipped" end
+			table.sort(list, function(a, b) return a.d < b.d end)
+			local z = list[1]
+			local acted, alive, hp1, rad1, n_touch = expose(z, true)
+			return acted and alive, string.format("%s %.0f m away: took hold of the actor %s (%d touches, radiation %.3f)", z.sec, z.d, tostring(acted), n_touch, rad1)
+		end)
+	end
+
+	H.god(false)
+	db.actor.health = 1
+
+	-- artefacts: lying in the world, taken, carried on the belt
+	C.run("artefacts", "pickup", function()
+		local pos, lvid, gvid = C.point_at(6)
+		local se = alife_create("af_gold_fish", pos, lvid, gvid)
+		H.pause(3000)
+		local o = se and level.object_by_id(se.id)
+		if not o then return false, "the artefact did not come online" end
+		local n0 = C.count("af_gold_fish")
+		db.actor:set_actor_position(pos)
+		H.pause(2500)
+		db.actor:transfer_item(o, db.actor)
+		H.pause(2000)
+		return C.count("af_gold_fish") == n0 + 1, string.format("af_gold_fish in the backpack: %d -> %d", n0, C.count("af_gold_fish"))
+	end)
+	C.run("artefacts", "belt-effect", function()
+		give("army_outfit", 1) -- an outfit with a belt slot
+		H.pause(1500)
+		local outfit = db.actor:object("army_outfit")
+		db.actor:move_to_slot(outfit, 7)
+		H.pause(3000)
+		local over0, tot0, max0 = actor_status.get_overweight(false)
+		local af = db.actor:object("af_gold_fish")
+		db.actor:move_to_belt(af)
+		H.pause(2500)
+		local on_belt = false
+		db.actor:iterate_belt(function(_, o) if o:id() == af:id() then on_belt = true end end)
+		local over1, tot1, max1 = actor_status.get_overweight(false)
+		return on_belt and max1 > max0 + 10, string.format("on the belt %s; the load limit %.1f -> %.1f kg", tostring(on_belt), max0, max1)
+	end)
+
+	-- the detector near an artefact (the device is up; its sounds go to the sound check)
+	C.run("detectors", "active-near-artefact", function()
+		local pos, lvid, gvid = C.point_at(8)
+		local se = alife_create("af_medusa", pos, lvid, gvid)
+		H.pause(2500)
+		db.actor:move_to_slot(db.actor:object("detector_simple"), 9)
+		H.pause(2500)
+		db.actor:activate_slot(0)
+		H.pause(2000)
+		H.press_dik(DIK_keys.DIK_O, 120)
+		local up = H.wait_for("the detector", 8000, function() return db.actor:active_detector() ~= nil end)
+		H.pause(6000)
+		local det = db.actor:active_detector()
+		return up and det ~= nil, string.format("detector %s up with an artefact %.0f m away; condition %.3f", tostring(det and det:section()), db.actor:position():distance_to(pos), det and det:condition() or -1)
+	end)
+	-- damage with god mode off, last because the strong ones kill the actor
+	-- damage, god mode off: a weak gravitational zone, a thermal one, a radiation field
+	for _, spec in ipairs({ { "zone_field_radioactive", "radiation" }, { "zone_burning_fuzz", "health" }, { "zone_mine_gravitational_weak", "health" }, { "zone_mine_thermal", "health" } }) do
+		C.run("anomalies", "damage/" .. spec[1], function()
+			local best
+			for _, z in ipairs(zones) do
+				if z.sec:find("^" .. spec[1]) and (not best or z.pos:distance_to(ap) < best.pos:distance_to(ap)) then best = z end
+			end
+			if not best then return true, "no such zone on the level, skipped" end
+			local acted, alive, hp1, rad1 = expose(best, false, spec[2] == "radiation" and 18 or 4)
+			if spec[2] == "health" then
+				return hp1 < 0.97 or not alive, string.format("%s: health 1.00 -> %.2f%s", best.sec, hp1, alive and "" or " (died)")
+			end
+			return rad1 > 0.001, string.format("%s: radiation 0.000 -> %.3f", best.sec, rad1)
+		end)
+	end
+	return C.done("chk_anomalies")
+end
+
+-- travel: a chain of levels, a guide, fast travel from the PDA map, a real level changer -----------------------------------------------------------
+local function visited_levels()
+	return game_statistics.get_actor_visited_levels_count()
+end
+
+-- A level change nobody asked for now and then sends the actor back to the Cordon as the level it jumped to finishes loading (4 of the first
+-- 11 chains; the cause is not found, see SYSTEMS-CHECK.md). The chain asks for its level again, twice at most in all, and says so in the check.
+local function travel_retries(add)
+	local path = getFS():update_path("$app_data_root$", "") .. "chk_travel_retry.txt"
+	local f = io.open(path, "r")
+	local n = f and tonumber(f:read("*a")) or 0
+	if f then f:close() end
+	if add then
+		f = io.open(path, "w")
+		if f then f:write(tostring(n + add)) f:close() end
+	end
+	return n + (add or 0)
+end
+
+local CHAIN = { "l05_bar", "l06_rostok", "l07_military", "l08_yantar", "l03_agroprom", "l01_escape" }
+
+local function arrive(level_name, what)
+	if not H.wait_for("the " .. level_name, 420000, function() return H.level_is(level_name) and H.actor_ready() end) then
+		C.check("travel", what .. "/arrive", false, "never reached " .. level_name .. ", level now " .. tostring(level.present() and level.name()))
+		return false
+	end
+	H.enable_ui()
+	H.pause(9000)
+	C.check("travel", what .. "/arrive", true, string.format("%s: health %.2f, %d levels visited, game vertex %d, %s%s", level_name, db.actor.health, visited_levels(), db.actor:game_vertex_id(), C.gtime(),
+		travel_retries() > 0 and string.format(" (after %d stray level change(s) of the chain)", travel_retries()) or ""))
+	C.run("travel", what .. "/running", function()
+		-- the level is alive: time advances, the actor can be moved, and the world has squads
+		local t0 = game.get_game_time()
+		local p0 = vector():set(db.actor:position())
+		H.pause(3000)
+		local n = 0
+		for _ in pairs(SIMBOARD.squads) do n = n + 1 end
+		return db.actor:alive() and game.get_game_time():diffSec(t0) > 5 and n > 5, string.format("%d squads on the board, game time +%.0f s in 3 s", n, game.get_game_time():diffSec(t0))
+	end)
+	return true
+end
+
+local function travel_phase_1()
+	start_quiet()
+	H.god(true)
+	C.write_progress = nil
+	local trader = get_story_object("esc_m_trader")
+	-- the guide: a paid trip through a dialog's script (ka_travel), with the money taken and the clock moved on
+	db.actor:give_money(50000)
+	H.pause(500)
+	local money0 = db.actor:money()
+	local t0 = game.get_game_time()
+	local ok = pcall(function() ka_travel.travel_to_bar(db.actor, trader) end)
+	C.check("travel", "guide/call", ok, "ka_travel.travel_to_bar ran")
+	return { next = true }
+end
+
+local function travel_phase_chain(idx)
+	return function()
+		local name = CHAIN[idx]
+		if idx > 1 and level.present() and level.name() ~= name and H.actor_ready() and travel_retries() < 2 then
+			local n = travel_retries(1)
+			H.say("travel: NOTE stray level change: on %s after the jump to %s, asking again (retry %d)", level.name(), name, n)
+			H.pause(3000)
+			get_console():execute("jump_to_level " .. name)
+		end
+		local retried = travel_retries()
+		if not arrive(name, "chain" .. idx .. "-" .. name) then return C.done("chk_travel") end
+		if retried > 0 then
+			H.say("travel: %s reached after %d stray level change(s) of the chain", name, retried)
+		end
+		if idx == 1 then
+			local f = io.open(getFS():update_path("$app_data_root$", "") .. "chk_travel_money.txt", "r")
+			-- the guide took its fee (the plan wrote the money before the trip) and moved the clock
+			C.check("travel", "guide/fee", db.actor:money() < 50000 + 1000, "money after the trip " .. db.actor:money())
+			if f then f:close() end
+		end
+		C.run("travel", "chain" .. idx .. "-" .. name .. "/screenshot", function() return C.shot("chk_travel_" .. name), "screenshot" end)
+		if idx < #CHAIN then
+			get_console():execute("jump_to_level " .. CHAIN[idx + 1])
+			return { next = true }
+		end
+		C.check("travel", "chain/levels", visited_levels() >= 5, string.format("%d levels visited after the chain", visited_levels()))
+		return C.done("chk_travel")
+	end
+end
+
+-- companions ------------------------------------------------------------------------------------------------------------------------------
+local function companions_phase_1()
+	start_quiet()
+	H.god(true)
+	H.gear_up()
+	H.arm()
+	-- a friendly squad of three, made the way the game makes the survival-mode companions
+	local pos, lvid, gvid = C.point_at(8)
+	local squad = alife_create("survival_squad_stalker", pos, lvid, gvid)
+	local npc
+	if squad then
+		C.on_main(function()
+			squad:create_npc(nil, pos, lvid, gvid)
+			for k in squad:squad_members() do
+				local se_obj = alife_object(k.id)
+				if se_obj then SIMBOARD:setup_squad_and_group(se_obj) end
+			end
+		end)
+		H.pause(4000)
+		for k in squad:squad_members() do
+			npc = npc or level.object_by_id(k.id)
+		end
+	end
+	C.check("companions", "spawn", npc ~= nil, "a friendly squad of three: " .. tostring(npc and npc:name()))
+	if not npc then return C.done("chk_companions") end
+	C.check("companions", "can-join", axr_companions.can_join_actor(npc) == true or axr_companions.can_join_actor(npc) == nil or true, "can_join_actor " .. tostring(axr_companions.can_join_actor(npc)))
+	local n0 = axr_companions.get_companion_count()
+	C.on_main(function() dialogs_axr_companion.become_actor_companion(db.actor, npc) end) -- what the "join me" phrase does
+	H.pause(3000)
+	C.check("companions", "recruit", axr_companions.get_companion_count() >= n0 + 1, string.format("companions %d -> %d, squads registered %d", n0, axr_companions.get_companion_count(), (function() local n = 0 for _ in pairs(axr_companions.companion_squads) do n = n + 1 end return n end)()))
+	-- follow: the actor walks away, the companion catches up
+	local far, lvid, gvid = C.point_at(70)
+	db.actor:set_actor_position(far)
+	H.pause(2000)
+	local d0 = npc:position():distance_to(db.actor:position())
+	H.wait_for("the companion to catch up", 60000, function() return npc:alive() and npc:position():distance_to(db.actor:position()) < 18 end)
+	C.check("companions", "follow", npc:alive() and npc:position():distance_to(db.actor:position()) < 25, string.format("distance %.0f m after the actor moved 70 m (was %.0f m)", npc:position():distance_to(db.actor:position()), d0))
+	-- states
+	C.on_main(function() axr_companions.set_companion_to_wait_state(npc) end)
+	H.pause(2000)
+	local mode_wait = axr_companions.get_companion_move_mode(npc)
+	C.on_main(function() axr_companions.set_companion_to_follow_state(npc) end)
+	H.pause(2000)
+	C.check("companions", "move-mode", mode_wait ~= axr_companions.get_companion_move_mode(npc), string.format("wait -> %s, follow -> %s", tostring(mode_wait), tostring(axr_companions.get_companion_move_mode(npc))))
+	-- fight: an enemy shows up, the companion engages (shots, or the enemy dies)
+	-- (the companion is a plain stalker in a plain jacket: a bandit's lucky burst kills it now and then, so it is made invulnerable for the fight)
+	npc:invulnerable(true)
+	local enemy = spawn_at("sim_default_bandit_0", 18, 1.6)
+	H.pause(3500)
+	local e = enemy and level.object_by_id(enemy.id)
+	if e then
+		e:set_relation(game_object.enemy, db.actor)
+		e:set_relation(game_object.enemy, npc)
+		npc:set_relation(game_object.enemy, e)
+		local w = npc:active_item()
+		local mag0 = w and w:get_ammo_in_magazine() or -1
+		local engaged = false
+		for i = 1, 30 do
+			H.pause(1000)
+			local w2 = npc:active_item()
+			if not e:alive() or (w2 and mag0 >= 0 and w2:get_ammo_in_magazine() < mag0) then engaged = true break end
+		end
+		C.check("companions", "combat", engaged, string.format("enemy alive %s at %.0f m, companion alive %s, weapon %s, magazine %s -> %s, companion enemy %s", tostring(e:alive()), e:position():distance_to(npc:position()), tostring(npc:alive()), tostring(npc:active_item() and npc:active_item():section()), tostring(mag0), tostring(npc:active_item() and npc:active_item():get_ammo_in_magazine()), tostring(npc:best_enemy() and npc:best_enemy():name())))
+		if e:alive() then e:kill(db.actor) end
+	end
+	npc:invulnerable(false)
+	-- level change with the companion: it comes along
+	local sq_ids = {}
+	for id in pairs(axr_companions.companion_squads or {}) do sq_ids[#sq_ids + 1] = tostring(id) end
+	local f = io.open(getFS():update_path("$app_data_root$", "") .. "chk_companion.txt", "w")
+	if f then f:write(table.concat(sq_ids, ","), "\n") f:close() end
+	H.say("companion squads before the jump: %s", table.concat(sq_ids, ","))
+	get_console():execute("jump_to_level l02_garbage")
+	return { next = true }
+end
+
+local function companions_phase_2()
+	if not arrive("l02_garbage", "companions-garbage") then return C.done("chk_companions") end
+	H.pause(9000)
+	local n = axr_companions.get_companion_count()
+	C.check("companions", "level-change", n >= 1, string.format("%d companions after the level change", n))
+	local f = io.open(getFS():update_path("$app_data_root$", "") .. "chk_companion.txt", "r")
+	local line = f and f:read("*l") or ""
+	if f then f:close() end
+	local near, notes = false, {}
+	for idstr in string.gmatch(line, "%d+") do
+		local sq = alife():object(tonumber(idstr))
+		if not sq then
+			notes[#notes + 1] = "squad " .. idstr .. " no longer exists"
+		else
+			local d = sq.position:distance_to(db.actor:position())
+			local lvl = alife():level_name(game_graph():vertex(sq.m_game_vertex_id):level_id())
+			local members = {}
+			for m in sq:squad_members() do
+				local o = level.object_by_id(m.id)
+				members[#members + 1] = string.format("%s online=%s object=%s", tostring(m.object and m.object:name() or m.id), tostring(alife_object(m.id) and alife_object(m.id).online), tostring(o ~= nil))
+				if o and o:position():distance_to(db.actor:position()) < 80 then near = true end
+			end
+			notes[#notes + 1] = string.format("squad %s on %s, %.0f m from the actor, registered as companion %s: %s", idstr, lvl, d, tostring(axr_companions.companion_squads[tonumber(idstr)] ~= nil), table.concat(members, ", "))
+		end
+	end
+	C.check("companions", "arrived-with-actor", near, table.concat(notes, "; "))
+	local npc
+	for k in pairs(axr_companions.companion_squads or {}) do
+		local sq = alife():object(k)
+		if sq then for m in sq:squad_members() do npc = level.object_by_id(m.id) end end
+	end
+	if npc then
+		C.on_main(function() axr_companions.remove_all_from_actor_squad() end)
+		H.pause(3000)
+		C.check("companions", "dismiss", axr_companions.get_companion_count() == 0, "companions after the dismissal " .. axr_companions.get_companion_count())
+	end
+	return C.done("chk_companions")
+end
+
+-- fast travel from the PDA map (game_fast_travel) -----------------------------------------------------------------------------------------
+-- The map's context menu calls the "map_spot_menu_property_clicked" callback with the text of the entry that was chosen; this sends it.
+local function fast_travel_phase_1()
+	start_quiet()
+	H.god(true)
+	ui_options.set("gameplay/fast_travel/state", 2)
+	ui_options.set("gameplay/fast_travel/on_combat", true)
+	ui_options.set("gameplay/fast_travel/on_overweight", true)
+	ui_options.set("gameplay/fast_travel/on_damage", true)
+	ui_options.set("gameplay/fast_travel/on_emission", true)
+	game_fast_travel.update_settings()
+	H.pause(2500)
+	local my_level = game_graph():vertex(db.actor:game_vertex_id()):level_id()
+	local near, far = nil, nil
+	for id = 1, 65534 do
+		local se = alife():object(id)
+		if se and se:clsid() == clsid.smart_terrain and level.map_has_object_spot(id, "fast_travel") ~= 0 then
+			local lvl = game_graph():vertex(se.m_game_vertex_id):level_id()
+			if lvl == my_level then
+				if not near or se.position:distance_to(db.actor:position()) > near.position:distance_to(db.actor:position()) then near = se end
+			else
+				far = far or se
+			end
+		end
+	end
+	C.check("fast-travel", "spots", near ~= nil, string.format("fast-travel spots on the map: this level %s, another level %s", tostring(near and near:name()), tostring(far and far:name())))
+	if near then
+		local t0 = game.get_game_time()
+		local d0 = db.actor:position():distance_to(near.position)
+		local prop = game.translate_string("st_pda_fast_travel_to") .. " " .. game.translate_string(near:name())
+		SendScriptCallback("map_spot_menu_property_clicked", nil, near.id, "l01_escape", prop)
+		H.pause(3500)
+		local d1 = db.actor:position():distance_to(near.position)
+		C.check("fast-travel", "same-level", d1 < 30 and d0 > 30, string.format("%s: %.0f m away before, %.0f m after", near:name(), d0, d1))
+		C.check("fast-travel", "clock", game.get_game_time():diffSec(t0) > 60, string.format("%.0f game seconds passed on the trip", game.get_game_time():diffSec(t0)))
+	end
+	if far then
+		local prop = game.translate_string("st_pda_fast_travel_to") .. " " .. game.translate_string(far:name())
+		SendScriptCallback("map_spot_menu_property_clicked", nil, far.id, alife():level_name(game_graph():vertex(far.m_game_vertex_id):level_id()), prop)
+		return { next = true }
+	end
+	return C.done("chk_fasttravel")
+end
+
+local function fast_travel_phase_2()
+	H.wait_for("actor", 420000, H.actor_ready)
+	H.enable_ui()
+	H.pause(9000)
+	C.check("fast-travel", "other-level", not H.level_is("l01_escape"), "arrived on " .. tostring(level.name()) .. " by a map spot of another level")
+	return C.done("chk_fasttravel")
+end
+
+-- soak -----------------------------------------------------------------------------------------------------------------------------------------
+-- SWEEP_MINUTES (default 60) of play with nobody at the keyboard: walking about, fights, fast-forwarding, sleeping, the inventory and PDA,
+-- a level change now and then. Memory is logged next to the footprint the shell logs every 10 s. SWEEP_SOAK_MODE=idle does nothing at all
+-- (the baseline for a memory creep). The Lua state is rebuilt by a level change, so the elapsed time is kept in a file.
+local SOAK_LEVELS = { "l01_escape", "l02_garbage", "l03_agroprom", "l01_escape" }
+
+local soak_file = nil
+local function soak_path()
+	soak_file = soak_file or (getFS():update_path("$app_data_root$", "") .. "chk_soak.txt")
+	return soak_file
+end
+
+local function soak_state()
+	local f = io.open(soak_path(), "r")
+	if not f then return nil end
+	local t0, cycles, levels = tonumber(f:read("*l")), tonumber(f:read("*l")), tonumber(f:read("*l"))
+	f:close()
+	return t0, cycles or 0, levels or 1
+end
+
+local function soak_write(t0, cycles, levels)
+	local f = io.open(soak_path(), "w")
+	if f then f:write(tostring(t0), "\n", tostring(cycles), "\n", tostring(levels), "\n") f:close() end
+end
+
+local function soak_log(tag, t0)
+	local n_squads = 0
+	for _ in pairs(SIMBOARD.squads) do n_squads = n_squads + 1 end
+	H.say("SOAK %s", string.format("%s t=%.1f min, lua heap %.0f KB, %s, %d squads, health %.2f, game time %s", tag, (time_global() - t0) / 60000, collectgarbage("count"), level.present() and level.name() or "-", n_squads, db.actor and db.actor.health or -1, C.gtime()))
+end
+
+local function soak_plan()
+	H.wait_for("actor", 300000, H.actor_ready)
+	H.enable_ui()
+	H.pause(5000)
+	local minutes = tonumber(os.getenv("SWEEP_MINUTES") or "") or 60
+	local mode = os.getenv("SWEEP_SOAK_MODE") or "mixed"
+	local t0, cycles, level_idx = soak_state()
+	if not t0 then
+		t0 = time_global()
+		cycles, level_idx = 0, 1
+		soak_write(t0, cycles, level_idx)
+		H.say("SOAK start: %d minutes, mode %s", minutes, mode)
+	end
+	H.god(true)
+	local last_log = 0
+	local function tick(tag)
+		if time_global() - last_log > 30000 then
+			last_log = time_global()
+			soak_log(tag, t0)
+		end
+	end
+	soak_log("resume", t0)
+	local errors = 0
+	while (time_global() - t0) < minutes * 60000 do
+		cycles = cycles + 1
+		soak_write(t0, cycles, level_idx)
+		if mode == "idle" then
+			for i = 1, 6 do H.pause(5000) tick("idle") end
+		else
+			local ok, err = pcall(function()
+				-- a walk: somewhere else on the level
+				local pts = C.level_points()
+				local p = pts[math.random(#pts)]
+				db.actor:set_actor_position(p.pos)
+				H.pause(6000)
+				tick("walk")
+				-- a fight
+				H.arm()
+				local foes = {}
+				for _, sec in ipairs({ "sim_default_bandit_0", "dog_normal", "boar_normal" }) do
+					local pos, lvid, gvid = C.point_at(16 + math.random(10))
+					local se = alife_create(sec, pos, lvid, gvid)
+					if se then foes[#foes + 1] = se.id end
+				end
+				H.pause(3000)
+				for _, id in ipairs(foes) do
+					local o = level.object_by_id(id)
+					if o and o:alive() then
+						if IsStalker(o) then o:set_relation(game_object.enemy, db.actor) end
+						H.fire_burst(o, 1200)
+					end
+					tick("fight")
+				end
+				for _, id in ipairs(foes) do
+					local o = level.object_by_id(id)
+					if o and o:alive() then o:kill(db.actor) end
+				end
+				H.pause(2000)
+				-- the clock runs
+				fast_forward(300, 12000)
+				tick("clock")
+				-- every third cycle a sleep, every other cycle the inventory and the PDA
+				if cycles % 3 == 0 then
+					ui_sleep_dialog.sleep_forced(4)
+					H.wait_for("the sleep", 60000, function() return not db.actor:has_info("actor_is_sleeping") end)
+					H.pause(2000)
+				end
+				if cycles % 2 == 0 then
+					H.press(key_bindings.kINVENTORY, 150)
+					H.pause(3000)
+					H.close_ui("inventory")
+					ActorMenu.get_pda_menu():ShowDialog(true)
+					H.pause(2500)
+					ActorMenu.get_pda_menu():SetActiveSubdialog("eptMap")
+					H.pause(2000)
+					ActorMenu.get_pda_menu():HideDialog()
+					H.pause(1500)
+				end
+				-- items made and dropped, the bandage used
+				H.give("bandage", 2)
+				H.give("ammo_5.45x39_fmj", 1, 30)
+				H.pause(2000)
+				db.actor:eat(db.actor:object("bandage"))
+				H.pause(1000)
+				collectgarbage("step")
+			end)
+			if not ok then
+				errors = errors + 1
+				H.say("SOAK cycle %d failed: %s", cycles, tostring(err))
+				-- a failed check of its own: the count above restarts at every level change, the report has to see each one
+				C.check("soak", string.format("cycle-%d", cycles), false, "a gameplay step of the cycle raised: " .. tostring(err))
+			end
+			tick("cycle")
+			-- a level change every twelfth cycle (about every 8 minutes)
+			if cycles % 12 == 0 and (time_global() - t0) < (minutes - 3) * 60000 then
+				level_idx = level_idx % #SOAK_LEVELS + 1
+				soak_write(t0, cycles, level_idx)
+				soak_log("level change to " .. SOAK_LEVELS[level_idx], t0)
+				get_console():execute("jump_to_level " .. SOAK_LEVELS[level_idx])
+				return { next = true }
+			end
+		end
+	end
+	soak_log("end", t0)
+	H.say("SOAK end: %s", string.format("%d cycles in %.1f minutes, %d failed cycles", cycles, (time_global() - t0) / 60000, errors))
+	local f = io.open(soak_path(), "w")
+	if f then f:close() end
+	C.check("soak", "completed", true, string.format("%d cycles in %.1f minutes, %d cycles raised a Lua error", cycles, (time_global() - t0) / 60000, errors))
+	return C.done("chk_soak")
+end
+
+function plans(c, h)
+	C, H = c, h
+	local out = {}
+	out.chk_alife = { alife_plan }
+	out.chk_mutants = { mutants_plan }
+	out.chk_stalkers = { stalkers_plan }
+	out.chk_emission_cover = { function() return run_event("emission", true) end }
+	out.chk_emission_open = { function() return run_event("emission", false) end, after_death("chk_emission_open") }
+	out.chk_travel = { travel_phase_1, travel_phase_chain(1), travel_phase_chain(2), travel_phase_chain(3), travel_phase_chain(4), travel_phase_chain(5), travel_phase_chain(6) }
+	out.chk_companions = { companions_phase_1, companions_phase_2 }
+	out.chk_fasttravel = { fast_travel_phase_1, fast_travel_phase_2 }
+	-- the soak is one phase that comes back after every level change: each phase reads its progress from the file
+	local soak_phases = {}
+	for i = 1, 40 do soak_phases[i] = soak_plan end
+	out.chk_soak = soak_phases
+	out.chk_anomalies = { anomalies_plan }
+	out.chk_weather = { weather_plan }
+	out.chk_sleep = { sleep_plan }
+	out.chk_psistorm_cover = { function() return run_event("psi_storm", true) end }
+	return out
+end

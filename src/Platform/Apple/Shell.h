@@ -12,6 +12,7 @@
 #include <cstdint>
 #include <functional>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 struct SDL_Window;
@@ -139,6 +140,17 @@ struct DeviceInfo
 };
 
 DeviceInfo QueryDeviceInfo();
+
+// Runs fn(arg) inside an autorelease pool. SDL's callback loop on the Mac is a plain while loop, not a pass of a run loop, so nothing
+// drains the pool main() has: every autoreleased object the Metal shim makes in a frame (command encoders, command buffers, strings,
+// ring allocations) stayed alive for good, about 30 MB a minute (docs/ios-port/SYSTEMS-CHECK.md, soak). One pool per frame fixes that.
+void RunInAutoreleasePool(void (*fn)(void*), void* arg);
+template <class F>
+inline void WithAutoreleasePool(F&& f)
+{
+    using Fn = std::remove_reference_t<F>;
+    RunInAutoreleasePool([](void* p) { (*static_cast<Fn*>(p))(); }, &f);
+}
 
 // Bytes the OS charges this process (phys_footprint: what jetsam counts, Metal and compressed memory included). Cheap.
 uint64_t ProcessFootprint();

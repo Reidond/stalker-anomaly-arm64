@@ -198,6 +198,17 @@ bool CALifeUpdateManager::change_level(NET_Packet& net_packet)
 	net_packet.r_vec3(graph().actor()->o_Position);
 	net_packet.r_vec3(graph().actor()->o_Angle);
 
+	{
+		// a script can pass any game vertex: this is only a log line, so it names the level only for a vertex that exists
+		const CGameGraph& gg = ai().game_graph();
+		const auto level_of = [&gg](GameGraph::_GRAPH_ID id) -> LPCSTR
+		{
+			return gg.valid_vertex_id(id) ? gg.header().level(gg.vertex(id)->level_id()).name().c_str() : "?";
+		};
+		Msg("* Changing level: game vertex %u (%s), level vertex %u, from %s", u32(graph().actor()->m_tGraphID),
+		    level_of(graph().actor()->m_tGraphID), graph().actor()->m_tNodeID, level_of(safe_graph_vertex_id));
+	}
+
 	Level().ClientSave();
 
 	graph().actor()->o_torso.yaw = graph().actor()->o_Angle.y;
