@@ -1,12 +1,16 @@
 // The Anomaly app: SDL3 callbacks around xr_engine::Init / Frame / Shutdown (src/xrEngine/xr_engine_app.h).
 //
-//   anomaly [--data-root <path>] [--exit-after <seconds>] [--script <file>] [--show-launcher]
-//           [--unattended [--size <w>x<h>] [--show-window]] [--foreground] [engine flags...]
+//   anomaly [--data-root <path>] [--exit-after <seconds>] [--script <file>] [--no-launcher] [--show-launcher]
+//           [--launcher-script <file>] [--unattended [--size <w>x<h>] [--show-window]] [--foreground] [engine flags...]
 //
 // Everything that is not one of the app's own flags goes to the engine as its command line (the same flags the Windows
 // build takes, e.g. -nointro, -ltx, -start, -nosound), after the contents of commandline.txt (xrEngine, XRENGINE.md).
-// The launcher (game-data status and how to copy the data) is shown when the data is missing or incomplete, or with
-// --show-launcher.
+// The launcher (src/Platform/Launcher, SwiftUI: Play, the mods, adding mods; also the game-data status and how to copy the data
+// when it is missing or incomplete) is the first screen of every ordinary start. --script, --exit-after, --unattended and
+// --no-launcher (or ANOMALY_NO_LAUNCHER=1) skip it and go straight to the engine, which mounts the mods of modlist.json as they
+// are; --show-launcher shows it anyway. --launcher-script <file> drives the launcher with the script's pad commands (padon, pad,
+// paddown, padup, padaxis, log, snapshot <name>, quit; the time is seconds since the launcher came up) and shows it, also on an
+// unattended run (then its window is hidden); Play then continues into the engine in the same process.
 //
 // --unattended (implied by --script and --exit-after, unless --foreground is given) is for runs nobody watches, on a Mac
 // somebody is working on: the app stays in the background (SDL's MAC_BACKGROUND_APP and ACTIVATE_WHEN_* hints, set before
@@ -63,6 +67,7 @@
 #include <Platform/Apple/GraphicsProfile.h>
 #include <Platform/Apple/Launcher.h>
 #include <Platform/Apple/Shell.h>
+#include <Platform/Launcher/AnomalyLauncher.h>
 
 #include <mtl_d3d11/mtl_stats.h>
 
@@ -105,10 +110,17 @@ struct ScriptStep
 
 struct App
 {
-    // the launcher's own window, while it is up
+    // the launcher's own window, while it is up: the SwiftUI launcher is hosted in it (swift_launcher), or, when that cannot be
+    // done, the shell's plain launcher draws into it (renderer, launcher)
     SDL_Window* window = nullptr;
     SDL_Renderer* renderer = nullptr;
     std::unique_ptr<AppleShell::Launcher> launcher;
+    void* swift_launcher = nullptr;
+    std::vector<SDL_Gamepad*> launcher_pads; // opened while the launcher is up (its pad input)
+    std::vector<ScriptStep> launcher_script; // --launcher-script
+    size_t launcher_script_next = 0;
+    std::vector<ScriptStep> launcher_releases;
+    Uint64 launcher_start_ns = 0;
 
     bool engine_up = false;
     int argc = 0;
@@ -203,7 +215,7 @@ void PrepareUnattendedConfig(App& app, const AppleShell::Paths& paths)
         path.c_str());
 }
 
-bool LoadScript(App& app, const char* path)
+bool LoadScript(std::vector<ScriptStep>& steps, const char* path)
 {
     std::ifstream in(path);
     if (!in)
@@ -233,10 +245,10 @@ bool LoadScript(App& app, const char* path)
         }
         while (!step.args.empty() && (step.args.back() == '\r' || step.args.back() == ' '))
             step.args.pop_back();
-        app.script.push_back(step);
+        steps.push_back(step);
     }
-    std::stable_sort(app.script.begin(), app.script.end(), [](const ScriptStep& a, const ScriptStep& b) { return a.at < b.at; });
-    AppleShell::Log("anomaly: script %s, %zu steps", path, app.script.size());
+    std::stable_sort(steps.begin(), steps.end(), [](const ScriptStep& a, const ScriptStep& b) { return a.at < b.at; });
+    AppleShell::Log("anomaly: script %s, %zu steps", path, steps.size());
     return true;
 }
 
@@ -790,8 +802,120 @@ bool StartEngine(App& app)
     return true;
 }
 
+// ---- the launcher -------------------------------------------------------------------------------------------------------------
+
+// Where the mods live (the shared contract): iPad Documents/Mods, Mac ~/Library/Application Support/Anomaly/Mods; ANOMALY_MODS_ROOT
+// overrides both, and a run with ANOMALY_STATE_ROOT uses <state>/Mods. Takes AppleShell::Paths::mods_root when the shell has one.
+template <class P>
+auto ModsRootOf(const P& paths, int) -> decltype(paths.mods_root, std::string())
+{
+    return paths.mods_root;
+}
+
+template <class P>
+std::string ModsRootOf(const P& paths, long)
+{
+    if (const char* env = getenv("ANOMALY_MODS_ROOT"); env && *env)
+        return env;
+#if defined(SDL_PLATFORM_IOS)
+    return paths.shell_dir + "/Mods"; // Documents, which the Files app shows
+#else
+    if (const char* state = getenv("ANOMALY_STATE_ROOT"); state && *state)
+        return std::string(state) + "/Mods";
+    return paths.app_support + "/Mods";
+#endif
+}
+
+void JsonString(std::string& out, const std::string& text)
+{
+    out += '"';
+    for (const unsigned char c : text)
+    {
+        switch (c)
+        {
+        case '"': out += "\\\""; break;
+        case '\\': out += "\\\\"; break;
+        case '\n': out += "\\n"; break;
+        case '\r': out += "\\r"; break;
+        case '\t': out += "\\t"; break;
+        default:
+            if (c < 0x20)
+            {
+                char buffer[8];
+                snprintf(buffer, sizeof(buffer), "\\u%04x", c);
+                out += buffer;
+            }
+            else
+                out += char(c);
+        }
+    }
+    out += '"';
+}
+
+// The launcher asks for the game-data check again (Rescan, and every 2 s while it is not usable): the shell's validation as JSON.
+char* DataStatusJson(void*)
+{
+    const AppleShell::GameDataStatus status = AppleShell::ValidateGameData(AppleShell::GetPaths().data_root);
+    std::string json = "{\"state\":";
+    JsonString(json, status.state == AppleShell::DataState::Ok ? "ok" : status.state == AppleShell::DataState::Incomplete ? "incomplete" : "notfound");
+    json += ",\"summary\":";
+    JsonString(json, status.summary);
+    json += ",\"help\":";
+    JsonString(json, status.help);
+    json += ",\"root\":";
+    JsonString(json, status.root);
+    json += ",\"files_ok\":" + std::to_string(status.files_ok) + ",\"files_expected\":" + std::to_string(status.files_expected) + "}";
+    return strdup(json.c_str());
+}
+
+std::string LauncherConfigJson(const AppleShell::Paths& paths)
+{
+    const std::string mods_root = ModsRootOf(paths, 0);
+    const AppleShell::DeviceInfo device = AppleShell::QueryDeviceInfo();
+    std::string json = "{\"mods_root\":";
+    JsonString(json, mods_root);
+    json += ",\"downloads_dir\":";
+    JsonString(json, mods_root + "/.downloads");
+#if defined(SDL_PLATFORM_IOS)
+    json += ",\"platform\":\"ios\",\"allow_quit\":false";
+#else
+    json += ",\"platform\":\"macos\",\"allow_quit\":true";
+#endif
+    json += ",\"version\":";
+    JsonString(json, "0.1");
+    json += ",\"device_line\":";
+    JsonString(json, device.model + " · " + device.os);
+    json += ",\"notices\":[";
+    bool first = true;
+    auto notice = [&](const char* text) {
+        json += first ? "" : ",";
+        first = false;
+        JsonString(json, text);
+    };
+    if (AppleShell::PreviousCrashLogExists())
+        notice("The previous run crashed: the report is in anomaly-crash.prev.log");
+    else if (AppleShell::PreviousSessionEndedUnexpectedly())
+        notice("The previous session ended unexpectedly (crash, memory kill or force quit)");
+    json += "]";
+    if (const char* auto_play = getenv("ANOMALY_LAUNCHER_AUTOPLAY_MS"); auto_play && *auto_play)
+        json += ",\"auto_play_ms\":" + std::to_string(atoi(auto_play));
+    json += "}";
+    return json;
+}
+
 void CloseLauncher(App& app)
 {
+    if (app.swift_launcher)
+    {
+        // the SwiftUI views come out of the window first; the window is destroyed after, and the engine makes its own
+        anomaly_launcher_close(app.swift_launcher);
+        app.swift_launcher = nullptr;
+    }
+    for (SDL_Gamepad* pad : app.launcher_pads)
+        SDL_CloseGamepad(pad);
+    app.launcher_pads.clear();
+    if (!app.unattended)
+        SDL_ResetHint(SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS); // only the launcher took pad input while another app was in front
     app.launcher.reset();
     if (app.renderer)
         SDL_DestroyRenderer(app.renderer);
@@ -801,23 +925,200 @@ void CloseLauncher(App& app)
     app.window = nullptr;
 }
 
+// The SwiftUI launcher, hosted in a plain SDL window (no renderer, no Metal view: SwiftUI draws). If that fails, the shell's own
+// launcher (SDL renderer, debug text) takes the window.
 bool OpenLauncher(App& app)
 {
-    SDL_WindowFlags flags = SDL_WINDOW_HIGH_PIXEL_DENSITY | SDL_WINDOW_METAL;
+    SDL_WindowFlags flags = SDL_WINDOW_HIGH_PIXEL_DENSITY;
 #if defined(SDL_PLATFORM_IOS)
     flags |= SDL_WINDOW_FULLSCREEN;
 #else
     flags |= SDL_WINDOW_RESIZABLE;
+    if (app.unattended)
+        flags |= SDL_WINDOW_HIDDEN; // a scripted run (--launcher-script): nobody is there to see the window
 #endif
-    if (!SDL_CreateWindowAndRenderer("Anomaly", 1280, 800, flags, &app.window, &app.renderer))
+    // the launcher takes pad input even while another app is in front (a Mac window that is not the key window)
+    SDL_SetHint(SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS, "1");
+    app.window = SDL_CreateWindow("Anomaly", 1280, 800, flags);
+    if (!app.window)
     {
         AppleShell::Log("anomaly: launcher window failed: %s", SDL_GetError());
         return false;
     }
-    AppleShell::Launcher::Config config;
-    config.allow_quit = true;
-    app.launcher = std::make_unique<AppleShell::Launcher>(app.window, app.renderer, config);
+#if !defined(SDL_PLATFORM_IOS)
+    SDL_SetWindowMinimumSize(app.window, 960, 600);
+#endif
+    const SDL_PropertiesID properties = SDL_GetWindowProperties(app.window);
+#if defined(SDL_PLATFORM_IOS)
+    void* native = SDL_GetPointerProperty(properties, SDL_PROP_WINDOW_UIKIT_WINDOW_POINTER, nullptr);
+#else
+    void* native = SDL_GetPointerProperty(properties, SDL_PROP_WINDOW_COCOA_WINDOW_POINTER, nullptr);
+#endif
+    const std::string config = LauncherConfigJson(AppleShell::GetPaths());
+    app.swift_launcher = native ? anomaly_launcher_open(native, config.c_str(), DataStatusJson, nullptr) : nullptr;
+    if (app.swift_launcher)
+    {
+        app.launcher_start_ns = SDL_GetTicksNS();
+        AppleShell::Log("anomaly: launcher up, mods in %s", ModsRootOf(AppleShell::GetPaths(), 0).c_str());
+        return true;
+    }
+    AppleShell::Log("anomaly: the SwiftUI launcher could not be hosted, using the plain launcher");
+    SDL_DestroyWindow(app.window);
+    app.window = nullptr;
+    SDL_WindowFlags plain = SDL_WINDOW_HIGH_PIXEL_DENSITY | SDL_WINDOW_METAL;
+#if defined(SDL_PLATFORM_IOS)
+    plain |= SDL_WINDOW_FULLSCREEN;
+#else
+    plain |= SDL_WINDOW_RESIZABLE;
+#endif
+    if (!SDL_CreateWindowAndRenderer("Anomaly", 1280, 800, plain, &app.window, &app.renderer))
+    {
+        AppleShell::Log("anomaly: launcher window failed: %s", SDL_GetError());
+        return false;
+    }
+    AppleShell::Launcher::Config plain_config;
+    plain_config.allow_quit = true;
+    app.launcher = std::make_unique<AppleShell::Launcher>(app.window, app.renderer, plain_config);
     return true;
+}
+
+// SDL's gamepad and key events as the launcher's buttons. Returns true when the event was the launcher's.
+bool LauncherEvent(App& app, const SDL_Event& event)
+{
+    auto send = [&](int button, bool down, bool keyboard) { anomaly_launcher_button(app.swift_launcher, button, down ? 1 : 0, keyboard ? 1 : 0); };
+    switch (event.type)
+    {
+    case SDL_EVENT_GAMEPAD_ADDED:
+        if (SDL_Gamepad* pad = SDL_OpenGamepad(event.gdevice.which))
+            app.launcher_pads.push_back(pad);
+        return true;
+    case SDL_EVENT_GAMEPAD_REMOVED:
+        for (auto it = app.launcher_pads.begin(); it != app.launcher_pads.end(); ++it)
+            if (SDL_GetGamepadID(*it) == event.gdevice.which)
+            {
+                SDL_CloseGamepad(*it);
+                app.launcher_pads.erase(it);
+                break;
+            }
+        return true;
+    case SDL_EVENT_GAMEPAD_BUTTON_DOWN:
+    case SDL_EVENT_GAMEPAD_BUTTON_UP:
+    {
+        static const struct { SDL_GamepadButton sdl; int button; } map[] = {
+            {SDL_GAMEPAD_BUTTON_DPAD_UP, ANOMALY_LAUNCHER_UP}, {SDL_GAMEPAD_BUTTON_DPAD_DOWN, ANOMALY_LAUNCHER_DOWN},
+            {SDL_GAMEPAD_BUTTON_DPAD_LEFT, ANOMALY_LAUNCHER_LEFT}, {SDL_GAMEPAD_BUTTON_DPAD_RIGHT, ANOMALY_LAUNCHER_RIGHT},
+            {SDL_GAMEPAD_BUTTON_SOUTH, ANOMALY_LAUNCHER_CONFIRM}, {SDL_GAMEPAD_BUTTON_EAST, ANOMALY_LAUNCHER_BACK},
+            {SDL_GAMEPAD_BUTTON_WEST, ANOMALY_LAUNCHER_SQUARE}, {SDL_GAMEPAD_BUTTON_NORTH, ANOMALY_LAUNCHER_TRIANGLE},
+            {SDL_GAMEPAD_BUTTON_START, ANOMALY_LAUNCHER_OPTIONS},
+        };
+        for (const auto& entry : map)
+            if (event.gbutton.button == entry.sdl)
+                send(entry.button, event.gbutton.down, false);
+        return true;
+    }
+    case SDL_EVENT_GAMEPAD_AXIS_MOTION:
+        if (event.gaxis.axis == SDL_GAMEPAD_AXIS_LEFTX)
+            anomaly_launcher_axis(app.swift_launcher, 0, float(event.gaxis.value) / 32767.0f);
+        else if (event.gaxis.axis == SDL_GAMEPAD_AXIS_LEFTY)
+            anomaly_launcher_axis(app.swift_launcher, 1, float(event.gaxis.value) / 32767.0f);
+        return true;
+#if defined(SDL_PLATFORM_IOS)
+    // a hardware keyboard on the iPad (on the Mac the launcher reads the keyboard itself, so a key is not handled twice)
+    case SDL_EVENT_KEY_DOWN:
+    case SDL_EVENT_KEY_UP:
+    {
+        if (event.key.repeat)
+            return true;
+        int button = -1;
+        switch (event.key.key)
+        {
+        case SDLK_UP: button = ANOMALY_LAUNCHER_UP; break;
+        case SDLK_DOWN: button = ANOMALY_LAUNCHER_DOWN; break;
+        case SDLK_LEFT: button = ANOMALY_LAUNCHER_LEFT; break;
+        case SDLK_RIGHT: button = ANOMALY_LAUNCHER_RIGHT; break;
+        case SDLK_RETURN:
+        case SDLK_SPACE: button = ANOMALY_LAUNCHER_CONFIRM; break;
+        case SDLK_ESCAPE: button = ANOMALY_LAUNCHER_BACK; break;
+        case SDLK_I: button = ANOMALY_LAUNCHER_TRIANGLE; break;
+        case SDLK_P: button = ANOMALY_LAUNCHER_OPTIONS; break;
+        default: break;
+        }
+        if (button >= 0)
+            send(button, event.key.down, true);
+        return true;
+    }
+#endif
+    default:
+        return false;
+    }
+}
+
+// --launcher-script: the pad commands of the engine script, run against the launcher (t = seconds since it came up), so a pad
+// can be driven through its screens with nobody holding one. `snapshot <name>` saves a PNG of the launcher next to the shell log.
+void RunLauncherScript(App& app)
+{
+    const double now = double(SDL_GetTicksNS() - app.launcher_start_ns) * 1e-9;
+    for (size_t i = 0; i < app.launcher_releases.size();)
+    {
+        if (now >= app.launcher_releases[i].release_at)
+        {
+            SetPadButton(app, app.launcher_releases[i].args, false, app.launcher_releases[i].pad_index);
+            app.launcher_releases.erase(app.launcher_releases.begin() + long(i));
+        }
+        else
+            ++i;
+    }
+    while (app.launcher_script_next < app.launcher_script.size() && app.launcher_script[app.launcher_script_next].at <= now)
+    {
+        const ScriptStep& step = app.launcher_script[app.launcher_script_next++];
+        AppleShell::Log("anomaly: launcher script t=%.1f %s %s", now, step.command.c_str(), step.args.c_str());
+        if (step.command == "padon")
+            AttachVirtualPad(app, atoi(step.args.c_str()) == 2 ? 1 : 0);
+        else if (step.command == "padoff")
+            DetachVirtualPad(app, step.args.empty() ? app.pad_sel : (atoi(step.args.c_str()) == 2 ? 1 : 0));
+        else if (step.command == "padsel")
+            app.pad_sel = atoi(step.args.c_str()) == 2 ? 1 : 0;
+        else if (step.command == "pad")
+        {
+            std::string name = step.args;
+            double ms = 80;
+            const size_t last_space = name.find_last_of(' ');
+            if (last_space != std::string::npos)
+            {
+                ms = atof(name.c_str() + last_space + 1);
+                name.resize(last_space);
+            }
+            SetPadButton(app, name, true);
+            ScriptStep release;
+            release.args = name;
+            release.pad = true;
+            release.pad_index = app.pad_sel;
+            release.release_at = now + ms * 1e-3;
+            app.launcher_releases.push_back(release);
+        }
+        else if (step.command == "paddown")
+            SetPadButton(app, step.args, true);
+        else if (step.command == "padup")
+            SetPadButton(app, step.args, false);
+        else if (step.command == "padaxis")
+            SetPadAxis(app, step.args);
+        else if (step.command == "snapshot")
+        {
+            const std::string file = AppleShell::GetPaths().shell_dir + "/" + (step.args.empty() ? "launcher" : step.args) + ".png";
+            AppleShell::Log("anomaly: launcher snapshot %s: %s", file.c_str(),
+                app.swift_launcher && anomaly_launcher_snapshot(app.swift_launcher, file.c_str()) ? "saved" : "failed");
+        }
+        else if (step.command == "log")
+            AppleShell::Log("anomaly: launcher script: %s", step.args.c_str());
+        else if (step.command == "quit")
+        {
+            SDL_Event quit{};
+            quit.type = SDL_EVENT_QUIT;
+            SDL_PushEvent(&quit);
+        }
+        else
+            AppleShell::Log("anomaly: launcher script: cannot run '%s %s'", step.command.c_str(), step.args.c_str());
+    }
 }
 } // namespace
 
@@ -830,12 +1131,17 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char** argv)
     app->argc = argc;
     app->argv = argv;
 
-    bool want_launcher = false, unattended_flag = false, foreground = false;
+    bool want_launcher = false, unattended_flag = false, foreground = false, no_launcher = false;
     const char* script_path = nullptr;
+    const char* launcher_script_path = nullptr;
     for (int i = 1; i < argc; ++i)
     {
         if (!strcmp(argv[i], "--show-launcher"))
             want_launcher = true;
+        else if (!strcmp(argv[i], "--no-launcher"))
+            no_launcher = true;
+        else if (!strcmp(argv[i], "--launcher-script") && i + 1 < argc)
+            launcher_script_path = argv[++i];
         else if (!strcmp(argv[i], "--unattended"))
             unattended_flag = true;
         else if (!strcmp(argv[i], "--foreground"))
@@ -850,6 +1156,13 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char** argv)
             script_path = argv[++i];
     }
     app->unattended = !foreground && (unattended_flag || script_path || app->exit_after_s > 0);
+    // The launcher is the first screen of an ordinary start. Runs nobody watches (--script, --exit-after, --unattended) and
+    // --no-launcher / ANOMALY_NO_LAUNCHER go straight to the engine, which mounts the mods of modlist.json as they are.
+    // --show-launcher and --launcher-script show it regardless.
+    if (const char* env = getenv("ANOMALY_NO_LAUNCHER"); env && *env && *env != '0')
+        no_launcher = true;
+    const bool automated = script_path || app->exit_after_s > 0 || unattended_flag;
+    bool show_launcher = want_launcher || launcher_script_path || (!no_launcher && !automated);
 #if defined(SDL_PLATFORM_IOS)
     // Unattended mode is for the Mac (no focus, no window, silent sound). On the iPad a scripted run stays an ordinary foreground run:
     // the engine must pause when the app leaves the screen (GPU work in the background kills the app), so `g_always_active` is wrong there.
@@ -885,14 +1198,16 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char** argv)
     }
     const AppleShell::Paths& paths = AppleShell::GetPaths();
     // a relative script path is looked up next to the shell's files too (iPad: Documents/, where devicectl copies it)
-    if (script_path)
-    {
-        std::string resolved = script_path;
+    auto resolve_script = [&](const char* name) {
+        std::string resolved = name;
         if (resolved[0] != '/' && !std::ifstream(resolved))
-            resolved = paths.shell_dir + "/" + script_path;
-        if (!LoadScript(*app, resolved.c_str()))
-            return SDL_APP_FAILURE;
-    }
+            resolved = paths.shell_dir + "/" + name;
+        return resolved;
+    };
+    if (script_path && !LoadScript(app->script, resolve_script(script_path).c_str()))
+        return SDL_APP_FAILURE;
+    if (launcher_script_path && !LoadScript(app->launcher_script, resolve_script(launcher_script_path).c_str()))
+        return SDL_APP_FAILURE;
     AppleShell::Log("anomaly: build %s %s", __DATE__, __TIME__); // which binary a log belongs to (this file's compile time)
     AppleShell::Log("anomaly: data root %s", paths.data_root.c_str());
     AppleShell::Log("anomaly: appdata   %s", paths.appdata.c_str());
@@ -901,13 +1216,12 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char** argv)
 
     InstallTerminateSource();
     const bool data_ok = AppleShell::ValidateGameData(paths.data_root).state == AppleShell::DataState::Ok;
-    // --no-launcher, --script and --exit-after (also on the iPad, where unattended mode is off) start the engine with modlist.json as it is
-    const bool skip_launcher = AppleShell::SkipLauncher();
-    if (skip_launcher)
-        want_launcher = false;
-    if (data_ok && !want_launcher)
+    // the shell reads the same flags (and commandline.txt): a run that asked to skip the launcher uses modlist.json as it is
+    if (AppleShell::SkipLauncher() && !want_launcher && !launcher_script_path)
+        show_launcher = false;
+    if (data_ok && !show_launcher)
         return StartEngine(*app) ? SDL_APP_CONTINUE : SDL_APP_FAILURE;
-    if (app->unattended || skip_launcher)
+    if ((app->unattended || !show_launcher) && !launcher_script_path)
     {
         // nobody is there to read a launcher: fail instead of waiting for a click
         AppleShell::Log("anomaly: %s: the game data at %s is not usable, not showing the launcher", app->unattended ? "unattended" : "no launcher",
@@ -1046,7 +1360,27 @@ SDL_AppResult SDL_AppIterate(void* appstate)
         }
         return SDL_APP_CONTINUE;
     }
-    if (app->launcher)
+    if (app->swift_launcher)
+    {
+        AppleShell::Update();
+        if (!app->launcher_script.empty())
+            RunLauncherScript(*app);
+        switch (anomaly_launcher_result(app->swift_launcher))
+        {
+        case ANOMALY_LAUNCHER_PLAY:
+            // The launcher has written modlist.json. Its views leave the window and the window goes; the engine then creates its own
+            // (SDL window, Metal layer), in this same process.
+            AppleShell::Log("anomaly: Play pressed in the launcher, starting the engine");
+            CloseLauncher(*app);
+            AppleShell::WriteFsGameLtx(); // the mod list changed since the shell started: the engine mounts what this file says
+            return StartEngine(*app) ? SDL_APP_CONTINUE : SDL_APP_FAILURE;
+        case ANOMALY_LAUNCHER_QUIT:
+            return SDL_APP_SUCCESS;
+        default:
+            break;
+        }
+    }
+    else if (app->launcher)
     {
         AppleShell::Update();
         app->launcher->Render();
@@ -1086,6 +1420,11 @@ SDL_AppResult SDL_AppEvent(void* appstate, SDL_Event* event)
     }
     if (event->type == SDL_EVENT_QUIT)
         return SDL_APP_SUCCESS;
+    if (app->swift_launcher)
+    {
+        LauncherEvent(*app, *event);
+        return SDL_APP_CONTINUE;
+    }
     if (!app->launcher)
         return SDL_APP_CONTINUE;
     switch (app->launcher->HandleEvent(*event))
