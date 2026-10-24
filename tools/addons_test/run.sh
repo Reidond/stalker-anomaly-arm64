@@ -110,7 +110,7 @@ ipad_device() {
     if [[ ${#device_args} -gt 0 ]]; then echo ${device_args[2]}; return; fi
     echo ${ANOMALY_IPAD_UDID:-}
 }
-ipad_sh() { "$repo/tools/ios/ipad.sh" "${device_args[@]}" "$@"; }
+ipad_sh() { "${ADDONS_TEST_IPAD_SH:-$repo/tools/ios/ipad.sh}" "${device_args[@]}" "$@"; }   # ADDONS_TEST_IPAD_SH: a stand-in for a dry run
 
 # copies the scenario's files one by one (devicectl creates the folders); what the scenario no longer has is removed after
 ipad_push() {
@@ -187,7 +187,13 @@ run() {
             ;;
         ipad)
             local copy=$res/ipad-logs
-            ipad_sh script "$timeline" -dbg "$@[3,-1]" > "$res/console.txt" 2>&1 || true
+            local try
+            for try in 1 2 3; do   # a launch fails now and then with "pid could not be determined" (IPAD.md): launch again
+                ipad_sh script "$timeline" -dbg "$@[3,-1]" > "$res/console.txt" 2>&1 || true
+                grep -q "could not be determined" "$res/console.txt" || break
+                echo "launch failed (try $try), again"
+                sleep 5
+            done
             ipad_sh logs "$copy" > /dev/null 2>&1 || true
             cp "$copy"/engine-logs/logs/xray_*.log "$res/engine.log" 2>/dev/null || cp "$copy"/engine-logs/xray_*.log "$res/engine.log" 2>/dev/null || true
             cp "$copy/anomaly-shell.log" "$res/shell.log" 2>/dev/null || true
