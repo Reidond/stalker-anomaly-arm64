@@ -3,9 +3,7 @@
 import Foundation
 import SwiftUI
 import ModManagerCore
-#if canImport(ModDownloads)
 import ModDownloads
-#endif
 
 @MainActor
 final class ImportCoordinator: ObservableObject {

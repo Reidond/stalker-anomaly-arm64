@@ -1,8 +1,8 @@
 # The SwiftUI launcher: the app's first screen (home, mods, add mod). A static library of Swift files; the app shell reaches it through
-# the C functions of AnomalyLauncher.h. The mod manager and downloads modules (ModManagerCore, ModDownloads) are linked when they are in
-# the build; Stubs.swift stands in for whichever is not, and goes away once both are on main. Documented in docs/ios-port/MOD-MANAGER.md.
-# The launcher needs the mod library and importer (ModManagerCore, an opt-in module: ANOMALY_BUILD_MODMANAGERCORE or ANOMALY_BUILD_ALL_MODULES).
-if(NOT TARGET ModManagerCore)
+# the C functions of AnomalyLauncher.h. Documented in docs/ios-port/MOD-MANAGER.md.
+# The launcher needs the mod library and importer (ModManagerCore, an opt-in module: ANOMALY_BUILD_MODMANAGERCORE or
+# ANOMALY_BUILD_ALL_MODULES) and the browser and downloader (ModDownloads, always built).
+if(NOT (TARGET ModManagerCore AND TARGET ModDownloads))
     message(STATUS "launcher: skipped (needs ANOMALY_BUILD_ALL_MODULES=ON or ANOMALY_BUILD_MODMANAGERCORE=ON)")
     return()
 endif()
@@ -33,14 +33,11 @@ set_target_properties(anomaly_launcher PROPERTIES
 if(ANOMALY_LAUNCHER_SWIFT_TARGET_OPTION)
     target_compile_options(anomaly_launcher PRIVATE "${ANOMALY_LAUNCHER_SWIFT_TARGET_OPTION}")
 endif()
-target_link_libraries(anomaly_launcher PUBLIC ModManagerCore)
+target_link_libraries(anomaly_launcher PUBLIC ModManagerCore ModDownloads)
 if(ANOMALY_IOS)
     # The Xcode generator does not hand a static Swift library's .swiftmodule (in the library's products folder) to the targets that
     # link it, whose products folders are their own subdirectories
     target_compile_options(anomaly_launcher PRIVATE "SHELL:-I $<TARGET_FILE_DIR:ModManagerCore>")
-endif()
-if(TARGET ModDownloads)
-    target_link_libraries(anomaly_launcher PUBLIC ModDownloads)
 endif()
 
 # A C++ executable that links Swift code needs the Swift runtime's search paths (the Swift driver would add them itself).

@@ -12,7 +12,4 @@ set_target_properties(launcher_snapshot PROPERTIES Swift_LANGUAGE_VERSION 5 Swif
 if(ANOMALY_LAUNCHER_SWIFT_TARGET_OPTION)
     target_compile_options(launcher_snapshot PRIVATE "${ANOMALY_LAUNCHER_SWIFT_TARGET_OPTION}")
 endif()
-target_link_libraries(launcher_snapshot PRIVATE ModManagerCore)
-if(TARGET ModDownloads)
-    target_link_libraries(launcher_snapshot PRIVATE ModDownloads)
-endif()
+target_link_libraries(launcher_snapshot PRIVATE ModManagerCore ModDownloads)

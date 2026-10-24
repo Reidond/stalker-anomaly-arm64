@@ -1,9 +1,7 @@
 // Add mod: from the Files app (zip, 7z, rar or a folder), from the in-app browser (ModDB, GitHub) or from a pasted link.
 import SwiftUI
 import UniformTypeIdentifiers
-#if canImport(ModDownloads)
 import ModDownloads
-#endif
 
 struct LauncherSnapshotKey: EnvironmentKey { static let defaultValue = false }
 
