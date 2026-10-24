@@ -44,6 +44,12 @@ if(NOT ANOMALY_IOS AND TARGET xrEngine)
     add_subdirectory(tools/xrengine_smoke)
 endif()
 
+# The SwiftUI launcher (the app's first screen) and the tool that renders its screens offscreen.
+add_subdirectory(src/Platform/Launcher)
+if(NOT ANOMALY_IOS AND TARGET anomaly_launcher)
+    add_subdirectory(tools/launcher_snapshot)
+endif()
+
 # The game: every module linked statically into one app (needs ANOMALY_BUILD_ALL_MODULES).
 add_subdirectory(src/Platform/App)
 

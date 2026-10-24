@@ -13,8 +13,11 @@ include(AnomalyGameApp)
 
 add_executable(anomaly main.cpp Unattended.mm)
 target_include_directories(anomaly PRIVATE "${PROJECT_SOURCE_DIR}/src")
-target_link_libraries(anomaly PRIVATE xrEngine xrGame xrRender_R4 metal_d3d11 anomaly_apple_shell "-framework Foundation" "$<$<NOT:$<BOOL:${ANOMALY_IOS}>>:-framework AppKit>")
+target_link_libraries(anomaly PRIVATE xrEngine xrGame xrRender_R4 metal_d3d11 anomaly_apple_shell anomaly_launcher "-framework Foundation" "$<$<NOT:$<BOOL:${ANOMALY_IOS}>>:-framework AppKit>")
 anomaly_configure_game_app(anomaly DISPLAY_NAME "Anomaly")
+# anomaly_launcher is Swift: CMake would link with swiftc, which does not take the C++ link flags (-fsanitize, ...); the C++ driver does,
+# and the Swift runtime's paths come with anomaly_launcher's INTERFACE link options.
+set_target_properties(anomaly PROPERTIES LINKER_LANGUAGE CXX)
 
 # The Monolith gamedata overlay (the repository's gamedata/: scripts, configs and shaders the engine build needs next to the
 # game data) rides in the bundle; the shell packs it into an archive at startup (src/Platform/Apple/Overlay.cpp).
@@ -31,3 +34,12 @@ add_custom_command(TARGET anomaly POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E rm -rf "${anomaly_resources_dir}/overlay"
     COMMAND ${CMAKE_COMMAND} -E copy_directory "${PROJECT_SOURCE_DIR}/gamedata" "${anomaly_resources_dir}/overlay"
     COMMENT "anomaly: copying the Monolith gamedata overlay into the bundle")
+
+# The launcher's logo: the generated app icon (cmake/AnomalyAppIcon.cmake: the Anomaly launcher's logo when the game data was there at
+# configure time, the repository's own fallback artwork otherwise), as launcher-logo.png in the bundle's resources. Never committed.
+get_property(anomaly_app_icon_dir GLOBAL PROPERTY ANOMALY_APP_ICON_DIR)
+if(anomaly_app_icon_dir AND EXISTS "${anomaly_app_icon_dir}/icon-1024.png")
+    add_custom_command(TARGET anomaly POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy "${anomaly_app_icon_dir}/icon-1024.png" "${anomaly_resources_dir}/launcher-logo.png"
+        COMMENT "anomaly: copying the launcher logo into the bundle")
+endif()
