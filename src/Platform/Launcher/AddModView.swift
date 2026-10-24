@@ -34,8 +34,12 @@ struct AddModView: View {
                     row("Files", detail: "A zip, 7z or rar archive, or a folder, from the Files app", systemImage: "folder.fill")
                 }
                 .padFocus("add.files", inList: true)
-                NavigationLink(value: Screen.browse) {
-                    row("Browse", detail: "ModDB and GitHub in the built-in browser", systemImage: "globe")
+                Button { model.push(.browse) } label: {
+                    HStack {
+                        row("Browse", detail: "ModDB and GitHub in the built-in browser", systemImage: "globe")
+                        Spacer()
+                        Image(systemName: "chevron.right").font(.footnote.weight(.semibold)).foregroundStyle(.tertiary)
+                    }
                 }
                 .padFocus("add.browse", inList: true)
             } footer: {
@@ -81,10 +85,19 @@ struct BrowseView: View {
     @EnvironmentObject private var model: LauncherModel
 
     var body: some View {
-        DownloadsView(downloadsDir: model.downloadsDir) { file in
-            model.pop()
-            model.imports.begin(url: file, temporary: true)
-        }
-        .launcherScreen("Browse", inline: true)
+        #if os(iOS)
+        // the cover's own NavigationStack holds it (see LauncherModel.showBrowser): a Done button leaves it
+        DownloadsView(downloadsDir: model.downloadsDir, onDownloaded: finished)
+            .navigationTitle("Browse")
+            .toolbar { ToolbarItem(placement: .topBarLeading) { Button("Done") { model.pop() } } }
+        #else
+        DownloadsView(downloadsDir: model.downloadsDir, onDownloaded: finished)
+            .launcherScreen("Browse", inline: true)
+        #endif
+    }
+
+    private func finished(_ file: URL) {
+        model.pop()
+        model.imports.begin(url: file, temporary: true)
     }
 }

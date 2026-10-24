@@ -456,7 +456,7 @@ comes from the device.
 | Home | The logo, **Play** (disabled until the game data is valid) with the number of mods that are on, **Mods** (n of m on), **Add Mod**, Quit (Mac). When the game data is missing or incomplete it shows the shell's check (`ValidateGameData`) with the how-to-copy text and a Rescan, and looks again by itself every 2 s, so a copy in progress shows up live. This replaces the old debug-text launcher, which stays in the shell for `shell_lab` and as the fallback when the SwiftUI one cannot be hosted. A previous crash is shown as a notice. |
 | Mods | The load order, first (lowest priority) to last (wins a file conflict): number, name, version, size and file count, a conflict count, an info button and a switch. Drag to reorder (Edit on the iPad, direct on the Mac), swipe or context menu to remove, tap the row for the details. |
 | Mod details | About, version, author, size, files, load position, source (file, link or browser), date added, and the file conflicts from `ModLibrary.conflicts()`: which files it overrides in which mod and which are overridden by which, with the paths. Switch on/off, load later / earlier, remove (asks first). |
-| Add Mod | Files (`.fileImporter`: zip, 7z, rar, or a folder), Browse (`DownloadsView`: ModDB, GitHub) and a link field with Paste and Download (`LinkDownloader`). |
+| Add Mod | Files (`.fileImporter`: zip, 7z, rar, or a folder), Browse (`DownloadsView`: ModDB, GitHub; a full-screen cover with its own `NavigationStack` and a Done button on the iPad, a pushed screen on the Mac) and a link field with Paste and Download (`LinkDownloader`). |
 | Import sheet | For all three sources: *reading* (`inspect`), the warnings the importer found ("Contains Windows DLLs", ...) with *Add Anyway* / *Cancel*, the FOMOD wizard (`FomodWizardView`) when the mod has one, *installing* with progress, then *added* (switch on, open Mods) or *failed* with the importer's message. A download that ends up here is deleted afterwards (the mod is stored). |
 
 Everything the launcher changes goes through `ModLibrary` at once (`setEnabled`, `move`, `remove` replace `modlist.json` atomically);
@@ -483,7 +483,7 @@ sit on top (the import sheet, the remove confirmation) take the focus until they
 The focus ring and the hint bar at the bottom (pad glyphs or key caps, for what the buttons do on this screen) appear when a pad or the
 keyboard is used and go away at the next touch or click, so the touch and mouse UI stays the plain system one. The list scrolls to the
 focused row, going back returns to the row that was open, and the stick repeats like the D-pad (after 0.35 s, then every 0.09 s). The system
-file picker and the in-app browser are other views: touch there, not the pad. The FOMOD wizard is driven through its `FomodSession`: the launcher owns the
+file picker and the in-app browser are other views: touch there, not the pad (Circle closes the browser). The browser is a cover on the iPad because `DownloadsView` pushed onto the launcher's stack made SwiftUI drop the stack's pushed screens (seen on the device; the lab app, where it is the stack's root, is fine). The FOMOD wizard is driven through its `FomodSession`: the launcher owns the
 session while a FOMOD is being answered, and D-pad / stick move the wizard's cursor, Cross picks the option or presses the footer button, Circle goes back
 (Cancel on the first step), R1 or Options go on (Next, Install on the last step).
 

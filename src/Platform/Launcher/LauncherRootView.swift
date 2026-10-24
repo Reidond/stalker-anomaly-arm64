@@ -50,6 +50,14 @@ struct LauncherRootView: View {
                     .environmentObject(model.focus)
             }
         }
+        #if os(iOS)
+        .fullScreenCover(isPresented: $model.showBrowser) {
+            NavigationStack { BrowseView() }
+                .tint(Theme.accent)
+                .environmentObject(model)
+                .environmentObject(model.focus)
+        }
+        #endif
         .fileImporter(isPresented: $model.showFilePicker, allowedContentTypes: ModFileTypes.importable, allowsMultipleSelection: false) { result in
             switch result {
             case .success(let urls):
