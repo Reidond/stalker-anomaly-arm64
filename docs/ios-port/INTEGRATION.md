@@ -159,8 +159,9 @@ the time is seconds since the engine came up:
 <t> relmove <dx> <dy>
 <t> click <x> <y> [button]
 <t> log <text...>            a line in the shell log
-<t> delete <path>            remove one file, or one empty folder, below the game folder: a relative path whose first part is gamedata or db, no `..`, links refused,
-                             never recursive (the iPad has no way to delete a file from outside; tools/addons_test uses it)
+<t> delete <path>            remove one file, or one empty folder, below gamedata/, db/addons/ or db/patches/ of the game folder (any case; src/Platform/Apple/DeleteStep.h,
+                             tools/delete_step_test): never a stock archive or folder of db/, no `..`, no link anywhere in the path, never recursive
+                             (the iPad has no way to delete a file from outside; tools/addons_test uses it)
 <t> mods_delete <id>         remove <mods root>/<id> (a plain folder name, directly inside the mods root; MOD-MANAGER.md)
 <t> mods_clear               remove every entry of the mods root (put it last)
 <t> quit                     leave through the engine's own disconnect path
