@@ -957,7 +957,9 @@ SDL_AppResult SDL_AppIterate(void* appstate)
             app->interval_max_ns = std::max(app->interval_max_ns, gap_ns);
         }
         app->last_frame_start_ns = frame_start_ns;
-        if (!xr_engine::Frame())
+        bool keep_going = true;
+        AppleShell::WithAutoreleasePool([&] { keep_going = xr_engine::Frame(); });
+        if (!keep_going)
         {
             // the last frame: the level is gone, what follows is xr_engine::Shutdown() (the "quit (ok)" line ends it)
             AppleShell::Log("anomaly: the engine asked to quit");

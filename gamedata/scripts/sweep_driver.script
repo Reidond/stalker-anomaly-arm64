@@ -1233,6 +1233,17 @@ function on_game_start()
 		return
 	end
 	say("driver armed: plan %s", plan_name)
+	if plan_name:sub(1, 4) == "chk_" then
+		-- the systems check (docs/ios-port/SYSTEMS-CHECK.md): its plans live in sweep_check*.script and use these helpers
+		sweep_check.install(phases, {
+			say = say, pause = pause, wait_for = wait_for, try = try, give = give, spot = spot, move_inland = move_inland,
+			spawn_near = spawn_near, god = god, actor_hit = actor_hit, press_dik = press_dik, press = press, ui_open = ui_open,
+			close_ui = close_ui, face = face, level_is = level_is, actor_ready = actor_ready, enable_ui = enable_ui,
+			finish_game_over = finish_game_over, reload = reload, finish = finish, gear_up = gear_up, arm = arm,
+			fire_burst = fire_burst, save_here = save_here, shown = shown, read_state = read_state, write_state = write_state,
+			plan = plan_name,
+		})
+	end
 	RegisterScriptCallback("actor_on_first_update", on_first_update)
 	RegisterScriptCallback("GUI_on_show", gui_on_show)
 	RegisterScriptCallback("GUI_on_hide", gui_on_hide)

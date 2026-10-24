@@ -1,0 +1,380 @@
+--[[
+	Systems check, part 3: the PDA, dialogs and tasks, stashes, repair and upgrades, the HUD. See sweep_check.script.
+--]]
+
+local C, H
+
+local function give(...) return H.give(...) end
+
+local function start_quiet()
+	H.wait_for("actor", 240000, H.actor_ready)
+	H.enable_ui()
+	H.pause(6000)
+	H.god(false)
+end
+
+local function pda_menu() return ActorMenu.get_pda_menu() end
+
+-- PDA ----------------------------------------------------------------------------------------------------------------------------------
+local function pda_plan()
+	start_quiet()
+	give("device_pda", 1)
+	H.pause(1500)
+	-- a task, a rank change and a map spot for the tabs to show
+	local trader = get_story_object("esc_m_trader")
+	task_manager.get_task_manager():give_task("esc_m_trader_task_3", trader and trader:id() or 0)
+	H.pause(3000)
+	local rank0, rep0 = db.actor:character_rank(), db.actor:character_reputation()
+	game_statistics.increment_rank(1500)
+	game_statistics.increment_reputation(400)
+	local spot_id = db.actor:id()
+	level.map_add_object_spot(spot_id, "red_location", "chk pda spot")
+	news_manager.send_tip(db.actor, "chk: a line for the log tab", nil, "default", 5)
+	H.pause(2000)
+
+	C.check("pda", "task-registered", db.actor:get_task("esc_m_trader_task_3", true) ~= nil, "esc_m_trader_task_3 is in the actor's task list")
+	C.check("pda", "rank", db.actor:character_rank() > rank0, string.format("rank %d -> %d (%s)", rank0, db.actor:character_rank(), tostring(ranks.get_obj_rank_name(db.actor))))
+	C.check("pda", "reputation", db.actor:character_reputation() > rep0, string.format("reputation %d -> %d", rep0, db.actor:character_reputation()))
+	C.check("pda", "map-spot", level.map_has_object_spot(spot_id, "red_location") ~= 0, "the red location is on the map")
+
+	pda_menu():ShowDialog(true)
+	local up = H.wait_for("the PDA", 6000, function() return pda_menu():IsShown() end)
+	C.check("pda", "open", up, "ActorMenu pda IsShown " .. tostring(pda_menu():IsShown()))
+	for _, tab in ipairs({ "eptTasks", "eptMap", "eptContacts", "eptLogs", "eptRanking", "eptRelations", "eptEncyclopedia", "eptRadio" }) do
+		C.run("pda", "tab/" .. tab, function()
+			pda_menu():SetActiveSubdialog(tab)
+			H.pause(1800)
+			local sec = pda_menu():GetActiveSection()
+			if tab == "eptMap" or tab == "eptTasks" or tab == "eptRanking" or tab == "eptLogs" or tab == "eptContacts" then
+				C.shot("chk_pda_" .. tab)
+			end
+			return pda_menu():IsShown(), "active section " .. tostring(sec)
+		end)
+	end
+	pda_menu():HideDialog()
+	H.pause(1500)
+	C.check("pda", "close", not pda_menu():IsShown(), "closed")
+	return C.done("chk_pda")
+end
+
+-- dialogs and tasks ---------------------------------------------------------------------------------------------------------------------
+-- The talk window is opened as the game does (run_talk_dialog on the story trader); the task is taken the way the dialog's phrase does
+-- (task_manager:give_task), progressed in the world, handed in through the task manager's own "finished task" functions, and the reward looked at.
+local function tasks_plan()
+	start_quiet()
+	local trader = get_story_object("esc_m_trader")
+	C.check("tasks", "trader", trader ~= nil, "Sidorovich, " .. tostring(trader and trader:name()))
+	if not trader then return C.done("chk_tasks") end
+	db.actor:set_actor_position(trader:position())
+	H.pause(4000)
+	trader = get_story_object("esc_m_trader")
+	db.actor:run_talk_dialog(trader, false)
+	H.pause(3500)
+	C.check("tasks", "talk-window", db.actor:is_talking(), "the talk window is up: " .. tostring(db.actor:is_talking()))
+	C.run("tasks", "talk-screenshot", function() return C.shot("chk_talk"), "screenshot chk_talk" end)
+	-- close it the way a player does
+	H.press_dik(DIK_keys.DIK_ESCAPE, 150)
+	H.pause(2500)
+	C.check("tasks", "talk-closed", not db.actor:is_talking(), "closed")
+
+	-- take a task
+	local id = "esc_m_trader_task_2" -- Contract Killer: kill a named stalker
+	local tm = task_manager.get_task_manager()
+	local money0 = db.actor:money()
+	axr_task_manager.trigger_job_func(id) -- the "job description" step of the dialog: the bounty target is picked here
+	H.pause(1500)
+	tm:give_task(id, trader:id())
+	H.pause(3500)
+	local target_id = axr_task_manager.bounties_by_id[id]
+	C.check("tasks", "take", db.actor:get_task(id, true) ~= nil and tm.task_info[id] ~= nil, string.format("task %s is in the list, stage %s", id, tostring(tm.task_info[id] and tm.task_info[id].stage)))
+	local se_target = target_id and alife_object(target_id)
+	C.check("tasks", "target", se_target ~= nil and se_target:alive(), string.format("target %s (%s)", tostring(se_target and se_target:name()), tostring(se_target and alife():level_name(game_graph():vertex(se_target.m_game_vertex_id):level_id()))))
+
+	-- progress it: the game picked a stalker on another level; the actor goes after one of its own choosing next to it instead
+	-- (alife():kill_entity asserts for a stalker that carries items), and kills it
+	local pos, lvid, gvid = C.point_at(14)
+	local victim = alife_create("sim_default_bandit_0", pos, lvid, gvid)
+	H.pause(3500)
+	local o = victim and level.object_by_id(victim.id)
+	C.check("tasks", "victim", o ~= nil, "a bandit to stand in for the target")
+	if o then
+		axr_task_manager.bounties_by_id[id] = victim.id
+		o:kill(db.actor)
+		H.pause(1500)
+	end
+	local reached = H.wait_for("the task to reach its last stage", 40000, function()
+		return tm.task_info[id] and tm.task_info[id].stage == 1
+	end)
+	C.check("tasks", "progress", reached, string.format("stage %s after the target died", tostring(tm.task_info[id] and tm.task_info[id].stage)))
+	local finished = axr_task_manager.get_first_finished_task(trader, false)
+	C.check("tasks", "ready-to-hand-in", finished == id, "the giver sees a finished task: " .. tostring(finished))
+
+	-- hand it in: what the dialog's last phrase does
+	axr_task_manager.set_finished_task_complete(trader, false)
+	local done = H.wait_for("the task to complete", 30000, function() return tm.task_info[id] and tm.task_info[id].status == "completed" end)
+	H.pause(2000)
+	local reward = db.actor:money() - money0
+	C.check("tasks", "complete", done, "status " .. tostring(tm.task_info[id] and tm.task_info[id].status))
+	C.check("tasks", "reward", reward >= 3000, string.format("money %d -> %d (+%d)", money0, db.actor:money(), reward))
+	return C.done("chk_tasks")
+end
+
+-- stashes ---------------------------------------------------------------------------------------------------------------------------------
+local function stash_plan()
+	start_quiet()
+	-- the game fills one of its inventory boxes and marks it on the map
+	local box_id, name
+	for attempt = 1, 80 do
+		local id, nm = treasure_manager.get_random_stash(false, "stash", attempt > 40, false)
+		if id then
+			local se = alife_object(id)
+			if se and game_graph():vertex(se.m_game_vertex_id):level_id() == game_graph():vertex(db.actor:game_vertex_id()):level_id() then
+				box_id, name = id, nm
+				treasure_manager.set_random_stash(false, "chk stash", nil, id)
+				break
+			end
+		end
+	end
+	C.check("stashes", "create", box_id ~= nil, "a stash on this level: " .. tostring(name) .. " (id " .. tostring(box_id) .. ")")
+	if not box_id then return C.done("chk_stash") end
+	local se = alife_object(box_id)
+	C.check("stashes", "map-spot", level.map_has_object_spot(box_id, "treasure") ~= 0 or level.map_has_object_spot(box_id, "treasure_unique") ~= 0, "the stash is marked on the map")
+	-- walk to it, open it
+	db.actor:set_actor_position(se.position)
+	local box
+	H.wait_for("the stash to come online", 20000, function() box = level.object_by_id(box_id) return box ~= nil end)
+	C.check("stashes", "online", box ~= nil, "the box is a game object near the actor")
+	if box then
+		SendScriptCallback("physic_object_on_use_callback", box, db.actor)
+		H.pause(2000)
+		local items = {}
+		box:iterate_inventory_box(function(_, it) items[#items + 1] = it end, box)
+		C.check("stashes", "content", #items > 0, string.format("%d items in the box after it was used", #items))
+		local stat0 = game_statistics.get_statistic_count("stashes_found")
+		local n0 = C.inventory_total()
+		if #items > 0 then
+			box:transfer_item(items[1], db.actor)
+			H.pause(1000)
+			SendScriptCallback("actor_on_item_take_from_box", box, items[1])
+			H.pause(1500)
+			C.check("stashes", "take", C.inventory_total() > n0, string.format("inventory items %d -> %d", n0, C.inventory_total()))
+			C.check("stashes", "found-counted", game_statistics.get_statistic_count("stashes_found") == stat0 + 1, string.format("stashes found %d -> %d", stat0, game_statistics.get_statistic_count("stashes_found")))
+			C.check("stashes", "spot-removed", level.map_has_object_spot(box_id, "treasure") == 0, "the map spot is gone")
+		end
+	end
+	return C.done("chk_stash")
+end
+
+-- repair and upgrades ------------------------------------------------------------------------------------------------------------------
+local function mechanics_plan()
+	start_quiet()
+	give("wpn_ak74", 1)
+	give("cleaning_kit_r5", 1) -- a rifle_5 cleaning kit: repairs 5.45 and 5.56 rifles
+	give("ammo_5.45x39_fmj", 1, 30)
+	H.pause(2500)
+	local ak = db.actor:object("wpn_ak74")
+
+	-- repair kit: the game's own dialog, with the weapon picked and "repair" pressed
+	C.run("mechanics", "repair-kit", function()
+		ak:set_condition(0.8) -- a cleaning kit works on weapons between 0.75 and 0.99
+		H.pause(500)
+		local kit = db.actor:object("cleaning_kit_r5")
+		if not kit then return false, "no cleaning kit in the inventory" end
+		C.on_main(function() item_repair.start(kit, "cleaning_kit_r5") end)
+		H.pause(2500)
+		local gui = item_repair.GUI
+		if not (gui and gui:IsShown()) then return false, "the repair dialog did not open" end
+		C.shot("chk_repair")
+		local listed = 0
+		for _, ci in pairs(gui.CC[1].cell) do if ci:IsShown() then listed = listed + 1 end end
+		C.on_main(function() gui.CC[1]:On_Select(1) gui:On_CC_Mouse1(1, 1) end) -- what a click on the first cell does
+		H.pause(800)
+		local c0 = ak:condition()
+		C.on_main(function() gui:OnRepair() end)
+		H.pause(1500)
+		return ak:condition() > c0 + 0.05 and not gui:IsShown(), string.format("%d repairable items listed; condition %.2f -> %.2f", listed, c0, ak:condition())
+	end)
+
+	-- upgrades: installed by the engine, remembered, and they change the weapon
+	C.run("mechanics", "upgrade", function()
+		local id = "up_firsta_ak74" -- an element of the group up_gr_firstab_ak74: the installable upgrade (the group id is not one)
+		inventory_upgrades.force_upgrade = true -- the precondition script asks for a mechanic to be talking; this is its own override
+		local rpm0 = ak:cast_Weapon():RPM()
+		local cost = ini_sys:r_float_ex("up_sect_firsta_ak74", "cost")
+		local ok = ak:install_upgrade(id)
+		inventory_upgrades.force_upgrade = false
+		H.pause(1500)
+		local has = ak:has_upgrade(id)
+		return has, string.format("install_upgrade(%s) returned %s, has_upgrade %s", id, tostring(ok), tostring(has))
+	end)
+	-- the upgrade and the repair survive a save and a load (the next phase looks)
+	get_console():execute("save chk_mech")
+	H.pause(4000)
+	return { reload = "chk_mech" }
+end
+
+local function mechanics_after_load()
+	H.wait_for("the load", 240000, H.actor_ready)
+	H.enable_ui()
+	H.pause(6000)
+	local ak = db.actor:object("wpn_ak74")
+	C.check("mechanics", "upgrade-persists", ak ~= nil and ak:has_upgrade("up_firsta_ak74"), "has_upgrade after the load: " .. tostring(ak and ak:has_upgrade("up_firsta_ak74")))
+	C.check("mechanics", "repair-persists", ak ~= nil and math.abs(ak:condition() - 0.89) < 0.02, string.format("condition after the load %.3f", ak and ak:condition() or -1))
+	return C.done("chk_mechanics")
+end
+
+-- HUD ------------------------------------------------------------------------------------------------------------------------------------
+local function hud_plan()
+	start_quiet()
+	give("wpn_ak74", 1)
+	give("ammo_5.45x39_fmj", 2, 30)
+	give("medkit", 1)
+	H.pause(2500)
+	local hud = get_hud()
+	C.check("hud", "present", hud ~= nil, "get_hud() returns the HUD")
+	local ak = db.actor:object("wpn_ak74")
+	db.actor:move_to_slot(ak, 3)
+	db.actor:make_item_active(ak)
+	H.pause(5000)
+	C.run("hud", "weapon-screenshot", function() return C.shot("chk_hud_weapon"), "screenshot with the rifle up" end)
+	-- indicators the survival scripts drive: wound, radiation, hunger
+	local cond = db.actor:cast_Actor():conditions()
+	local hit_ = hit()
+	hit_.type = hit.wound
+	hit_.power = 0.2
+	hit_.impulse = 0
+	hit_.direction = vector():set(0, 0, 1)
+	hit_.draftsman = db.actor
+	db.actor:hit(hit_)
+	cond:ChangeRadiation(0.5)
+	cond:ChangeSatiety(-0.7)
+	H.pause(6000)
+	C.check("hud", "state", db.actor.bleeding > 0 and db.actor.radiation > 0.3, string.format("bleeding %.3f, radiation %.3f, satiety %.2f", db.actor.bleeding, db.actor.radiation, cond:GetSatiety()))
+	C.run("hud", "indicators-screenshot", function() return C.shot("chk_hud_indicators"), "screenshot with bleeding, radiation and hunger" end)
+	C.check("hud", "indicator-levels", actor_status.get_radiation(true) >= 1 and actor_status.get_satienty(true) >= 1, string.format("radiation indicator %s, hunger indicator %s", tostring(actor_status.get_radiation(true)), tostring(actor_status.get_satienty(true))))
+	-- HUD hidden and shown again
+	get_console():execute("hud_draw off")
+	H.pause(1200)
+	C.shot("chk_hud_off")
+	get_console():execute("hud_draw on")
+	H.pause(1200)
+	C.check("hud", "toggle", get_console():get_bool("hud_draw"), "hud_draw back on")
+	-- zone map and weapon zoom reticle exist
+	C.run("hud", "zone-map", function() local zm = hud and true return zm, "get_hud() alive with the minimap on screen" end)
+	return C.done("chk_hud")
+end
+
+-- main menu and options ----------------------------------------------------------------------------------------------------------------------
+-- The main menu stops the level, and the driver with it: tools/sweep/run.sh opens and closes it from the --script timeline and calls
+-- menu_verify() through the console's run_string while it is up.
+local menu_off_seen = false
+local menu_on_time = nil
+function menu_verify(state)
+	local ok, err = pcall(function()
+		-- the main menu stops the game behind it: the game clock must not move between "on" and "off" (it moves 6 s per second otherwise)
+		if state == "on" then
+			menu_on_time = game.get_game_time()
+			C.check("menu", "main-menu-on", level.present() and db.actor ~= nil, "main_menu on with a level loaded; see chk_menu_main.png")
+		else
+			menu_off_seen = true
+			local moved = menu_on_time and game.get_game_time():diffSec(menu_on_time) or -1
+			C.check("menu", "main-menu-pauses", moved >= 0 and moved < 20, string.format("the game clock moved %.0f game seconds in the 6 s the menu was up", moved))
+			C.check("menu", "main-menu-off", level.present() and db.actor ~= nil and db.actor:alive(), "back in the game")
+		end
+	end)
+	if not ok then C.check("menu", "main-menu-" .. state, false, "Lua error: " .. tostring(err)) end
+end
+
+local function menu_plan()
+	start_quiet()
+	-- the options window: open from the main state, look at it, close it
+	local opt
+	C.on_main(function()
+		opt = ui_options.UIOptions()
+		opt.owner = nil
+		opt:ShowDialog(true)
+		opt:Reset_last_opt()
+	end)
+	H.pause(3500)
+	C.check("menu", "options-open", opt ~= nil and opt:IsShown(), "the options window is up")
+	C.run("menu", "options-screenshot", function() return C.shot("chk_menu_options"), "screenshot chk_menu_options" end)
+	C.on_main(function() opt:HideDialog() end)
+	H.pause(1500)
+	C.check("menu", "options-close", not opt:IsShown(), "closed")
+
+	-- options keep what they are given: the game's options file and the console variables behind them
+	for _, spec in ipairs({
+		{ id = "gameplay/fast_travel/state", values = { 0, 2 } },
+		{ id = "alife/event/emission_frequency", values = { 3, 6 } },
+		{ id = "other/quicksave_cnt", values = { 5, 10 } },
+	}) do
+		C.run("menu", "option/" .. spec.id, function()
+			local old = ui_options.get(spec.id)
+			ui_options.set(spec.id, spec.values[1])
+			local a = ui_options.get(spec.id)
+			ui_options.set(spec.id, spec.values[2])
+			local b = ui_options.get(spec.id)
+			ui_options.set(spec.id, old)
+			return tonumber(a) == spec.values[1] and tonumber(b) == spec.values[2], string.format("%s: set %s read %s, set %s read %s, restored %s", spec.id, tostring(spec.values[1]), tostring(a), tostring(spec.values[2]), tostring(b), tostring(ui_options.get(spec.id)))
+		end)
+	end
+	-- the options file: written in the app's appdata, the game folder's copy (the default) is left alone (it is shared by every game on
+	-- the Mac and read-only on the iPad; a new-game request another game wrote there once sent this one back to the start)
+	C.run("menu", "options-file-in-appdata", function()
+		local game_file = getFS():update_path("$game_config$", "") .. "axr_options.ltx"
+		local function slurp(path)
+			local f = io.open(path, "rb")
+			if not f then return nil end
+			local t = f:read("*a")
+			f:close()
+			return t
+		end
+		local before = slurp(game_file)
+		axr_main.config:w_value("sweep_check", "options_file", "1")
+		axr_main.config:save()
+		axr_main.config:w_value("sweep_check", "options_file")
+		axr_main.config:save()
+		local user_file = getFS():update_path("$app_data_root$", "") .. "axr_options.ltx"
+		local written = slurp(user_file)
+		return axr_main.config.fname == user_file and written ~= nil and slurp(game_file) == before, string.format("saved to %s (%d bytes); the game folder's copy %s", tostring(axr_main.config.fname), written and #written or -1, slurp(game_file) == before and "untouched" or "CHANGED")
+	end)
+	C.run("menu", "console-variable", function()
+		local c = get_console()
+		local before = c:get_float("snd_volume_music")
+		c:execute("snd_volume_music 0.31")
+		local after = c:get_float("snd_volume_music")
+		c:execute("snd_volume_music " .. tostring(before))
+		return math.abs(after - 0.31) < 0.01, string.format("snd_volume_music %.2f -> %.2f -> %.2f", before, after, c:get_float("snd_volume_music"))
+	end)
+
+	-- the load and save dialogs list the saves
+	C.run("menu", "load-dialog", function()
+		local dlg
+		C.on_main(function()
+			dlg = ui_load_dialog.UILoadDialog()
+			dlg:ShowDialog(true)
+		end)
+		H.pause(3000)
+		local shown = dlg ~= nil and dlg:IsShown()
+		C.shot("chk_menu_load")
+		C.on_main(function() dlg:HideDialog() end)
+		H.pause(1500)
+		return shown, "the load window listed the saves and was closed: shown " .. tostring(shown)
+	end)
+	-- stay up for the timeline's menu steps (they come at +10 s after the level is ready); the level stands still while the menu is up
+	H.wait_for("the menu to have been opened and closed", 240000, function() return menu_off_seen end)
+	H.pause(2000)
+	return C.done("chk_menu")
+end
+
+function plans(c, h)
+	C, H = c, h
+	local out = {}
+	out.chk_pda = { pda_plan }
+	out.chk_tasks = { tasks_plan }
+	out.chk_stash = { stash_plan }
+	out.chk_mechanics = { mechanics_plan, mechanics_after_load }
+	out.chk_hud = { hud_plan }
+	out.chk_menu = { menu_plan }
+	return out
+end

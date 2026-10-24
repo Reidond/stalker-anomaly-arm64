@@ -21,6 +21,7 @@
 #           --out <dir>         where the run's files go (default build/sweep-runs/<time>-<plan>)
 #           --state <dir>       the app's ANOMALY_STATE_ROOT (default build/sweep-state; keeps sweep_base between runs)
 #           --plain             no sanitizer environment (for a release build)
+#           --script-file <f>   use this --script timeline instead of the generated one (menu path and quit included)
 #           --tsan              the ThreadSanitizer build (cmake --preset macos-arm64-tsan, default app build/macos-arm64-tsan/...) with
 #                               TSAN_OPTIONS and tools/sweep/tsan.supp instead of the ASan/UBSan environment; use --scale 3 and a
 #                               longer --timeout (the game runs 5 to 15 times slower)
@@ -50,6 +51,7 @@ plain=0
 tsan=0
 app_explicit=0
 plan=""
+script_file=""
 size="1280x720"
 density=2
 
@@ -62,6 +64,7 @@ while [ $# -gt 0 ]; do
         --out) out="$2"; shift 2 ;;
         --state) state="$2"; shift 2 ;;
         --plain) plain=1; shift ;;
+        --script-file) script_file="$2"; shift 2 ;;
         --tsan) tsan=1; shift ;;
         --size) size="$2"; shift 2 ;;
         --density) density="$2"; shift 2 ;;
@@ -103,6 +106,7 @@ base_save="$appdata/savedgames/sweep_base.scop"
 # Lua driver, which follows the game, not the clock.
 script="$out/run.script"
 start_new_game=0
+seed_faction=""
 menu_only=0
 quit_after=""
 case "$plan" in
@@ -113,6 +117,7 @@ case "$plan" in
         sweep_plan=hold; quit_after=$(awk -v s="$scale" 'BEGIN{printf "%d", 90*s}'); background_at=$(awk -v s="$scale" 'BEGIN{printf "%d", 80*s}') ;;
     quit_loading) start_new_game=1; quit_after=$(awk -v s="$scale" 'BEGIN{printf "%d", 22*s}') ;; # just after Start: the loading screen
     newgame) start_new_game=1 ;;
+    chk_new_*) seed_faction="${plan#chk_new_}" ;; # systems check: a new game as another faction, started from the console
     smoke) [ -f "$base_save" ] || start_new_game=1 ;;
     *) [ -f "$base_save" ] || { echo "no sweep_base save in $appdata/savedgames: run 'tools/sweep/run.sh newgame' first" >&2; exit 2; } ;;
 esac
@@ -136,6 +141,22 @@ hard_stop=$(( timeout_s - 60 ))
         # a cold shader cache makes the loading take minutes, so the "press any key" of its end cannot be on a fixed time:
         # keep tapping (Left Shift is the least harmful key once the game runs)
         awk -v s="$scale" -v end="${quit_after:-$hard_stop}" 'BEGIN{ for (t = 60; t < end / s; t += 15) printf "%.1f key Left Shift\n", t*s }'
+    elif [ -n "$seed_faction" ]; then
+        # the faction dialog only writes [character_creation] of axr_options.ltx and starts the game; do the same from the menu's Lua
+        echo "4 console run_string sweep_check_play.seed(\"$seed_faction\")"
+        echo "5 console start server(all/single/alife/new) client(localhost)"
+        awk -v s="$scale" -v end="$hard_stop" 'BEGIN{ for (t = 20; t < end / s; t += 15) printf "%.1f key Left Shift\n", t*s }'
+    elif [ "$plan" = chk_menu ]; then
+        # the main menu stops the level (and the driver with it), so this plan is driven from the timeline: load the base save, wait for
+        # the level, then open the menu, look at it from Lua (run_string), close it
+        echo "4 console start server(sweep_base/single/alife/load) client(localhost)"
+        awk -v s="$scale" 'BEGIN{ for (t = 20; t < 80; t += 15) printf "%.1f key Left Shift\n", t*s }'
+        echo "90 waitlevel 300 l01_escape"
+        echo "100 console main_menu on"
+        echo "102 console run_string sweep_check_ui.menu_verify(\"on\")"
+        echo "104 console screenshot chk_menu_main"
+        echo "108 console main_menu off"
+        echo "111 console run_string sweep_check_ui.menu_verify(\"off\")"
     elif [ "$menu_only" = 0 ]; then
         echo "4 console start server(sweep_base/single/alife/load) client(localhost)"
         # every loading screen (also the one of a reload) waits for "press any key" and the game does not run until then; a tap of Left Shift (sprint) is the least harmful key
@@ -144,10 +165,17 @@ hard_stop=$(( timeout_s - 60 ))
     [ -n "${background_at:-}" ] && echo "$background_at lifecycle background"
     echo "${quit_after:-$hard_stop} quit"
 } > "$script"
+[ -z "$script_file" ] || cp "$script_file" "$script"
 
 # ---- environment ------------------------------------------------------------------------------------------------------
 # the overlay is read from the checkout, not from the bundle, so an edit of gamedata/ (the driver) needs no relink
 env_args=(--env "ANOMALY_STATE_ROOT=$state" --env "ANOMALY_SWEEP=${sweep_plan:-$plan}" --env "ANOMALY_OVERLAY=$repo/gamedata")
+# settings of a plan (the soak's length and mode), passed through to the driver's os.getenv
+for v in SWEEP_MINUTES SWEEP_SOAK_MODE; do
+    [ -z "${!v:-}" ] || env_args+=(--env "$v=${!v}")
+done
+# SWEEP_ENV="NAME=value NAME=value": more environment for the app (e.g. MallocStackLogging=lite to find who allocates)
+for kv in ${SWEEP_ENV:-}; do env_args+=(--env "$kv"); done
 # SWEEP_APP_ENV="K=V K=V": more environment variables for the app (MallocScribble=1 MallocPreScribble=1 turns a use after free into a wild pointer)
 for kv in ${SWEEP_APP_ENV:-}; do env_args+=(--env "$kv"); done
 if [ "$tsan" = 1 ]; then
@@ -168,6 +196,7 @@ elif [ "$plain" = 0 ]; then
     )
 fi
 
+rm -f "$appdata/sweep_state.txt" "$appdata"/chk_soak.txt "$appdata"/chk_snapshot.txt "$appdata"/chk_companion.txt "$appdata"/chk_travel_retry.txt # a plan starts at its first phase
 rm -f "$log_dir"/xray_*.log "$shell_log_dir"/anomaly-crash.log "$log_dir"/*.crash.txt 2>/dev/null
 
 echo "plan $plan, out $out"
