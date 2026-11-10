@@ -693,9 +693,36 @@ static int str_gsub (lua_State *L) {
 #define MAX_FORMAT	(sizeof(FLAGS) + sizeof(LUA_INTFRMLEN) + 10)
 
 
+/* ANOMALY: %s and %q take any value, as in LuaJIT: a __tostring metamethod is
+** called once; otherwise nil, booleans and other objects are written as
+** tostring writes them. Stock 5.1 accepts only strings and numbers, and the
+** scripts pass booleans and nil to %s in log and UI strings. The argument is
+** replaced in place, so the luaL_Buffer's stack slots above it are untouched. */
+static void tostring_arg (lua_State *L, int arg) {
+  int t = lua_type(L, arg);
+  if (t == LUA_TSTRING || t == LUA_TNUMBER) return;
+  if (luaL_callmeta(L, arg, "__tostring")) {
+    if (lua_isstring(L, -1)) {
+      lua_replace(L, arg);
+      return;
+    }
+    lua_pop(L, 1);
+  }
+  switch (t) {
+    case LUA_TNIL: lua_pushliteral(L, "nil"); break;
+    case LUA_TBOOLEAN: lua_pushstring(L, lua_toboolean(L, arg) ? "true" : "false"); break;
+    case LUA_TNONE: luaL_argerror(L, arg, "no value"); break;
+    default: lua_pushfstring(L, "%s: %p", luaL_typename(L, arg), lua_topointer(L, arg)); break;
+  }
+  lua_replace(L, arg);
+}
+
+
 static void addquoted (lua_State *L, luaL_Buffer *b, int arg) {
   size_t l;
-  const char *s = luaL_checklstring(L, arg, &l);
+  const char *s;
+  tostring_arg(L, arg);  /* ANOMALY */
+  s = luaL_checklstring(L, arg, &l);
   luaL_addchar(b, '"');
   while (l--) {
     switch (*s) {
@@ -798,7 +825,9 @@ static int str_format (lua_State *L) {
         }
         case 's': {
           size_t l;
-          const char *s = luaL_checklstring(L, arg, &l);
+          const char *s;
+          tostring_arg(L, arg);  /* ANOMALY */
+          s = luaL_checklstring(L, arg, &l);
           if (!strchr(form, '.') && l >= 100) {
             /* no precision and string is too long to be formatted;
                keep original string */

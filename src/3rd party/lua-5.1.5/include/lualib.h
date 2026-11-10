@@ -36,6 +36,17 @@ LUALIB_API int (luaopen_math) (lua_State *L);
 #define LUA_DBLIBNAME	"debug"
 LUALIB_API int (luaopen_debug) (lua_State *L);
 
+/* ANOMALY: LuaBitOp (bitop/bit.c), opened by luaL_openlibs as LuaJIT opens its
+** built-in bit library */
+#define LUA_BITLIBNAME	"bit"
+LUALIB_API int (luaopen_bit) (lua_State *L);
+
+/* ANOMALY: the VM state the sampling profiler reads (lanomaly.c): 'I' Lua
+** bytecode, 'C' a C function called from Lua, 'G' the garbage collector,
+** 'N' outside Lua. Written by the thread running the VM; meant to be read from
+** a signal handler on that thread. */
+LUA_API int (lua51_vmstate) (void);
+
 #define LUA_LOADLIBNAME	"package"
 LUALIB_API int (luaopen_package) (lua_State *L);
 

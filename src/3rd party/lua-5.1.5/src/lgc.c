@@ -21,6 +21,7 @@
 #include "lstring.h"
 #include "ltable.h"
 #include "ltm.h"
+#include "lanomaly.h"  /* ANOMALY */
 
 
 #define GCSTEPSIZE	1024u
@@ -610,6 +611,8 @@ static l_mem singlestep (lua_State *L) {
 void luaC_step (lua_State *L) {
   global_State *g = G(L);
   l_mem lim = (GCSTEPSIZE/100) * g->gcstepmul;
+  int vms;  /* ANOMALY: VM state for the profiler */
+  lua51_vmstate_enter('G', vms);
   if (lim == 0)
     lim = (MAX_LUMEM-1)/2;  /* no limit */
   g->gcdept += g->totalbytes - g->GCthreshold;
@@ -629,11 +632,14 @@ void luaC_step (lua_State *L) {
   else {
     setthreshold(g);
   }
+  lua51_vmstate_leave(vms);  /* ANOMALY */
 }
 
 
 void luaC_fullgc (lua_State *L) {
   global_State *g = G(L);
+  int vms;  /* ANOMALY: VM state for the profiler */
+  lua51_vmstate_enter('G', vms);
   if (g->gcstate <= GCSpropagate) {
     /* reset sweep marks to sweep all elements (returning them to white) */
     g->sweepstrgc = 0;
@@ -655,6 +661,7 @@ void luaC_fullgc (lua_State *L) {
     singlestep(L);
   }
   setthreshold(g);
+  lua51_vmstate_leave(vms);  /* ANOMALY */
 }
 
 

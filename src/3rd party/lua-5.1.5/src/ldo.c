@@ -29,6 +29,7 @@
 #include "lundump.h"
 #include "lvm.h"
 #include "lzio.h"
+#include "lanomaly.h"  /* ANOMALY */
 
 
 
@@ -110,6 +111,7 @@ void luaD_throw (lua_State *L, int errcode) {
 
 int luaD_rawrunprotected (lua_State *L, Pfunc f, void *ud) {
   struct lua_longjmp lj;
+  int vms = lua51_vmstate_;  /* ANOMALY: the VM state is restored on errors */
   lj.status = 0;
   lj.previous = L->errorJmp;  /* chain new error handler */
   L->errorJmp = &lj;
@@ -117,6 +119,15 @@ int luaD_rawrunprotected (lua_State *L, Pfunc f, void *ud) {
     (*f)(L, ud);
   );
   L->errorJmp = lj.previous;  /* restore old error handler */
+  lua51_vmstate_leave(vms);
+  if (lj.status == -1) {
+    /* ANOMALY: a C++ exception that is not a Lua error crossed this call (the
+    ** catch(...) of LUAI_TRY): report it as a runtime error with a message,
+    ** as LuaJIT does, instead of an unknown status with no error object. */
+    lj.status = LUA_ERRRUN;
+    setsvalue2s(L, L->top, luaS_newliteral(L, "C++ exception"));
+    incr_top(L);
+  }
   return lj.status;
 }
 
@@ -317,7 +328,12 @@ int luaD_precall (lua_State *L, StkId func, int nresults) {
     if (L->hookmask & LUA_MASKCALL)
       luaD_callhook(L, LUA_HOOKCALL, -1);
     lua_unlock(L);
-    n = (*curr_func(L)->c.f)(L);  /* do the actual call */
+    {
+      int vms;  /* ANOMALY: VM state for the profiler */
+      lua51_vmstate_enter('C', vms);
+      n = (*curr_func(L)->c.f)(L);  /* do the actual call */
+      lua51_vmstate_leave(vms);
+    }
     lua_lock(L);
     if (n < 0)  /* yielding? */
       return PCRYIELD;
@@ -374,8 +390,12 @@ void luaD_call (lua_State *L, StkId func, int nResults) {
     else if (L->nCcalls >= (LUAI_MAXCCALLS + (LUAI_MAXCCALLS>>3)))
       luaD_throw(L, LUA_ERRERR);  /* error while handing stack error */
   }
-  if (luaD_precall(L, func, nResults) == PCRLUA)  /* is a Lua function? */
+  if (luaD_precall(L, func, nResults) == PCRLUA) {  /* is a Lua function? */
+    int vms;  /* ANOMALY: VM state for the profiler */
+    lua51_vmstate_enter('I', vms);
     luaV_execute(L, 1);  /* call it */
+    lua51_vmstate_leave(vms);
+  }
   L->nCcalls--;
   luaC_checkGC(L);
 }
@@ -402,6 +422,7 @@ static void resume (lua_State *L, void *ud) {
     else  /* yielded inside a hook: just continue its execution */
       L->base = L->ci->base;
   }
+  lua51_vmstate_ = 'I';  /* ANOMALY: lua_resume's luaD_rawrunprotected restores it */
   luaV_execute(L, cast_int(L->ci - L->base_ci));
 }
 

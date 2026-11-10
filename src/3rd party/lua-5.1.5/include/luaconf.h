@@ -161,7 +161,14 @@
 
 #else
 
+/* ANOMALY: the library is compiled as C++ (errors unwind as C++ exceptions,
+** see LUAI_THROW) but keeps C linkage, so C files and C++ files that include
+** lua.h inside extern "C" link to the same symbols. */
+#if defined(__cplusplus)
+#define LUA_API		extern "C"
+#else
 #define LUA_API		extern
+#endif
 
 #endif
 
@@ -348,7 +355,9 @@
 ** CHANGE it to 2 if you want the old behaviour, or undefine it to turn
 ** off the advisory error when nesting [[...]].
 */
-#define LUA_COMPAT_LSTR		1
+/* ANOMALY: off, as in LuaJIT: "[[" inside a long string or comment is text,
+** not an error (5.1's default 1 rejects it). */
+/* #define LUA_COMPAT_LSTR		1 */
 
 /*
 @@ LUA_COMPAT_GFIND controls compatibility with old 'string.gfind' name.

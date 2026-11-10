@@ -297,6 +297,28 @@ static void read_string (LexState *ls, int del, SemInfo *seminfo) {
           case 'r': c = '\r'; break;
           case 't': c = '\t'; break;
           case 'v': c = '\v'; break;
+          /* ANOMALY: LuaJIT's (and Lua 5.2's) \xXX and \z escapes; the
+          ** Monolith scripts write UTF-8 icon glyphs as \xXX. */
+          case 'x': {
+            int i;
+            c = 0;
+            for (i = 0; i < 2; i++) {
+              next(ls);
+              if (!isxdigit(ls->current))
+                luaX_lexerror(ls, "hexadecimal digit expected", TK_STRING);
+              c = 16*c + (isdigit(ls->current) ? ls->current - '0' :
+                                                 (tolower(ls->current) - 'a' + 10));
+            }
+            break;
+          }
+          case 'z': {
+            next(ls);
+            while (isspace(ls->current)) {
+              if (currIsNewline(ls)) inclinenumber(ls);
+              else next(ls);
+            }
+            continue;
+          }
           case '\n':  /* go through */
           case '\r': save(ls, '\n'); inclinenumber(ls); continue;
           case EOZ: continue;  /* will raise an error next loop */
