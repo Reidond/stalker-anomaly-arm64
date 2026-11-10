@@ -3,7 +3,9 @@
 Decision of 2026-11-10 on the six spikes of [PLAN.md](PLAN.md). **Go: build the port as planned, as
 32-bit WebAssembly with a WebGPU renderer.** No spike found a blocker. Three parts of the plan change
 (input, audio, the data cache), and the spikes found risks the plan did not list (saves, storage
-quota, request limits, GPU memory). `PLAN.md` is revised to match.
+quota, request limits, GPU memory). `PLAN.md` is revised to match. Two checks run after the spikes,
+on the hosting plan and on the real storage limit, are under
+[Checked after the spikes](#checked-after-the-spikes).
 
 Each spike's document has the numbers, the method and its own list of what was not verified:
 [LUA51.md](LUA51.md) (S1a), [WASM-BUILD.md](WASM-BUILD.md) (S1b), [SHADERS-WGSL.md](SHADERS-WGSL.md)
@@ -19,7 +21,7 @@ Each spike's document has the numbers, the method and its own list of what was n
 | S2 | Do the shaders reach WGSL? | Yes, with three SPIR-V rewrites | 1478 of 1486 jobs (99.5 %) over four profiles. Of the 253 shaders a default run requests, 251 pass; the other two belong to 3D fluid, which is off on web |
 | S3 | Does the heap fit in 4 GB? | Yes, and not in 2 GB | 1.2 GB in play, 1.4 to 1.8 GB at a level load, 2.5 GB if the allocator keeps what it frees |
 | S4a | Does the hosting work? | Yes | Worker, private bucket and Access are deployed. All of `db/` is published: 67 archives, 15.97 GiB, 4,128 chunks, 31.5 minutes, verified |
-| S4b | Does the browser environment work? | Yes for rendering, storage and audio. Input needs a page bridge. DualSense is not tried on a pad | 4,000 draws cost 1.0 ms of CPU a frame. OPFS reads 7.4 to 7.9 GiB/s. The storage quota was 10.0 GiB |
+| S4b | Does the browser environment work? | Yes for rendering, storage and audio. Input needs a page bridge. DualSense is not tried on a pad | 4,000 draws cost 1.0 ms of CPU a frame. OPFS reads 7.4 to 7.9 GiB/s. The reported storage quota was 10.0 GiB |
 
 ## The plan's risks after W0
 
@@ -40,12 +42,15 @@ New risks:
   is not Apple's is unknown.
 - **GPU memory.** Textures, render targets and geometry take 2.7 to 3.4 GB on the GPU at texture
   level 1. The web graphics profile has to choose by device.
-- **Storage quota.** Chrome offered 4.8 to 13.9 GiB of OPFS in the profiles measured, less than the
-  16 GB of data. The browser copy becomes a capped cache, not a mirror.
+- **Storage space.** Chrome reported 4.8 to 13.9 GiB of OPFS quota in the profiles measured, less
+  than the 16 GB of data. The report is not the limit (see below), but the real limit is not found
+  and depends on the player's disk. The browser copy is a cache with a cap, and it has to handle a
+  refused write.
 - **Saves are tied to the Lua VM.** A save holds bytecode, so a web save does not load on the Mac or
   the iPad, and the other way round.
 - **Request limit.** Every request runs the Worker. A full download is about 4,100 requests, and a
-  free Workers plan allows 100,000 a day.
+  free Workers plan allows 100,000 a day. The deployment turned out to be on a paid plan (see
+  below), which has no daily limit, so this is no longer a risk.
 
 ## Changes to the plan
 
@@ -56,6 +61,7 @@ All are made in `PLAN.md`:
 2. **Audio:** OpenAL Soft renders through its loopback device on a worker thread and an AudioWorklet
    plays it. SDL3's audio backend would mix on the page's main thread.
 3. **Data cache:** OPFS holds the boot set, the current level and what it touches, with eviction.
+   The cap is a setting; the quota the browser reports is not used to size it.
 4. **Occlusion:** boolean results; a sample-count pass replaces pixel counts for flares.
 5. **Allocator:** mimalloc is required, not an optimisation: the engine assumes 16-byte alignment.
 6. **Platform split:** rename `XR_PLATFORM_APPLE` to `XR_PLATFORM_POSIX` where it means POSIX, then
@@ -71,10 +77,29 @@ All are made in `PLAN.md`:
 11. **Web graphics profile:** the iPad's memory settings: a 64 MB sound cache and no CPU copies of
     textures, which would cost 1.0 GB of heap.
 
+## Checked after the spikes
+
+Run on 2026-11-10 on the owner's Mac, after the spike documents were written. On these two points
+they replace what `HOSTING.md` and `BROWSER-LAB.md` leave open.
+
+- **Workers plan.** The hosting account is on Workers Paid (`cf accounts subscriptions get`). The
+  free plan's 100,000 requests a day does not apply.
+- **Storage limit.** In the owner's normal Chrome 157 profile, on the deployed origin,
+  `navigator.storage.estimate()` reported a quota of 10 GiB with nothing stored. A 12 GiB file and
+  then a 20 GiB file were written to OPFS through `createWritable()` in 64 MiB writes, with no
+  error (23 s and 36 s). While writing, the reported quota was the usage plus 10 GiB each time
+  (22 GiB at 12 used, 30 GiB at 20 used). The figure is a fixed headroom, not the limit, and the
+  whole data set fits on this machine. The probe file was discarded and usage went back to zero.
+  The disk is 926 GiB with 326 GiB free.
+
+  Not measured: the real limit, a small or nearly full disk, `persist()`, other browsers, and the
+  sync access handle the engine will write through.
+
 ## Not known yet
 
 | Question | Answered by |
 |---|---|
+| The browser's real storage limit; a small or nearly full disk | W1h (refused writes), W3 (other machines) |
 | Lua 5.1 and C++ exceptions in wasm | W1c |
 | Frame CPU, heap and binary size of the whole engine in wasm | W1j |
 | mimalloc's retained memory at the largest level load | W1j |
@@ -89,7 +114,5 @@ All are made in `PLAN.md`:
 1. **DualSense on a real pad**, USB then Bluetooth: the checklist in `BROWSER-LAB.md`, section 4.
    Everything about the pad is untested until then.
 2. **Esc with a real keyboard:** steps 3 to 5 of "To run it in your own Chrome" in `BROWSER-LAB.md`.
-3. **Storage quota in a normal Chrome profile:** step 6 of the same list.
-4. **The hosting account's Workers plan,** for the daily request limit.
-5. **The players' machines:** operating system, GPU and memory. They decide the web graphics profile
+3. **The players' machines:** operating system, GPU and memory. They decide the web graphics profile
    and where the first x86 run happens.

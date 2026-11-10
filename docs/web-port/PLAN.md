@@ -190,9 +190,13 @@ A second implementation of the same D3D11 headers, written against the C `webgpu
 - The web backend runs on the I/O thread: it keeps chunks in the browser's private file system
   (OPFS) and fetches missing ones while the engine thread waits. Measured in S4b: a stored chunk
   arrives in under 1 ms, a missing one in 10 to 17 ms from a local server.
-- **OPFS is a capped cache with eviction, not a full copy.** Chrome offered 4.8 to 13.9 GiB in the
-  profiles measured, less than the data. The cache holds the boot set, the current level and the
-  parts of the shared archives it touches. Chunks are not also cached in the heap.
+- **OPFS is a cache with a cap and eviction, not a full copy by default.** The cap is a setting and
+  is not taken from the browser: Chrome 157 reported a quota of usage plus 10 GiB at every size
+  tried, and the owner's Chrome accepted 20 GiB while reporting 10 (`W0-RESULTS.md`). The real
+  limit is not known, so the store treats a refused write as a full cache: it evicts and retries.
+  By default the cache holds the boot set, the current level and the parts of the shared archives
+  it touches; where the disk allows, the cap can cover all the data. Chunks are not also cached in
+  the heap.
 - The stock data is 67 archives under `db/`, 15.97 GiB: levels 6.9 GB, textures 7.0 GB, meshes
   1.4 GB, sounds 1.0 GB, configs 24 MB. All of it is published. A few small loose files
   (`fsgame.ltx`, `gamedata/`) and the repo's own `gamedata` overlay are not yet; they join the boot
@@ -261,10 +265,11 @@ Deployed in S4a (`HOSTING.md`):
 - Publishing all of `db/` took 31.5 minutes with 8 parallel `cf r2 objects put`; a rerun uploads
   only chunks that are missing. `cf` accepts at most 300 MB per object, which chunking avoids.
   Chunks no index refers to are not pruned yet.
-- Cost: about $0.10 a month for the storage above the free 10 GB, and egress is free. Requests are
-  the limit to watch: every request runs the Worker, a full download is about 4,100 of them, and a
-  free Workers plan allows 100,000 a day. If that binds: a paid plan, larger chunks, or Cloudflare's
-  Workers Cache in front of the Worker.
+- Cost: about $0.10 a month for the storage above the free 10 GB, and egress is free. Every request
+  runs the Worker, and a full download is about 4,100 of them. The deployment is on the Workers
+  Paid plan, which has no daily limit; a free plan stops at 100,000 requests a day, about 24 full
+  downloads. Larger chunks, or Cloudflare's Workers Cache in front of the Worker, would cut the
+  count.
 - The `cf` CLI is a beta, pinned at 1.0.0-beta.28. Its `deploy` ignores the Worker's configuration,
   so the Worker is deployed with `wrangler`; everything else goes through `cf`.
 - The address, account and allow-list are deployment settings and stay out of the repo.
@@ -274,7 +279,8 @@ Deployed in S4a (`HOSTING.md`):
 The data source is a loader setting. A deployment without a data bucket shows three steps instead:
 open the ModDB page, download the one archive, drop it on the page. It unpacks into OPFS with a
 progress bar, verifies files against the existing game-data manifest, and resumes after a reload.
-The storage quota above limits this too.
+It needs room for all 16 GiB in OPFS. The owner's Chrome accepted that much; other machines are not
+tested.
 
 ## Risks, largest first
 
@@ -286,16 +292,18 @@ The storage quota above limits this too.
 3. **GPU memory.** 2.7 to 3.4 GB at texture level 1. The graphics profile must fit the device.
 4. **Asynchronous GPU results.** Occlusion is boolean and one frame late; readbacks are
    asynchronous. Flares and light visibility need work to look the same.
-5. **Storage quota.** The browser may offer less than a level set needs, and does not grant
-   persistence to a fresh page. The cache must evict and re-fetch.
+5. **Storage space.** Chrome's reported quota is not its limit: the owner's Chrome accepted 20 GiB
+   while reporting 10. The real limit is not found, small or full disks are not tested, and
+   persistence is not granted to a fresh page. The cache must survive a refused write and eviction
+   by the browser, and re-fetch.
 6. **Renderer defects inherited from M2,** plus the x86-only undefined behaviour class
    (`RENDER-QA.md`), which a third architecture may expose again.
 7. **Saves are tied to the Lua VM,** so nothing moves between the web and the native builds.
-8. **Request limit of the hosting plan,** about 24 full downloads a day on a free plan.
-9. **DualSense over WebHID is untested on hardware.**
+8. **DualSense over WebHID is untested on hardware.**
 
 Measured and now low: shader translation (S2), the heap size (S3), Lua speed on native code and
-the coroutine limit (S1a), worker rendering and storage speed (S4b).
+the coroutine limit (S1a), worker rendering and storage speed (S4b). No longer a risk: the hosting
+plan's daily request limit, since the deployment is on a paid Workers plan.
 
 ## Milestones
 
@@ -323,7 +331,7 @@ Every piece keeps the Apple build and its tests unchanged.
 | W1e | **xrSound and OpenAL Soft for wasm**, with the loopback device | W1a | A smoke tool under Node renders a positioned source with HRTF and reverb into a buffer and checks it |
 | W1f | **xrEngine and the small modules for wasm** (xrNetServer, xrXMLParser) | W1a | They compile for wasm as libraries |
 | W1g | **xrServerEntities and xrGame for wasm**, with the luabind bindings | W1a, W1c | They compile for wasm as libraries |
-| W1h | **Chunk store**: the index reader, the I/O thread, the capped OPFS cache with eviction, as a backend of W1b's interface | W1b | In headless Chrome against a local Worker: all archives register from the index, a config file and a large level entry read correctly, and the cache stays under its cap while evicting |
+| W1h | **Chunk store**: the index reader, the I/O thread, the capped OPFS cache with eviction, as a backend of W1b's interface | W1b | In headless Chrome against a local Worker: all archives register from the index, a config file and a large level entry read correctly, the cache stays under its cap while evicting, and a refused write (injected) evicts and retries |
 | W1i | **Shader pack, first version**: a Mac tool writes reflection for the default request set; the null backend loads it instead of compiling | W1d | The headless run on the Mac passes with shader compilation switched off |
 | W1j | **The whole engine under Node**: R4 on the null backend for wasm, the final link, the headless run | W1b to W1g, W1i | A new game in the Cordon loads from the real archives, ticks A-Life, saves and loads. Reported: frame CPU against the native headless run, heap at the Cordon and at the largest level load, binary size, the thread table |
 | W1k | **Browser boot**: a minimal page (capability check, progress overlay, log), the engine on a worker with the chunk store, the cache-hit header in the Worker | W1h, W1j | In Chrome the engine reaches the Cordon and ticks A-Life, from a local Worker and from the deployed origin. Reported: time and requests for a first and a second boot, heap, and the initial-memory choice |
