@@ -14,8 +14,6 @@ enum XrMapSite
 	XR_MAP_SITE_COUNT = 4
 };
 
-// Call at every mmap (positive) and munmap (negative) of a window.
-void xr_apple_map_note(int site, long long delta_bytes);
 
 // One extra named value an application adds to every sample (the renderer's CPU-visible buffers and textures, for example).
 struct XrMemExtra
@@ -45,6 +43,19 @@ struct XrMemValues
 	uint32_t threads = 0;
 };
 
+// Call at every mmap (positive) and munmap (negative) of a window.
+// The web build is compiled with XR_PLATFORM_APPLE as well (src/Common/Platform.h) but has no mach, malloc zones or task_info: there the
+// counters and the sampler are empty inline functions, and the call sites compile to nothing.
+#if defined(XR_PLATFORM_WEB)
+inline void xr_apple_map_note(int, long long) {}
+inline void xr_apple_memstat_start(const char*, unsigned, XrMemProbe, XrMemLog) {}
+inline void xr_apple_memstat_stop() {}
+inline bool xr_apple_memstat_running() { return false; }
+inline void xr_apple_memstat_now(XrMemValues*) {}
+inline void xr_apple_memstat_mark(const char*) {}
+#else
+void xr_apple_map_note(int site, long long delta_bytes);
+
 // Starts the sampler thread. Every `interval_ms` it reads malloc, the task's memory, the mapped windows and the probe's values,
 // appends a row to the CSV at `csv_path` (may be null: no file), keeps the maximum of every column, and every 10 s writes a
 // "mem:" line through `log`. Safe to call once; later calls are ignored.
@@ -56,3 +67,4 @@ bool xr_apple_memstat_running();
 void xr_apple_memstat_now(XrMemValues* out);
 // A line in the CSV and the log, for correlating a phase with the numbers (e.g. "level loaded").
 void xr_apple_memstat_mark(const char* label);
+#endif // XR_PLATFORM_WEB

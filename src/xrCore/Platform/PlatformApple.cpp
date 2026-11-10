@@ -668,6 +668,7 @@ void xr_apple_vm_info(size_t* free_bytes, size_t* reserved, size_t* committed)
 }
 #endif // !XR_PLATFORM_WEB
 
+#ifndef XR_PLATFORM_WEB // mach, malloc zones and task_info: the web build gets no-op inline versions from XrMemStats.h
 // ---------------------------------------------------------------------------------------------
 // Memory statistics for docs/web-port/MEMORY.md: what a 32-bit WebAssembly heap would have to hold. Counters and a sampler
 // thread only; nothing here changes what the engine does.
@@ -932,6 +933,7 @@ void xr_apple_memstat_mark(const char* label)
 	}
 	s->log_locked("mark");
 }
+#endif // !XR_PLATFORM_WEB
 
 // ---------------------------------------------------------------------------------------------
 // Code pages
