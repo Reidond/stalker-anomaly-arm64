@@ -29,7 +29,10 @@ fs.writeFileSync(path.join(PROFILE, '.web-lab-profile'), 'headless Chrome profil
 
 const chrome = spawn(CHROME, [
   '--headless=new', `--user-data-dir=${PROFILE}`, '--remote-debugging-port=0', '--no-first-run',
-  '--no-default-browser-check', '--mute-audio', '--window-size=1280,1000', 'about:blank',
+  '--no-default-browser-check', '--mute-audio', '--window-size=1280,1000',
+  // Extensions installed for every new profile on this Mac open their own tabs, which hides ours.
+  '--disable-extensions', '--disable-component-extensions-with-background-pages',
+  'about:blank',
 ], { stdio: ['ignore', 'ignore', 'pipe'] });
 let shuttingDown = false;
 const stop = () => { if (!shuttingDown) { shuttingDown = true; chrome.kill('SIGTERM'); } };
@@ -70,16 +73,18 @@ const send = (method, params = {}, sessionId) => new Promise((resolve, reject) =
 });
 
 const version = await send('Browser.getVersion');
-const { targetId } = await send('Target.createTarget', { url: 'about:blank' });
+// Drive the tab Chrome opened at start. A second tab would sit in the background, where it is
+// "hidden": requestAnimationFrame stops on the page and on the worker (the lab, like the engine,
+// stops iterating), and pointer lock and fullscreen are refused.
+const { targetInfos } = await send('Target.getTargets');
+let targetId = targetInfos.find((t) => t.type === 'page')?.targetId;
+if (!targetId) ({ targetId } = await send('Target.createTarget', { url: 'about:blank' }));
 const { sessionId } = await send('Target.attachToTarget', { targetId, flatten: true });
 const s = (method, params) => send(method, params, sessionId);
 await s('Runtime.enable');
 await s('Page.enable');
-// A background tab is "hidden": requestAnimationFrame stops on the page and on the worker, and the
-// lab (like the engine) stops iterating. Make this tab the visible, focused one.
 await send('Target.activateTarget', { targetId });
 await s('Page.bringToFront');
-await s('Emulation.setFocusEmulationEnabled', { enabled: true });
 await s('Page.navigate', { url: URL_ });
 
 const evaluate = async (expr) => {
@@ -100,6 +105,8 @@ const waitFor = async (pred, ms, what) => {
   for (const row of Object.values(r)) if (row.status !== 'pending') console.warn(`  ${row.id} ${row.status}: ${row.summary}`);
   console.warn(consoleLines.slice(-25).map((l) => `  console: ${l}`).join('\n'));
   console.warn('  health:', JSON.stringify(await evaluate('lab.health()')));
+  const t = await send('Target.getTargets');
+  console.warn('  targets:', JSON.stringify(t.targetInfos.map((x) => [x.type, x.url.slice(0, 60), x.attached])));
   return r;
 };
 const settled = (r, id) => r[id] && !['pending', 'running'].includes(r[id].status);
