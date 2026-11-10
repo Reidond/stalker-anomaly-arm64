@@ -75,6 +75,11 @@ const { sessionId } = await send('Target.attachToTarget', { targetId, flatten: t
 const s = (method, params) => send(method, params, sessionId);
 await s('Runtime.enable');
 await s('Page.enable');
+// A background tab is "hidden": requestAnimationFrame stops on the page and on the worker, and the
+// lab (like the engine) stops iterating. Make this tab the visible, focused one.
+await send('Target.activateTarget', { targetId });
+await s('Page.bringToFront');
+await s('Emulation.setFocusEmulationEnabled', { enabled: true });
 await s('Page.navigate', { url: URL_ });
 
 const evaluate = async (expr) => {
@@ -94,6 +99,7 @@ const waitFor = async (pred, ms, what) => {
   const r = await results();
   for (const row of Object.values(r)) if (row.status !== 'pending') console.warn(`  ${row.id} ${row.status}: ${row.summary}`);
   console.warn(consoleLines.slice(-25).map((l) => `  console: ${l}`).join('\n'));
+  console.warn('  health:', JSON.stringify(await evaluate('lab.health()')));
   return r;
 };
 const settled = (r, id) => r[id] && !['pending', 'running'].includes(r[id].status);

@@ -319,9 +319,11 @@ function onFullscreenChange() {
 // ---- Live input panel ----------------------------------------------------------------------------
 
 let lastLive = null;
+let lastLiveAt = 0; // the worker reports every 250 ms while it is iterating
 
 function onLive(d) {
   lastLive = d;
+  lastLiveAt = performance.now();
   const lat = (s) => (s && s.count ? `${fmt(s.median)} ms median, ${fmt(s.p95)} p95 (${s.count})` : 'n/a');
   const card = (title, body) => `<div class="card"><h3>${title}</h3><div class="num"></div></div>`.replace('<div class="num"></div>', `<div class="num">${body}</div>`);
   const counters = (c) => `keys ${c.key_down} down / ${c.key_up} up, last ${c.last_key.startsWith('#') ? KEY_CODES[+c.last_key.slice(1)] ?? c.last_key : c.last_key || '–'}\n` +
@@ -704,7 +706,10 @@ installControls();
 installBridge();
 installPad();
 runPadSelfTest();
-globalThis.lab = { results: () => Object.fromEntries(results), command, setResult };
+globalThis.lab = {
+  results: () => Object.fromEntries(results), command, setResult,
+  health: () => ({ msSinceWorkerReport: performance.now() - lastLiveAt, rafCount, visibility: document.visibilityState, log: $('log').innerText.split('\n').slice(-8) }),
+};
 if (environment()) {
   loadWasm();
   persist().then(estimate).catch((e) => setResult('storage.persist', 'fail', e.message));
