@@ -3,6 +3,9 @@
 //////////////////////////////////////////////////////////////////////
 
 #include "stdafx.h"
+#ifdef XR_PLATFORM_APPLE
+#include "Platform/XrMemStats.h"
+#endif
 #pragma hdrstop
 
 #ifndef XR_PLATFORM_APPLE
@@ -1524,6 +1527,7 @@ static bool archive_read_range(CLocatorAPI::archive& A, u32 ptr, u32 size, u32 g
 		{
 			out.map_base = base;
 			out.map_size = map_size;
+			xr_apple_map_note(XR_MAP_ARCHIVE, (long long)map_size); // counter for docs/web-port/MEMORY.md
 			out.data = (u8*)base + (ptr - start);
 			return true;
 		}
@@ -1568,7 +1572,10 @@ void CLocatorAPI::file_from_archive(IReader*& R, LPCSTR fname, const file& desc)
 	rtc_decompress(dest, desc.size_real, range.data, desc.size_compressed);
 	R = xr_new<CTempReader>(dest, desc.size_real, 0);
 	if (range.map_base)
+	{
+		xr_apple_map_note(XR_MAP_ARCHIVE, -(long long)range.map_size);
 		munmap(range.map_base, range.map_size);
+	}
 	else
 		xr_free(range.data);
 }

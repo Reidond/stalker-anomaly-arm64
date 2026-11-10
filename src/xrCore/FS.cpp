@@ -1,4 +1,7 @@
 #include "stdafx.h"
+#ifdef XR_PLATFORM_APPLE
+#include "Platform/XrMemStats.h"
+#endif
 #pragma hdrstop
 
 #include "fs_internal.h"
@@ -532,6 +535,7 @@ CPackReader::~CPackReader()
 #endif // DEBUG
 
 #ifdef XR_PLATFORM_APPLE
+	xr_apple_map_note(XR_MAP_ARCHIVE, -(long long)map_size); // counter for docs/web-port/MEMORY.md
 	munmap(base_address, map_size);
 #else
 	UnmapViewOfFile(base_address);
@@ -576,6 +580,7 @@ CVirtualFileRW::CVirtualFileRW(const char* cFileName)
 
 	void* view = mmap(NULL, (size_t)Size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
 	R_ASSERT3(view != MAP_FAILED, cFileName, Debug.error2string(GetLastError()));
+	xr_apple_map_note(XR_MAP_LOOSE_RW, (long long)Size); // counter for docs/web-port/MEMORY.md
 	data = (char*)view;
 	hSrcFile = (void*)(intptr_t)(fd + 1);
 	hSrcMap = NULL;
@@ -583,6 +588,7 @@ CVirtualFileRW::CVirtualFileRW(const char* cFileName)
 
 CVirtualFileRW::~CVirtualFileRW()
 {
+	xr_apple_map_note(XR_MAP_LOOSE_RW, -(long long)Size);
 	munmap((void*)data, (size_t)Size);
 	::close(int(intptr_t(hSrcFile)) - 1);
 }
@@ -598,6 +604,7 @@ CVirtualFileReader::CVirtualFileReader(const char* cFileName)
 
 	void* view = mmap(NULL, (size_t)Size, PROT_READ, MAP_PRIVATE, fd, 0);
 	R_ASSERT3(view != MAP_FAILED, cFileName, Debug.error2string(GetLastError()));
+	xr_apple_map_note(XR_MAP_LOOSE_READ, (long long)Size); // counter for docs/web-port/MEMORY.md
 	data = (char*)view;
 	hSrcFile = (void*)(intptr_t)(fd + 1);
 	hSrcMap = NULL;
@@ -605,6 +612,7 @@ CVirtualFileReader::CVirtualFileReader(const char* cFileName)
 
 CVirtualFileReader::~CVirtualFileReader()
 {
+	xr_apple_map_note(XR_MAP_LOOSE_READ, -(long long)Size);
 	munmap((void*)data, (size_t)Size);
 	::close(int(intptr_t(hSrcFile)) - 1);
 }

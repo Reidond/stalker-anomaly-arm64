@@ -27,11 +27,15 @@ void xr_apple_vm_info(size_t* free_bytes, size_t* reserved, size_t* committed); 
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
+#include <cstdio>
 #include <mutex>
 #include <string>
+#include <thread>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
+
+#include "XrMemStats.h"
 
 
 // ---------------------------------------------------------------------------------------------
@@ -663,6 +667,271 @@ void xr_apple_vm_info(size_t* free_bytes, size_t* reserved, size_t* committed)
 		*free_bytes = (size_t)physical - *committed;
 }
 #endif // !XR_PLATFORM_WEB
+
+// ---------------------------------------------------------------------------------------------
+// Memory statistics for docs/web-port/MEMORY.md: what a 32-bit WebAssembly heap would have to hold. Counters and a sampler
+// thread only; nothing here changes what the engine does.
+// ---------------------------------------------------------------------------------------------
+namespace
+{
+std::atomic<long long> g_map_live[XR_MAP_SITE_COUNT];
+std::atomic<long long> g_map_live_total{0};
+std::atomic<long long> g_map_peak{0};
+std::atomic<unsigned long long> g_map_count{0};
+} // namespace
+
+void xr_apple_map_note(int site, long long delta_bytes)
+{
+	if (site < 0 || site >= XR_MAP_SITE_COUNT)
+		return;
+	g_map_live[site].fetch_add(delta_bytes, std::memory_order_relaxed);
+	const long long total = g_map_live_total.fetch_add(delta_bytes, std::memory_order_relaxed) + delta_bytes;
+	if (delta_bytes > 0)
+	{
+		g_map_count.fetch_add(1, std::memory_order_relaxed);
+		long long peak = g_map_peak.load(std::memory_order_relaxed);
+		while (total > peak && !g_map_peak.compare_exchange_weak(peak, total, std::memory_order_relaxed))
+		{
+		}
+	}
+}
+
+namespace
+{
+unsigned count_threads()
+{
+	thread_act_array_t list = nullptr;
+	mach_msg_type_number_t n = 0;
+	if (task_threads(mach_task_self(), &list, &n) != KERN_SUCCESS)
+		return 0;
+	for (mach_msg_type_number_t i = 0; i < n; ++i)
+		mach_port_deallocate(mach_task_self(), list[i]);
+	vm_deallocate(mach_task_self(), (vm_address_t)list, n * sizeof(thread_act_t));
+	return n;
+}
+
+long long ll_max0(long long v) { return v > 0 ? v : 0; }
+
+void read_mem_values(XrMemValues* v, bool with_threads)
+{
+	malloc_statistics_t ms = {};
+	malloc_zone_statistics(nullptr, &ms); // all zones
+	v->malloc_in_use = ms.size_in_use;
+	v->malloc_allocated = ms.size_allocated;
+	v->malloc_blocks = ms.blocks_in_use;
+	v->malloc_max_in_use = ms.max_size_in_use;
+	task_vm_info_data_t info;
+	mach_msg_type_number_t count = TASK_VM_INFO_COUNT;
+	if (task_info(mach_task_self(), TASK_VM_INFO, (task_info_t)&info, &count) == KERN_SUCCESS)
+	{
+		v->footprint = info.phys_footprint;
+		v->internal = info.internal;
+		v->compressed = info.compressed;
+		v->resident = info.resident_size;
+	}
+	v->map_total = 0;
+	for (int i = 0; i < XR_MAP_SITE_COUNT; ++i)
+	{
+		v->map_live[i] = (uint64_t)ll_max0(g_map_live[i].load(std::memory_order_relaxed));
+		v->map_total += v->map_live[i];
+	}
+	v->map_peak = (uint64_t)ll_max0(g_map_peak.load(std::memory_order_relaxed));
+	v->map_count = g_map_count.load(std::memory_order_relaxed);
+	if (with_threads)
+		v->threads = count_threads();
+}
+
+// One row of the CSV: the fixed columns, then the probe's.
+struct MemSampler
+{
+	std::thread thread;
+	std::mutex mutex; // csv, columns and peaks
+	std::condition_variable cv;
+	bool stop = false;
+	bool running = false;
+	FILE* csv = nullptr;
+	XrMemProbe probe = nullptr;
+	XrMemLog log = nullptr;
+	unsigned interval_ms = 100;
+	std::chrono::steady_clock::time_point t0;
+	std::chrono::steady_clock::time_point last_log;
+	std::chrono::steady_clock::time_point last_flush;
+	std::vector<std::string> names;
+	std::vector<uint64_t> cur, peak;
+	std::vector<double> peak_t;
+	bool header_written = false;
+	unsigned threads = 0;
+
+	double now_s() const { return std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count(); }
+
+	static std::string mb(uint64_t v)
+	{
+		char b[32];
+		snprintf(b, sizeof b, "%.0f", double(v) / 1048576.0);
+		return b;
+	}
+
+	// Takes one sample; the caller holds the mutex.
+	void sample_locked()
+	{
+		XrMemValues v;
+		read_mem_values(&v, true);
+		threads = v.threads;
+		XrMemExtra extra[XR_MEM_EXTRA_MAX];
+		const int ne = probe ? std::min(probe(extra), int(XR_MEM_EXTRA_MAX)) : 0;
+		const size_t ncols = 15 + (size_t)ne;
+		if (names.size() != ncols)
+		{
+			names = {"malloc_in_use", "malloc_allocated", "malloc_blocks", "malloc_max_in_use", "footprint", "internal", "compressed",
+			         "resident", "map_archive", "map_stream", "map_loose_read", "map_loose_rw", "map_total", "map_peak", "threads"};
+			for (int i = 0; i < ne; ++i)
+				names.push_back(extra[i].name);
+			cur.assign(ncols, 0);
+			if (peak.size() < ncols)
+			{
+				peak.resize(ncols, 0);
+				peak_t.resize(ncols, 0.0);
+			}
+		}
+		uint64_t* c = cur.data();
+		c[0] = v.malloc_in_use; c[1] = v.malloc_allocated; c[2] = v.malloc_blocks; c[3] = v.malloc_max_in_use;
+		c[4] = v.footprint; c[5] = v.internal; c[6] = v.compressed; c[7] = v.resident;
+		c[8] = v.map_live[XR_MAP_ARCHIVE]; c[9] = v.map_live[XR_MAP_STREAM]; c[10] = v.map_live[XR_MAP_LOOSE_READ];
+		c[11] = v.map_live[XR_MAP_LOOSE_RW]; c[12] = v.map_total; c[13] = v.map_peak; c[14] = v.threads;
+		for (int i = 0; i < ne; ++i)
+			c[15 + i] = extra[i].value;
+		const double t = now_s();
+		for (size_t i = 0; i < ncols; ++i)
+			if (c[i] > peak[i])
+			{
+				peak[i] = c[i];
+				peak_t[i] = t;
+			}
+		if (csv)
+		{
+			if (!header_written)
+			{
+				fprintf(csv, "t_s");
+				for (const std::string& n : names)
+					fprintf(csv, ",%s", n.c_str());
+				fprintf(csv, "\n");
+				header_written = true;
+			}
+			fprintf(csv, "%.3f", t);
+			for (size_t i = 0; i < ncols; ++i)
+				fprintf(csv, ",%llu", (unsigned long long)c[i]);
+			fprintf(csv, "\n");
+			const auto now = std::chrono::steady_clock::now();
+			if (now - last_flush >= std::chrono::seconds(1))
+			{
+				fflush(csv);
+				last_flush = now;
+			}
+		}
+	}
+
+	// A line of the current values with the peaks in brackets; the caller holds the mutex.
+	void log_locked(const char* tag)
+	{
+		if (!log || cur.empty())
+			return;
+		std::string s = std::string("anomaly: mem: ") + tag + " t=" + std::to_string((long long)now_s()) + "s";
+		static const char* const shown[] = {"malloc_in_use", "footprint", "map_total", "map_peak"};
+		auto add = [&](size_t i) {
+			s += std::string(" ") + names[i] + " " + mb(cur[i]) + " (peak " + mb(peak[i]) + ")";
+		};
+		for (size_t i = 0; i < names.size(); ++i)
+		{
+			bool fixed_shown = false;
+			for (const char* n : shown)
+				fixed_shown |= names[i] == n;
+			if (fixed_shown || i >= 15)
+				add(i);
+		}
+		s += " MB, threads " + std::to_string(cur[14]);
+		log(s.c_str());
+	}
+
+	void run()
+	{
+		std::unique_lock<std::mutex> lk(mutex);
+		while (!stop)
+		{
+			sample_locked();
+			const auto now = std::chrono::steady_clock::now();
+			if (now - last_log >= std::chrono::seconds(10))
+			{
+				last_log = now;
+				log_locked("sample");
+			}
+			cv.wait_for(lk, std::chrono::milliseconds(interval_ms), [&] { return stop; });
+		}
+		sample_locked();
+		log_locked("final");
+		if (csv)
+		{
+			fclose(csv);
+			csv = nullptr;
+		}
+	}
+};
+
+MemSampler* g_mem_sampler = nullptr;
+} // namespace
+
+void xr_apple_memstat_start(const char* csv_path, unsigned interval_ms, XrMemProbe probe, XrMemLog log)
+{
+	if (g_mem_sampler)
+		return;
+	MemSampler* s = new MemSampler();
+	s->probe = probe;
+	s->log = log;
+	s->interval_ms = interval_ms ? interval_ms : 100;
+	s->t0 = s->last_log = s->last_flush = std::chrono::steady_clock::now();
+	if (csv_path && *csv_path)
+		s->csv = fopen(csv_path, "w");
+	s->running = true;
+	g_mem_sampler = s;
+	s->thread = std::thread([s] { s->run(); });
+}
+
+void xr_apple_memstat_stop()
+{
+	MemSampler* s = g_mem_sampler;
+	if (!s || !s->running)
+		return;
+	{
+		std::lock_guard<std::mutex> lk(s->mutex);
+		s->stop = true;
+	}
+	s->cv.notify_all();
+	if (s->thread.joinable())
+		s->thread.join();
+	s->running = false;
+	// the sampler object stays (marks after stop are ignored); a few hundred bytes
+}
+
+bool xr_apple_memstat_running() { return g_mem_sampler && g_mem_sampler->running; }
+
+void xr_apple_memstat_now(XrMemValues* out) { read_mem_values(out, true); }
+
+void xr_apple_memstat_mark(const char* label)
+{
+	MemSampler* s = g_mem_sampler;
+	if (!s || !s->running)
+		return;
+	std::lock_guard<std::mutex> lk(s->mutex);
+	s->sample_locked();
+	if (s->csv)
+		fprintf(s->csv, "#mark,%.3f,%s\n", s->now_s(), label ? label : "");
+	if (s->log)
+	{
+		char b[256];
+		snprintf(b, sizeof b, "anomaly: mem: mark %s", label ? label : "");
+		s->log(b);
+	}
+	s->log_locked("mark");
+}
 
 // ---------------------------------------------------------------------------------------------
 // Code pages
