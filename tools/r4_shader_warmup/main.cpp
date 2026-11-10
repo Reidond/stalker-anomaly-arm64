@@ -758,7 +758,7 @@ int main(int argc, char** argv)
     setvbuf(stdout, nullptr, _IOLBF, 0);
     std::string game_dir = R4_WARMUP_DEFAULT_GAME_DIR;
     std::string run_dir = R4_WARMUP_RUN_DIR;
-    std::string filter, json_path;
+    std::string filter, json_path, export_path;
     int passes = 1;
     unsigned jobs = std::max(2u, std::thread::hardware_concurrency());
     bool cold = false, list_only = false, strict = false, skin = true;
@@ -781,6 +781,7 @@ int main(int argc, char** argv)
         else if (a == "--list") list_only = true;
         else if (a == "--dump-msl") ctx.dump_dir = next();
         else if (a == "--strict") strict = true;
+        else if (a == "--export-requests") export_path = next();
         else
         {
             fprintf(stderr, "unknown option %s\n", a.c_str());
@@ -840,6 +841,59 @@ int main(int argc, char** argv)
         for (const Request& r : requests)
             printf("%s%s%s %s%s\n", r.name.c_str(), ext_of(r.kind), r.skinning >= 0 ? (" skin " + std::to_string(r.skinning)).c_str() : "",
                    r.startup ? "[startup]" : "", r.origin.c_str());
+        return 0;
+    }
+
+    if (!export_path.empty())
+    {
+        // --export-requests: every request with the entry point, profile and macro list run_job() would compile it with,
+        // for other translators (tools/shader_batch --requests, docs/web-port/SHADERS-WGSL.md). Tab-separated:
+        //   name ext skin status entry target origin NAME=VALUE...   (status: ok, missing, legacy)
+        std::ofstream ex(export_path, std::ios::trunc);
+        ex << "# r4_shader_warmup --export-requests: default settings, " << requests.size() << " requests\n";
+        for (const Request& r : requests)
+        {
+            std::string name = r.name;
+            if (r.kind == Kind::Vertex && r.skinning >= 0)
+                name += "_" + std::to_string(r.skinning);
+            std::string source;
+            const bool present = read_shader_file(std::string("r3\\") + strip_params(r.name) + ext_of(r.kind), source);
+            // the same entry/target choice as run_job()
+            std::string entry = "main", target;
+            bool legacy = false;
+            switch (r.kind)
+            {
+            case Kind::Vertex:
+                target = "vs_2_0";
+                if (source.find("main_vs_1_1") != std::string::npos) { entry = "main_vs_1_1"; target = "vs_1_1"; }
+                if (source.find("main_vs_2_0") != std::string::npos) { entry = "main_vs_2_0"; target = "vs_2_0"; }
+                break;
+            case Kind::Pixel:
+                target = "ps_2_0";
+                for (const char* v : {"1_1", "1_2", "1_3", "1_4", "2_0"})
+                    if (source.find(std::string("main_ps_") + v) != std::string::npos)
+                        legacy = true;
+                break;
+            case Kind::Compute: target = "cs_5_0"; break;
+            case Kind::Geometry: target = "gs_4_0"; break;
+            case Kind::Hull: target = "hs_5_0"; break;
+            case Kind::Domain: target = "ds_5_0"; break;
+            }
+            ex << r.name << '\t' << ext_of(r.kind) << '\t' << r.skinning << '\t' << (!present ? "missing" : legacy ? "legacy" : "ok") << '\t'
+               << entry << '\t';
+            if (!legacy)
+            {
+                // macros for missing files too: another tool may find them in a loose overlay this file system lacks
+                const R4Macros macros = r4_default_macros(name.c_str(), entry.c_str(), target.c_str(), r.skinning);
+                ex << macros.target << '\t' << r.origin;
+                for (const auto& d : macros.defines)
+                    ex << '\t' << d.first << '=' << d.second;
+            }
+            else
+                ex << target << '\t' << r.origin;
+            ex << '\n';
+        }
+        printf("  exported %zu requests to %s\n", requests.size(), export_path.c_str());
         return 0;
     }
 
