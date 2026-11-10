@@ -1,0 +1,67 @@
+# standalone
+# Memory run (tools/render_harness/mem_report.sh): a chain of level changes from the base save. Cordon, then Garbage, Pripyat (the largest
+# level archive, 500 MB), Jupiter (417 MB) and back to the Cordon: does the heap return after each unload? Each level's time counts from
+# the level being ready (a waitlevel step holds the timeline); the loading screen takes a key a little after the level is ready.
+1 console r_screenshot_mode png
+2 console start server(h_cordon/single/alife/load) client(localhost)
+3 waitlevel 300 l01_escape
+3.5 console ai_ignore_actor on
+5 key Left Shift
+7 key Left Shift
+9 key Left Shift
+11 key Left Shift
+13 key Left Shift
+15 key Left Shift
+17 console run_string xr_harness.mem("l01_escape 17 s")
+17.5 console mem_stats
+47 console run_string xr_harness.mem("l01_escape 47 s")
+48 mark loading l02_garbage
+48.5 console jump_to_level l02_garbage
+49 waitlevel 300 l02_garbage
+51 key Left Shift
+53 key Left Shift
+55 key Left Shift
+57 key Left Shift
+59 key Left Shift
+61 key Left Shift
+63 console run_string xr_harness.mem("l02_garbage 14 s")
+63.5 console mem_stats
+93 console run_string xr_harness.mem("l02_garbage 44 s")
+94 mark loading pripyat
+94.5 console jump_to_level pripyat
+95 waitlevel 300 pripyat
+97 key Left Shift
+99 key Left Shift
+101 key Left Shift
+103 key Left Shift
+105 key Left Shift
+107 key Left Shift
+109 console run_string xr_harness.mem("pripyat 14 s")
+109.5 console mem_stats
+139 console run_string xr_harness.mem("pripyat 44 s")
+140 mark loading jupiter
+140.5 console jump_to_level jupiter
+141 waitlevel 300 jupiter
+143 key Left Shift
+145 key Left Shift
+147 key Left Shift
+149 key Left Shift
+151 key Left Shift
+153 key Left Shift
+155 console run_string xr_harness.mem("jupiter 14 s")
+155.5 console mem_stats
+185 console run_string xr_harness.mem("jupiter 44 s")
+186 mark loading l01_escape again
+186.5 console jump_to_level l01_escape
+187 waitlevel 300 l01_escape
+189 key Left Shift
+191 key Left Shift
+193 key Left Shift
+195 key Left Shift
+197 key Left Shift
+199 key Left Shift
+201 console run_string xr_harness.mem("l01_escape again 14 s")
+201.5 console mem_stats
+231 console run_string xr_harness.mem("l01_escape again 44 s")
+232 mark chain ends
+235 quit

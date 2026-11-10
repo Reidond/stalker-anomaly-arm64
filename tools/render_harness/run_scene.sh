@@ -14,6 +14,10 @@
 # Environment: HARNESS_COLD_SHADERS=1 (empty shader cache), HARNESS_ENV="VAR=value ..." (passed to the app), HARNESS_ARGS="..." (more
 # app arguments; `-p preset` already adds `--graphics-profile none`),
 # HARNESS_CONSOLE="cmd;cmd" (console commands before the level loads), HARNESS_STATE=<dir> (use that state root instead of a fresh one), HARNESS_FOOTPRINT=1 (writes footprint.txt: `footprint` of the app at about 40 s; tools/render_harness/perf_report.sh reads it).
+# Memory runs (docs/web-port/MEMORY.md, tools/render_harness/mem_report.sh): HARNESS_MEMSTAT=1 passes `--memstat <run>/mem.csv` (a sampler thread
+# writes malloc, footprint, mapped windows and the renderer's CPU-visible memory every 100 ms); HARNESS_MEMSNAP="60 240" runs `vmmap -summary`
+# and `heap -s` on the app that many seconds after the launch (<run>/vmmap_<s>.txt, heap_<s>.txt; with HARNESS_ENV="MallocStackLogging=1" also
+# malloc_history -allBySize, the live heap by call stack: mallochist_<s>.txt).
 set -euo pipefail
 
 root=$(cd "$(dirname "$0")/../.." && pwd)
@@ -88,6 +92,8 @@ for scene in "${scenes[@]}"; do
     fi
 
     args=(--data-root "$data" --script "$script" --exit-after "$limit" -dbg)
+    [ "${HARNESS_MEMSTAT:-0}" = 1 ] && args+=(--memstat "$run/mem.csv")
+    snaps=(${HARNESS_MEMSNAP:-})
     [ -n "$size" ] && args+=(--size "$size")
     # the Mac's graphics profile (docs/ios-port/SETTINGS.md) overrides user.ltx: a `-p preset` or `-x` run is about its own values, so it
     # runs without a profile. HARNESS_ARGS adds anything else, e.g. "--graphics-profile ipad" or "--unlocked-graphics".
@@ -112,6 +118,16 @@ for scene in "${scenes[@]}"; do
             fp_done=1
             footprint "$(pgrep -f "$script" | head -1)" > "$run/footprint.txt" 2>&1 || true
         fi
+        while [ ${#snaps[@]} -gt 0 ] && [ $(( now - start )) -ge "${snaps[0]}" ]; do
+            pid=$(pgrep -f "$script" | head -1)
+            if [ -n "$pid" ]; then
+                vmmap -summary "$pid" > "$run/vmmap_${snaps[0]}.txt" 2>&1 || true
+                heap "$pid" -s > "$run/heap_${snaps[0]}.txt" 2>&1 || true
+                # with HARNESS_ENV="MallocStackLogging=1": the live allocations grouped by call stack, largest first (slow; the game runs slower too)
+                case "${HARNESS_ENV:-}" in *MallocStackLogging*) malloc_history "$pid" -allBySize > "$run/mallochist_${snaps[0]}.txt" 2>&1 || true;; esac
+            fi
+            snaps=(${snaps[@]+"${snaps[@]:1}"})
+        done
         if [ $done_at = 0 ] && grep -aq "script asked to quit\|Anomaly shell shutting down\|--exit-after .* reached" "$shell_log" 2>/dev/null; then done_at=$now; fi
         if [ $done_at != 0 ] && [ $(( now - done_at )) -gt 40 ]; then echo "   ! process did not exit after shutdown, killing" ; pkill -9 -f "$script" || true; fi
         if [ $(( now - start )) -gt $(( limit + 90 )) ]; then echo "   ! run took too long, killing"; pkill -9 -f "$script" || true; fi

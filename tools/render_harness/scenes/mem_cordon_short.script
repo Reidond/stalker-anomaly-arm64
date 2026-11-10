@@ -1,0 +1,10 @@
+# Memory run (tools/render_harness/mem_report.sh): the Cordon for 90 s after the load, for the setting sweeps (texture_lod, no_ram_textures).
+0.5 mark cordon begins
+1 console run_string xr_harness.mem("cordon 0 s")
+1.5 console mem_stats
+30 console run_string xr_harness.tp_story("esc_m_trader",90)
+60 console run_string xr_harness.tp(-215,-7.5,-40.6,0)
+85 console run_string xr_harness.mem("cordon 85 s")
+85.5 console mem_stats
+86 mark cordon ends
+90 quit

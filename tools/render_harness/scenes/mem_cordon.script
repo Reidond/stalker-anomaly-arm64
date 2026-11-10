@@ -1,0 +1,19 @@
+# Memory run (tools/render_harness/mem_report.sh): the Cordon after the load, five minutes. The player is moved across the level every
+# minute (field, trader's bunker, village, field) so the streaming and the A-Life around each place run; times count from the level
+# being ready (the runner shifts them past the loading screen).
+0.5 mark cordon begins
+1 console run_string xr_harness.mem("cordon 0 s")
+1.5 console mem_stats
+30 console run_string xr_harness.mem("cordon 30 s")
+60 console run_string xr_harness.tp_story("esc_m_trader",90)
+90 console run_string xr_harness.mem("cordon 90 s")
+120 console run_string xr_harness.tp(-215,-7.5,-40.6,0)
+150 console run_string xr_harness.mem("cordon 150 s")
+180 console run_string xr_harness.tp(-2.8,2.8,82.7,200)
+210 console run_string xr_harness.mem("cordon 210 s")
+240 console run_string xr_harness.tp_story("esc_m_trader",90)
+270 console run_string xr_harness.mem("cordon 270 s")
+300 console run_string xr_harness.mem("cordon 300 s")
+300.5 console mem_stats
+301 mark cordon ends
+305 quit
