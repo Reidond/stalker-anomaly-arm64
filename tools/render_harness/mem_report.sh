@@ -36,7 +36,7 @@ wait_run() {
     local rtag=$1 scene=$2
     shift 2
     wait_idle
-    HARNESS_MEMSTAT=1 "$run" -t "$rtag" "$@" "$scene" 2>&1 | grep -v "^   shots:" | sed "s/^/[$rtag] /"
+    HARNESS_MEMSTAT=1 "$run" -t "$rtag" "$@" "$scene" 2>&1 | grep -v "^   shots:" | sed "s|^|[$rtag] |"
 }
 
 if [ "${MEM_REPORT_ONLY:-0}" != 1 ]; then
@@ -70,8 +70,24 @@ fi
 static_mb=$(size -m "$app/Contents/MacOS/anomaly" 2>/dev/null | awk '/^Segment __DATA/ { s += $3 } END { printf "%.0f", s / 1048576 }')
 {
     echo "<!-- tag $tag; static data $static_mb MB; stacks 64 MB (estimate) -->"
+    py="python3 -I $root/tools/render_harness/mem_report.py --static-mb ${static_mb:-0}"
+    for pdir in "$out"/ipad "$out"/mac; do
+        [ -d "$pdir" ] || continue
+        echo "## Summary: $(basename "$pdir") profile (MB; steady = medians of the last 10 s, peak = the largest sample with its parts)"
+        echo
+        $py --summary "$pdir"
+        echo
+    done
+    if ls -d "$out"/sweep-* > /dev/null 2>&1; then
+        echo "## Sweeps: the Cordon for 90 s, engine defaults (MB)"
+        echo
+        $py --sweeps "$out"/sweep-*
+        echo
+    fi
+    echo "## Every run"
+    echo
     for dir in "$out"/*/*/; do
-        [ -f "$dir/mem.csv" ] && python3 -I "$root/tools/render_harness/mem_report.py" --static-mb "${static_mb:-0}" "$dir"
+        [ -f "$dir/mem.csv" ] && $py "$dir"
     done
 } | tee "$out/mem_report.md"
 echo "written: $out/mem_report.md"

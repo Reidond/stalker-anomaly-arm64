@@ -2,6 +2,8 @@
 """Turns the memory runs of tools/render_harness/mem_report.sh into markdown tables (docs/web-port/MEMORY.md).
 
     mem_report.py [--static-mb N] [--stacks-mb N] <run-dir> [<run-dir> ...]
+    mem_report.py [--static-mb N] [--stacks-mb N] --summary <profile-dir>    one table: the scenarios of a profile
+    mem_report.py [--static-mb N] [--stacks-mb N] --sweeps <sweep-dir> ...     one table: the setting sweeps
 
 A run dir (build/render-harness/<tag>/<scene>) holds mem.csv (the sampler of --memstat), shell.log and engine.log. The sampler's
 rows are split into phases at its marks ("engine up", "level ready <name>", the scene's own `mark` lines), and for each phase the
@@ -191,6 +193,107 @@ def table(run, static_mb, stacks_mb):
     return "\n".join(out)
 
 
+def window(rows, a, b):
+    seg = [r for r in rows if a <= r["t_s"] < b]
+    if not seg:
+        return None
+    tail = [r for r in seg if r["t_s"] >= seg[-1]["t_s"] - 10.0] or seg
+    peak = max(seg, key=lambda r: r["heap"])
+    steady = {k: statistics.median(r[k] for r in tail) for k in peak}
+    return peak, steady
+
+
+def mark_time(marks, prefix, nth=0):
+    hits = [t for t, label in marks if label.startswith(prefix)]
+    return hits[nth] if len(hits) > nth else None
+
+
+def summary(profile_dir, static_mb, stacks_mb):
+    """One table for a profile: the scenarios of mem_report.sh, each as a peak (the heap's largest sample, with the parts of that
+    sample) and a steady state (medians of the window's last 10 s)."""
+    out = []
+    cols = [("heap", "heap"), ("malloc_in_use", "malloc"), ("lua", "Lua"), ("map_total", "windows"), ("shim_cpu", "Metal CPU"),
+            ("fixed", "stacks+static"), ("footprint", "footprint"), ("gpu_only", "GPU-only")]
+    out.append("| scenario | | " + " | ".join(c[1] for c in cols) + " |")
+    out.append("|---|---|" + "---|" * len(cols))
+
+    def row(name, kind, w):
+        if w is None:
+            return
+        peak, steady = w
+        src = peak if kind == "peak" else steady
+        out.append(f"| {name} | {kind} | " + " | ".join(mbf(src[k]) for k, _ in cols) + " |")
+
+    def load(name):
+        res = summarize(profile_dir / name, static_mb, stacks_mb) if (profile_dir / name / "mem.csv").exists() else None
+        if not res:
+            return None
+        rows, marks, _, _ = res
+        return rows, marks, rows[-1]["t_s"] + 1e-6
+
+    r = load("mem_menu")
+    if r:
+        rows, marks, end = r
+        row("main menu, from process start (engine init included)", "peak", window(rows, 0, end))
+        a = mark_time(marks, "menu idle begins") or 0
+        row("main menu, idle 1 min", "steady", window(rows, a, end))
+    r = load("_newgame")
+    if r:
+        rows, marks, end = r
+        s, ready = mark_time(marks, "new game started"), mark_time(marks, "level ready")
+        if s is not None and ready is not None:
+            row("new game: load of the Cordon", "peak", window(rows, s, ready))
+            row("new game: 30 s after the level is ready", "steady", window(rows, ready, end))
+    r = load("mem_cordon")
+    if r:
+        rows, marks, end = r
+        up, ready, begin = mark_time(marks, "engine up"), mark_time(marks, "level ready"), mark_time(marks, "cordon begins")
+        if up is not None and ready is not None:
+            row("Cordon from the base save: load", "peak", window(rows, up, ready))
+        if begin is not None:
+            row("Cordon, 5 min of play", "peak", window(rows, begin, end))
+            row("Cordon, 5 min of play (end)", "steady", window(rows, begin, end))
+    r = load("mem_levels")
+    if r:
+        rows, marks, end = r
+        names = [("l02_garbage", "loading l02_garbage"), ("pripyat", "loading pripyat"), ("jupiter", "loading jupiter"),
+                 ("l01_escape (again)", "loading l01_escape again")]
+        first = mark_time(marks, "level ready l01_escape", 0)
+        nxt = mark_time(marks, "loading l02_garbage")
+        if first is not None and nxt is not None:
+            row("level chain: Cordon (first), steady", "steady", window(rows, first, nxt))
+        for i, (label, mk) in enumerate(names):
+            a = mark_time(marks, mk)
+            ready_t = [t for t, lb in marks if lb.startswith("level ready") and a is not None and t > a]
+            if a is None or not ready_t:
+                continue
+            b = ready_t[0]
+            c = mark_time(marks, names[i + 1][1]) if i + 1 < len(names) else end
+            row(f"level change to {label}: load", "peak", window(rows, a, b))
+            row(f"{label}: 40 s after ready", "steady", window(rows, b, c if c else end))
+    return "\n".join(out)
+
+
+def sweeps(dirs, static_mb, stacks_mb):
+    """One row per sweep dir (<tag>/sweep-*/mem_cordon_short): the Cordon load peak and the steady state after it."""
+    cols = [("heap", "heap"), ("malloc_in_use", "malloc"), ("map_total", "windows"), ("shim_cpu", "Metal CPU"), ("tex_staging", "staging textures"),
+            ("gpu_only", "GPU-only"), ("footprint", "footprint")]
+    out = ["| setting | | " + " | ".join(c[1] for c in cols) + " |", "|---|---|" + "---|" * len(cols)]
+    for d in dirs:
+        res = summarize(d / "mem_cordon_short", static_mb, stacks_mb) if (d / "mem_cordon_short" / "mem.csv").exists() else None
+        if not res:
+            continue
+        rows, marks, _, _ = res
+        up, ready, begin = mark_time(marks, "engine up"), mark_time(marks, "level ready"), mark_time(marks, "cordon begins")
+        end = rows[-1]["t_s"] + 1e-6
+        for kind, w in (("load peak", window(rows, up, ready) if up is not None and ready is not None else None),
+                        ("steady", window(rows, begin, end) if begin is not None else None)):
+            if w:
+                src = w[0] if kind == "load peak" else w[1]
+                out.append(f"| {d.name} | {kind} | " + " | ".join(mbf(src.get(k, 0)) for k, _ in cols) + " |")
+    return "\n".join(out)
+
+
 def main(argv):
     static_mb, stacks_mb = 0.0, 64.0
     runs = []
@@ -202,6 +305,12 @@ def main(argv):
         elif argv[i] == "--stacks-mb":
             stacks_mb = float(argv[i + 1])
             i += 2
+        elif argv[i] == "--sweeps":
+            print(sweeps([Path(a) for a in argv[i + 1:]], static_mb, stacks_mb))
+            return 0
+        elif argv[i] == "--summary":
+            print(summary(Path(argv[i + 1]), static_mb, stacks_mb))
+            return 0
         else:
             runs.append(Path(argv[i]))
             i += 1
