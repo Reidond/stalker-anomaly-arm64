@@ -7,13 +7,21 @@
 
 #ifdef XR_PLATFORM_APPLE
 
-#include <crt_externs.h>
 #include <fnmatch.h>
+#include <pwd.h>
+#ifdef XR_PLATFORM_WEB
+// Emscripten: POSIX libc. The Apple-only calls below (mach, sysctl, malloc zones, dyld) have web replacements in
+// Platform/PlatformWeb.cpp, or an XR_PLATFORM_WEB branch where they are one line.
+#include <emscripten/emscripten.h>
+#include <emscripten/heap.h>
+void xr_apple_vm_info(size_t* free_bytes, size_t* reserved, size_t* committed); // PlatformWeb.cpp
+#else
+#include <crt_externs.h>
 #include <mach-o/dyld.h>
 #include <mach/mach.h>
 #include <malloc/malloc.h>
-#include <pwd.h>
 #include <sys/sysctl.h>
+#endif
 
 #include <algorithm>
 #include <atomic>
@@ -460,13 +468,25 @@ void Sleep(DWORD ms)
 	}
 }
 
-unsigned long long GetTickCount64() { return clock_gettime_nsec_np(CLOCK_UPTIME_RAW) / 1000000ull; }
+#ifdef XR_PLATFORM_WEB
+// clock_gettime_nsec_np does not exist; CLOCK_MONOTONIC is performance.now() (or process.hrtime) in Emscripten
+static unsigned long long xr_monotonic_nsec()
+{
+	timespec ts;
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+	return (unsigned long long)ts.tv_sec * 1000000000ull + (unsigned long long)ts.tv_nsec;
+}
+#else
+static unsigned long long xr_monotonic_nsec() { return clock_gettime_nsec_np(CLOCK_UPTIME_RAW); }
+#endif
+
+unsigned long long GetTickCount64() { return xr_monotonic_nsec() / 1000000ull; }
 DWORD GetTickCount() { return (DWORD)GetTickCount64(); }
 
 BOOL QueryPerformanceCounter(LARGE_INTEGER* counter)
 {
 	// nanoseconds; same clock as mach_absolute_time but already scaled
-	counter->QuadPart = (LONGLONG)clock_gettime_nsec_np(CLOCK_UPTIME_RAW);
+	counter->QuadPart = (LONGLONG)xr_monotonic_nsec();
 	return TRUE;
 }
 
@@ -495,8 +515,17 @@ const char* GetCommandLine()
 	static std::string cmdline = []
 	{
 		std::string r;
+#ifdef XR_PLATFORM_WEB
+		// no process argv outside main(): the browser shell passes the line with xr_set_command_line(); under Node the
+		// pre-js cmake/web/node_argv.js puts process.argv in $XR_COMMAND_LINE
+		const char* env = getenv("XR_COMMAND_LINE");
+		int argc = 0;
+		char** argv = nullptr;
+		if (env) r = env;
+#else
 		int argc = *_NSGetArgc();
 		char** argv = *_NSGetArgv();
+#endif
 		for (int i = 0; i < argc; ++i)
 		{
 			if (i) r += ' ';
@@ -512,11 +541,18 @@ const char* GetCommandLine()
 
 DWORD GetCurrentThreadId()
 {
+#ifdef XR_PLATFORM_WEB
+	return (DWORD)(uintptr_t)pthread_self(); // the thread's control block address in the shared heap: unique per live thread
+#else
 	uint64_t tid = 0;
 	pthread_threadid_np(nullptr, &tid);
 	return (DWORD)tid;
+#endif
 }
 
+#ifdef XR_PLATFORM_WEB
+BOOL IsDebuggerPresent() { return FALSE; }
+#else
 BOOL IsDebuggerPresent()
 {
 	int mib[4] = {CTL_KERN, KERN_PROC, KERN_PROC_PID, getpid()};
@@ -526,6 +562,7 @@ BOOL IsDebuggerPresent()
 	if (sysctl(mib, 4, &info, &size, nullptr, 0) != 0) return FALSE;
 	return (info.kp_proc.p_flag & P_TRACED) != 0;
 }
+#endif
 
 void DebugBreak()
 {
@@ -540,8 +577,15 @@ void OutputDebugString(const char* str)
 DWORD GetModuleFileName(HMODULE /*module*/, char* buffer, DWORD size)
 {
 	char exe[1024];
+#ifdef XR_PLATFORM_WEB
+	// there is no executable on disk to ask for: <cwd>/anomaly, which keeps the "bin directory" next to the data the way the
+	// desktop builds have it
+	if (!getcwd(exe, sizeof(exe) - sizeof("/anomaly"))) return 0;
+	strcat(exe, "/anomaly");
+#else
 	uint32_t exe_size = sizeof(exe);
 	if (_NSGetExecutablePath(exe, &exe_size) != 0) return 0;
+#endif
 	char real[1024];
 	if (!realpath(exe, real)) strncpy(real, exe, sizeof(real) - 1);
 	xr_virtual_path(real, buffer, size);
@@ -592,6 +636,7 @@ int MessageBox(HWND, const char* text, const char* caption, unsigned type)
 // ---------------------------------------------------------------------------------------------
 // Memory queries (used by xrMemory, see memory_usage.cpp / Platform/xrMemory_apple.cpp)
 // ---------------------------------------------------------------------------------------------
+#ifndef XR_PLATFORM_WEB // the web versions of these three are in Platform/PlatformWeb.cpp
 size_t xr_apple_malloc_size(const void* p) { return p ? malloc_size(p) : 0; }
 
 size_t xr_apple_heap_bytes_in_use()
@@ -617,6 +662,7 @@ void xr_apple_vm_info(size_t* free_bytes, size_t* reserved, size_t* committed)
 	if (sysctlbyname("hw.memsize", &physical, &len, nullptr, 0) == 0 && (size_t)physical > *committed)
 		*free_bytes = (size_t)physical - *committed;
 }
+#endif // !XR_PLATFORM_WEB
 
 // ---------------------------------------------------------------------------------------------
 // Code pages
@@ -791,13 +837,13 @@ struct HandleObject
 	bool manual_reset = false;
 	bool signaled = false;
 	// mutex (recursive, owner tracked by thread id)
-	pthread_t owner = nullptr;
+	pthread_t owner = pthread_t(); // (an opaque pointer on Apple, an integer on Emscripten)
 	int recursion = 0;
 	// semaphore
 	LONG count = 0;
 	LONG maximum = 0;
 	// thread
-	pthread_t thread = nullptr;
+	pthread_t thread = pthread_t();
 	bool finished = false;
 	bool detached = false;
 	DWORD exit_code = STILL_ACTIVE;
@@ -989,7 +1035,7 @@ DWORD WaitForSingleObject(HANDLE handle, DWORD milliseconds)
 DWORD WaitForMultipleObjects(DWORD count, const HANDLE* handles, BOOL wait_all, DWORD milliseconds)
 {
 	// Polling is good enough for the handful of call sites (multiplayer sync, tools).
-	const uint64_t start = clock_gettime_nsec_np(CLOCK_UPTIME_RAW);
+	const uint64_t start = xr_monotonic_nsec();
 	for (;;)
 	{
 		DWORD ready = 0;
@@ -1013,7 +1059,7 @@ DWORD WaitForMultipleObjects(DWORD count, const HANDLE* handles, BOOL wait_all, 
 			for (DWORD i = 0; i < count; ++i) wait_one(as_object(handles[i]), 0);
 			return WAIT_OBJECT_0;
 		}
-		if (milliseconds != INFINITE && (clock_gettime_nsec_np(CLOCK_UPTIME_RAW) - start) / 1000000ull >= milliseconds)
+		if (milliseconds != INFINITE && (xr_monotonic_nsec() - start) / 1000000ull >= milliseconds)
 			return WAIT_TIMEOUT;
 		usleep(500);
 	}
@@ -1110,9 +1156,15 @@ void GetSystemInfo(SYSTEM_INFO* info)
 {
 	memset(info, 0, sizeof(*info));
 	int cpus = 1;
+#ifdef XR_PLATFORM_WEB
+	cpus = (int)sysconf(_SC_NPROCESSORS_ONLN); // navigator.hardwareConcurrency / os.cpus().length
+	if (cpus < 1) cpus = 1;
+	info->wProcessorArchitecture = 0xFFFF; // PROCESSOR_ARCHITECTURE_UNKNOWN: WebAssembly is none of the Windows ones
+#else
 	size_t size = sizeof(cpus);
 	sysctlbyname("hw.logicalcpu", &cpus, &size, nullptr, 0);
 	info->wProcessorArchitecture = PROCESSOR_ARCHITECTURE_ARM64;
+#endif
 	info->dwPageSize = (DWORD)getpagesize();
 	info->dwAllocationGranularity = info->dwPageSize;
 	info->dwNumberOfProcessors = (DWORD)cpus;
@@ -1122,8 +1174,12 @@ void GetSystemInfo(SYSTEM_INFO* info)
 BOOL GlobalMemoryStatusEx(MEMORYSTATUSEX* status)
 {
 	uint64_t total = 0;
+#ifdef XR_PLATFORM_WEB
+	total = (uint64_t)emscripten_get_heap_max(); // the heap ceiling (-sMAXIMUM_MEMORY): all the memory the module can ever have
+#else
 	size_t size = sizeof(total);
 	sysctlbyname("hw.memsize", &total, &size, nullptr, 0);
+#endif
 	size_t free_bytes = 0, reserved = 0, committed = 0;
 	xr_apple_vm_info(&free_bytes, &reserved, &committed);
 	memset(status, 0, sizeof(*status));

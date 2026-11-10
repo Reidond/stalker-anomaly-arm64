@@ -2,6 +2,7 @@
 
 #ifdef XR_PLATFORM_APPLE
 // Apple: Microsoft's PPL is not available. Grand Central Dispatch provides the thread pool.
+// Web: a small fixed pool of our own (Platform/xrThreadPool_web.h) in place of GCD; everything else below is shared.
 #include <atomic>
 #include <mutex>
 #include <memory>
@@ -9,13 +10,18 @@
 #include <unordered_map>
 #include <functional>
 #include <algorithm>
+#ifdef XR_PLATFORM_WEB
+#include "Platform/xrThreadPool_web.h"
+#else
 #include <dispatch/dispatch.h>
+#endif
 
 // Atomic types
 using xr_atomic_u32 = std::atomic_uint32_t;
 using xr_atomic_s32 = std::atomic_int;
 using xr_atomic_bool = std::atomic_bool;
 
+#ifndef XR_PLATFORM_WEB // (web: xr_task_group is in Platform/xrThreadPool_web.h)
 // Subset of concurrency::task_group: run() queues a callable on the global concurrent queue, wait() blocks until
 // everything queued so far has finished.
 class xr_task_group
@@ -52,6 +58,7 @@ public:
 		wait();
 	}
 };
+#endif // !XR_PLATFORM_WEB
 
 // Mutex-protected stand-ins for concurrency::concurrent_unordered_map / concurrent_vector. Nothing in the engine
 // uses them yet; they cover insert, lookup by value, push_back and indexed read.
@@ -117,6 +124,16 @@ public:
 	}
 };
 
+// fn(ctx, i) for i in [0, count) on the thread pool, the calling thread taking part; returns when all are done (dispatch_apply_f)
+inline void xr_parallel_apply(size_t count, void* ctx, void (*fn)(void*, size_t))
+{
+#ifdef XR_PLATFORM_WEB
+	xr_web::parallel_apply(count, ctx, fn);
+#else
+	dispatch_apply_f(count, dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ctx, fn);
+#endif
+}
+
 template <typename BlockRangeType, typename Body>
 inline void xr_parallel_for(BlockRangeType Begin, BlockRangeType End, Body Functor)
 {
@@ -126,7 +143,7 @@ inline void xr_parallel_for(BlockRangeType Begin, BlockRangeType End, Body Funct
 		BlockRangeType begin;
 		Body* functor;
 	} ctx = {Begin, &Functor};
-	dispatch_apply_f(size_t(End - Begin), dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), &ctx,
+	xr_parallel_apply(size_t(End - Begin), &ctx,
 	                 [](void* c, size_t i)
 	                 {
 		                 ctx_t* x = static_cast<ctx_t*>(c);
@@ -145,7 +162,7 @@ inline void xr_parallel_foreach(Index Begin, Index End, Body Functor)
 		Index begin;
 		Body* functor;
 	} ctx = {Begin, &Functor};
-	dispatch_apply_f(count, dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), &ctx,
+	xr_parallel_apply(count, &ctx,
 	                 [](void* c, size_t i)
 	                 {
 		                 ctx_t* x = static_cast<ctx_t*>(c);

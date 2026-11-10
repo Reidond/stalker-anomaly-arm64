@@ -4,8 +4,10 @@
 #include "particle_actions_collection.h"
 #include "particle_effect.h"
 
+#ifndef XR_PLATFORM_WEB // (nothing from tbb is used in this file; the bundled TBB headers do not know wasm32)
 #include <tbb/parallel_for.h>
 #include <tbb/blocked_range.h>
+#endif
 
 using namespace PAPI;
 

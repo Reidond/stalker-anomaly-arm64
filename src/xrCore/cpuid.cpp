@@ -23,7 +23,23 @@
 *   Returns int with capablity bit set.
 *
 ****************************************************/
-#ifdef XR_PLATFORM_APPLE
+#if defined(XR_PLATFORM_WEB)
+// WebAssembly: no cpuid, no sysctl. The module is built with -msimd128 -msse4.2 and Emscripten's SSE headers, and a wasm engine
+// refuses to load a module whose SIMD it lacks, so the whole SSE family is reported (SSE4.2 also keeps crc32() on its
+// CRC32C branch, see crc32.cpp). The core count is navigator.hardwareConcurrency (os.availableParallelism() under Node).
+int _cpuid(_processor_info* pinfo)
+{
+	memset(pinfo, 0, sizeof(_processor_info));
+	strncpy(pinfo->v_name, "WebAssembly", sizeof(pinfo->v_name) - 1);
+	strncpy(pinfo->model_name, "wasm32 SIMD128", sizeof(pinfo->model_name) - 1);
+	pinfo->feature = _CPU_FEATURE_SSE | _CPU_FEATURE_SSE2 | _CPU_FEATURE_SSE3 | _CPU_FEATURE_SSSE3 |
+		_CPU_FEATURE_SSE4_1 | _CPU_FEATURE_SSE4_2;
+	const long cpus = sysconf(_SC_NPROCESSORS_ONLN);
+	pinfo->n_cores = pinfo->n_threads = cpus > 0 ? (unsigned)cpus : 1u;
+	pinfo->affinity_mask = (pinfo->n_threads >= 32) ? 0xffffffffu : ((1u << pinfo->n_threads) - 1u);
+	return pinfo->feature;
+}
+#elif defined(XR_PLATFORM_APPLE)
 #include <sys/sysctl.h>
 
 static bool sysctl_string(const char* name, char* out, size_t size)

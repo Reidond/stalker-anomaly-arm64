@@ -4,6 +4,9 @@
 #ifdef XR_ARCH_ARM64
 #include <arm_acle.h>
 #endif
+#ifdef XR_ARCH_WASM32
+#include <string.h>
+#endif
 
 namespace
 {
@@ -38,7 +41,51 @@ namespace
 
     static constexpr auto crc32_table = generate_crc32_lookup_table();
 
-#ifdef XR_ARCH_ARM64
+#ifdef XR_ARCH_WASM32
+    // WebAssembly has no CRC32C instruction. Software CRC32C (Castagnoli, reflected polynomial 0x82F63B78), slicing by 8, with
+    // the same contract as _mm_crc32_* on x64: crc in, crc out, no final inversion. crc32() below must keep choosing this
+    // variant (CPU::ID reports SSE4.2 on the web build) or its results would be the plain IEEE CRC32 and differ from every
+    // other platform's.
+    constexpr std::array<std::array<u32, 256>, 8> generate_crc32c_tables() noexcept
+    {
+        std::array<std::array<u32, 256>, 8> t{};
+        for (u32 i = 0; i < 256; i++)
+        {
+            u32 c = i;
+            for (int j = 0; j < 8; j++)
+                c = (c & 1) ? (c >> 1) ^ 0x82F63B78u : (c >> 1);
+            t[0][i] = c;
+        }
+        for (int k = 1; k < 8; k++)
+            for (u32 i = 0; i < 256; i++)
+                t[k][i] = (t[k - 1][i] >> 8) ^ t[0][t[k - 1][i] & 0xFF];
+        return t;
+    }
+
+    static constexpr auto crc32c_tables = generate_crc32c_tables();
+
+    u32 crc32_sse42(const void* P, u32 len, u32 starting_crc = ~0u) noexcept
+    {
+        const u8* buffer = static_cast<const u8*>(P);
+        u32 crc = starting_crc;
+
+        while (len >= 8)
+        {
+            u32 lo, hi;
+            memcpy(&lo, buffer, 4);     // wasm is little endian
+            memcpy(&hi, buffer + 4, 4);
+            lo ^= crc;
+            crc = crc32c_tables[7][lo & 0xFF] ^ crc32c_tables[6][(lo >> 8) & 0xFF] ^ crc32c_tables[5][(lo >> 16) & 0xFF] ^
+                crc32c_tables[4][lo >> 24] ^ crc32c_tables[3][hi & 0xFF] ^ crc32c_tables[2][(hi >> 8) & 0xFF] ^
+                crc32c_tables[1][(hi >> 16) & 0xFF] ^ crc32c_tables[0][hi >> 24];
+            buffer += 8;
+            len -= 8;
+        }
+        while (len--)
+            crc = (crc >> 8) ^ crc32c_tables[0][(crc ^ *buffer++) & 0xFF];
+        return crc;
+    }
+#elif defined(XR_ARCH_ARM64)
     __attribute__((target("crc")))
     u32 crc32_sse42(const void* P, u32 len, u32 starting_crc = ~0u) noexcept
     {
