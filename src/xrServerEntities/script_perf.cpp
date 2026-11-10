@@ -65,6 +65,10 @@ thread_local u64 t_cpu_start = 0;
 // True while the main thread is inside a call into Lua. The profiler's timer counts the CPU time of every thread, so most of its ticks
 // land while the engine runs C++; LuaJIT would book those to the next Lua function that runs. The gate below drops them.
 std::atomic<bool> g_lua_active{false};
+// The start stamp of the main thread's outermost call into Lua (0 outside one). The profiler's sample callback prints the Lua stack of
+// a call that has run for more than 5 s, once per call: `[lua-stall]` lines, for a script that never returns (an endless loop).
+std::atomic<u64> g_main_call_start{0};
+u64 g_stall_reported = 0;
 
 inline bool on_main_thread()
 {
@@ -407,8 +411,26 @@ std::string base_name(const char* src)
 	return b;
 }
 
+void report_stall(lua_State* L, u64 start)
+{
+	g_stall_reported = start;
+	Msg("! [lua-stall] a call into Lua has run for %.1f s; its Lua stack:", double(now_ns() - start) * 1e-9);
+	lua_Debug ar;
+	for (int lvl = 0; lvl < 40 && lua_getstack(L, lvl, &ar); ++lvl)
+	{
+		if (!lua_getinfo(L, "Sln", &ar))
+			continue;
+		Msg("! [lua-stall] %2d %s:%d %s %s (defined at %d)", lvl, ar.short_src, ar.currentline, ar.namewhat ? ar.namewhat : "",
+		    ar.name ? ar.name : "?", ar.linedefined);
+	}
+	FlushLog();
+}
+
 void prof_callback(void*, lua_State* L, int samples, int vmstate)
 {
+	const u64 start = g_main_call_start.load(std::memory_order_relaxed);
+	if (start && start != g_stall_reported && now_ns() - start > 5000000000ull)
+		report_stall(L, start);
 	// 'I' interpreter, 'C' a C function called from Lua, 'G' the collector, 'N' a compiled trace, 'J' the JIT compiler
 	g_state_samples[vmstate & 255] += u64(samples);
 	g_samples += u64(samples);
@@ -770,9 +792,13 @@ unsigned long long enter()
 		return 1;
 	}
 	t_cpu_start = thread_cpu_ns();
+	const u64 stamp = now_ns();
 	if (on_main_thread())
+	{
+		g_main_call_start.store(stamp, std::memory_order_relaxed);
 		g_lua_active.store(true, std::memory_order_relaxed);
-	return now_ns();
+	}
+	return stamp;
 }
 
 void leave(unsigned long long stamp)
@@ -783,7 +809,10 @@ void leave(unsigned long long stamp)
 	if (stamp == 1)
 		return;
 	if (on_main_thread())
+	{
 		g_lua_active.store(false, std::memory_order_relaxed);
+		g_main_call_start.store(0, std::memory_order_relaxed);
+	}
 	const u64 ns = now_ns() - stamp;
 	if (on_main_thread())
 	{
