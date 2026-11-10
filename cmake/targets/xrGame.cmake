@@ -123,7 +123,7 @@ set(xrgame_compile_options
 )
 # gameinput: the controller layer's headers (xr_level_controller.cpp feeds its feedback model); lua_extensions: luaopen_lua_extensions,
 # luaopen_socket_core_init and pdebug_init_init, called by CScriptStorage (absent targets are skipped)
-set(xrgame_link_targets luabind LuaJIT::luajit ode xrAPI xrCDB xrNetServer xrPhysics xrXMLParser gameinput lua_extensions)
+set(xrgame_link_targets luabind Anomaly::Lua ode xrAPI xrCDB xrNetServer xrPhysics xrXMLParser gameinput lua_extensions)
 
 # One OBJECT library per shard, configured like anomaly_add_module() configures a module. The Xcode generator cannot archive
 # $<TARGET_OBJECTS:...> into libxrGame.a (the file is never produced), so there each shard is a static library of its own and

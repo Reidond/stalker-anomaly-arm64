@@ -28,9 +28,14 @@ add_library(Anomaly::EngineConfig ALIAS anomaly_engine_config)
 
 target_link_libraries(anomaly_engine_config INTERFACE
     Anomaly::xrCore         # -fdelayed-template-parsing, -fno-operator-names, -fno-strict-aliasing, src/ include roots
-    sse2neon::sse2neon      # the forwarding <xmmintrin.h> & co. in src/Common/compat land here
-    metal_d3d11_compat      # <d3d11.h>, <dxgi*.h>, <d3dcompiler.h>, <d3dx11.h> ... on top of Metal
 )
+if(NOT ANOMALY_WEB)
+    target_link_libraries(anomaly_engine_config INTERFACE
+        sse2neon::sse2neon      # the forwarding <xmmintrin.h> & co. in src/Common/compat land here
+        metal_d3d11_compat      # <d3d11.h>, <dxgi*.h>, <d3dcompiler.h>, <d3dx11.h> ... on top of Metal
+    )
+endif()
+# (web: the same forwarding headers hand <xmmintrin.h> & co. to Emscripten's own intrinsics, no library is involved)
 
 # src/Common/compat first: it holds stand-ins for Windows and compiler headers the engine includes by name
 # (<windows.h>, <malloc.h>, <dinput.h>, <d3d9types.h>, <DPlay/dplay8.h>, <xmmintrin.h>, ...), and it must win

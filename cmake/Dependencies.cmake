@@ -2,7 +2,19 @@
 
 set(ANOMALY_EXTERNAL_DIR "${PROJECT_SOURCE_DIR}/external")
 
-foreach(dep SDL openal-soft LuaJIT ogg vorbis theora SPIRV-Cross vkd3d sse2neon)
+# The scripts' VM: LuaJIT 2.1 (the default), or PUC Lua 5.1.5 + LuaBitOp compiled as C++ (in-tree; what the web build uses,
+# docs/web-port/LUA51.md). Code that differs tests ANOMALY_LUA51; targets link Anomaly::Lua.
+set(ANOMALY_LUA "luajit" CACHE STRING "Lua VM for the scripts: luajit (LuaJIT 2.1) or lua51 (PUC Lua 5.1.5 + LuaBitOp)")
+set_property(CACHE ANOMALY_LUA PROPERTY STRINGS luajit lua51)
+if(NOT ANOMALY_LUA MATCHES "^(luajit|lua51)$")
+    message(FATAL_ERROR "ANOMALY_LUA must be luajit or lua51 (got '${ANOMALY_LUA}')")
+endif()
+set(anomaly_luajit_submodule LuaJIT)
+if(ANOMALY_LUA STREQUAL "lua51")
+    set(anomaly_luajit_submodule "")
+endif()
+
+foreach(dep SDL openal-soft ${anomaly_luajit_submodule} ogg vorbis theora SPIRV-Cross vkd3d sse2neon)
     if(NOT EXISTS "${ANOMALY_EXTERNAL_DIR}/${dep}/.git")
         message(FATAL_ERROR "external/${dep} is missing; run: git submodule update --init --depth 1 external/${dep}")
     endif()
@@ -51,7 +63,17 @@ include(deps/Vorbis)
 include(deps/Theora)
 
 # LuaJIT 2.1: built with its own Makefile; JIT is on for macOS, interpreter-only on iOS by default.
-include(deps/LuaJIT)
+# With ANOMALY_LUA=lua51, Lua 5.1.5 instead (cmake/deps/Lua51.cmake).
+add_library(anomaly_lua INTERFACE)
+if(ANOMALY_LUA STREQUAL "lua51")
+    include(deps/Lua51)
+    target_link_libraries(anomaly_lua INTERFACE Lua51::lua51)
+else()
+    include(deps/LuaJIT)
+    target_link_libraries(anomaly_lua INTERFACE LuaJIT::luajit)
+endif()
+add_library(Anomaly::Lua ALIAS anomaly_lua)
+message(STATUS "Lua VM: ${ANOMALY_LUA}")
 
 # Shader translation (src/Platform/ShaderXlat): HLSL -> SPIR-V (vkd3d-shader), SPIR-V -> MSL (SPIRV-Cross).
 include(deps/SPIRV-Cross)

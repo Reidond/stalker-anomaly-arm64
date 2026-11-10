@@ -470,9 +470,13 @@ void CScriptStorage::reinit()
 
 
 #ifndef USE_LUAJIT_ONE
+	// LuaJIT: the standard libraries plus bit, jit and ffi. Lua 5.1 (ANOMALY_LUA51): the standard libraries plus bit (LuaBitOp,
+	// opened by the vendored luaL_openlibs); no jit and no ffi, and -nojit has nothing to switch off.
 	luaL_openlibs(lua());
+#ifndef ANOMALY_LUA51
 	if (strstr(Core.Params, "-nojit"))
 		luaJIT_setmode(lua(), 0, LUAJIT_MODE_ENGINE | LUAJIT_MODE_OFF);
+#endif
 #else // USE_LUAJIT_ONE
     // initialize lua standard library functions    
 
@@ -515,7 +519,7 @@ void CScriptStorage::reinit()
 	disable_os_funcs(lua());
 #ifdef XR_PLATFORM_APPLE
 	// Lua 5.0 names the scripts still use. LuaJIT 2.0 (the Windows build) kept them, 2.1 dropped them; global.lua defines the
-	// same two lines but is only run with lua_debug on.
+	// same two lines but is only run with lua_debug on. Lua 5.1 has both already (LUA_COMPAT_MOD, LUA_COMPAT_GFIND).
 	luaL_dostring(lua(), "math.mod = math.fmod string.gfind = string.gmatch");
 #endif
 

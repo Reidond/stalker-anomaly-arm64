@@ -16,7 +16,7 @@
 #define fdRLE10 0x03ede5bdb // 1/ln10
 
 // integer math on floats
-#if defined(_M_AMD64) || defined(XR_ARCH_ARM64)
+#if defined(_M_AMD64) || defined(XR_ARCH_ARM64) || defined(XR_ARCH_WASM32)
 IC bool negative(const float f) { return f < 0; }
 IC bool positive(const float f) { return f >= 0; }
 IC void set_negative(float& f) { f = -fabsf(f); }

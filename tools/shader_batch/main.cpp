@@ -118,9 +118,44 @@ struct Job
     std::string profile;
     int skin = -1;
     std::vector<shaderxlat::Macro> macros;
+    // --requests: the request as r4_shader_warmup --export-requests wrote it
+    std::string entryPoint = "main", target, request; // request: "<name><ext>[ skin N]"
+};
+
+// A request exported by r4_shader_warmup that is not a job: missing from the data, or skipped like the Metal path skips it.
+struct OtherRequest
+{
+    std::string label, status, detail;
 };
 
 enum class MetalState : uint8_t { NotRun, Ok, Fail };
+
+// What tools/shader_batch/wgsl_main.cpp (shader_wgsl) reports for one job.
+struct WgslReport
+{
+    bool run = false, ok = false, crashed = false;
+    std::string failure, firstError, log;
+    bool derivativeUniformity = false, discard = false, depthNonComparison = false, textureLoadDepth = false;
+    uint32_t clipDistances = 0;
+    uint32_t workgroup[4] = {0, 0, 0, 0}; // x, y, z, storage bytes
+    uint32_t isNanRewrites = 0, nonFiniteConstants = 0;
+    std::vector<std::string> enables, limits;
+    struct Binding
+    {
+        uint32_t group = 0, binding = 0;
+        std::string kind, dim, sampled, format;
+        char cls = '?';
+        uint32_t reg = 0;
+        std::string name;
+    };
+    std::vector<Binding> bindings;
+    struct Pair { uint32_t sg, sb, tg, tb; };
+    std::vector<Pair> pairs;
+    struct Var { uint32_t location; std::string type, interpolation; };
+    std::vector<Var> inputs, outputs;
+    double ms = 0;     // in the helper (patch + Tint + validation)
+    double wallMs = 0; // including the process spawn
+};
 
 struct JobResult
 {
@@ -140,6 +175,7 @@ struct JobResult
     bool notAnEntry = false; // include-only file with no `main`
     bool cacheHit = false;
     double iosCrossMs = 0;
+    WgslReport wgsl;
 };
 
 std::string firstErrorLine(const std::string& log)
@@ -209,6 +245,105 @@ bool validateMsl(const fs::path& file, bool ios, std::string& log, double& ms)
     ms = msSince(t0);
     log = p.output;
     return p.status == 0;
+}
+
+// ---------------------------------------------------------------- WGSL (Tint) validation
+
+// WebGPU @location of an interstage varying. D3D links vertex outputs to pixel inputs by semantic; WebGPU by location,
+// and only maxInterStageShaderVariables (16 by default) locations exist, so the stock semantics get a fixed compact
+// table. Anything outside it lands at 16 and above, where the limit check reports it.
+uint32_t wgslInterstageLocation(const std::string& sem, uint32_t index)
+{
+    struct Row { const char* name; uint32_t base; uint32_t count; };
+    // The stock shaders link TEXCOORD0..7, COLOR0..1, FOG, POSITION and POSITIONT between stages (the sweep's
+    // "Interstage semantics" section); TEXCOORD8/9 and NORMAL take the spare slots.
+    static const Row rows[] = {{"TEXCOORD", 0, 10}, {"COLOR", 10, 2}, {"FOG", 12, 1}, {"POSITION", 13, 1}, {"POSITIONT", 14, 1}, {"NORMAL", 15, 1}};
+    for (const Row& r : rows)
+        if (sem == r.name && index < r.count)
+            return r.base + index;
+    uint32_t h = 2166136261u;
+    for (char c : sem)
+        h = (h ^ (uint8_t)c) * 16777619u;
+    return 16 + (h + index) % 16;
+}
+
+// Register -> location for the interstage side of a stage (vertex outputs, pixel inputs). Where two semantics share a
+// register (D3D packing), the first one names it, as in the MSL path.
+std::vector<std::pair<uint32_t, uint32_t>> interstageMap(const shaderxlat::Reflection& r, Stage stage)
+{
+    std::vector<std::pair<uint32_t, uint32_t>> out;
+    if (stage != Stage::Vertex && stage != Stage::Pixel)
+        return out;
+    std::set<uint32_t> seen;
+    for (const auto& v : stage == Stage::Vertex ? r.outputs : r.inputs)
+        if (!v.system_value && seen.insert(v.reg).second)
+            out.push_back({v.reg, wgslInterstageLocation(v.semantic, v.semantic_index)});
+    return out;
+}
+
+void parseWgslReport(const std::string& text, WgslReport& w)
+{
+    std::istringstream is(text);
+    std::string line;
+    while (std::getline(is, line))
+    {
+        const size_t sp = line.find(' ');
+        const std::string key = line.substr(0, sp), val = sp == std::string::npos ? "" : line.substr(sp + 1);
+        std::istringstream vs(val);
+        if (key == "ok") w.ok = val == "1";
+        else if (key == "failure") w.failure = val;
+        else if (key == "ms") w.ms = std::atof(val.c_str());
+        else if (key == "derivative_uniformity") w.derivativeUniformity = val == "1";
+        else if (key == "discard") w.discard = val == "1";
+        else if (key == "clip_distances") w.clipDistances = (uint32_t)std::atoi(val.c_str());
+        else if (key == "depth_non_comparison_sampler") w.depthNonComparison = val == "1";
+        else if (key == "texture_load_depth") w.textureLoadDepth = val == "1";
+        else if (key == "workgroup") vs >> w.workgroup[0] >> w.workgroup[1] >> w.workgroup[2] >> w.workgroup[3];
+        else if (key == "rewrites") vs >> w.isNanRewrites >> w.nonFiniteConstants;
+        else if (key == "enable") w.enables.push_back(val);
+        else if (key == "limit") w.limits.push_back(val);
+        else if (key == "binding")
+        {
+            WgslReport::Binding b;
+            vs >> b.group >> b.binding >> b.kind >> b.dim >> b.sampled >> b.format >> b.cls >> b.reg >> b.name;
+            w.bindings.push_back(b);
+        }
+        else if (key == "pair")
+        {
+            WgslReport::Pair p{};
+            vs >> p.sg >> p.sb >> p.tg >> p.tb;
+            w.pairs.push_back(p);
+        }
+        else if (key == "in" || key == "out")
+        {
+            WgslReport::Var v;
+            vs >> v.location >> v.type >> v.interpolation;
+            (key == "in" ? w.inputs : w.outputs).push_back(v);
+        }
+        else if (key == "log")
+        {
+            w.log += val + "\n";
+            if (w.firstError.empty() && val.find("error") != std::string::npos)
+                w.firstError = val;
+        }
+    }
+    if (w.firstError.empty() && !w.ok)
+    {
+        std::istringstream again(w.log);
+        std::getline(again, w.firstError);
+    }
+}
+
+// Groups Tint messages: drop the "file:line:col" prefix, numbers and quoted identifiers.
+std::string wgslErrorKey(const std::string& failure, const std::string& line)
+{
+    std::string s = std::regex_replace(line, std::regex(R"(^[^ ]*:\d+:\d+(-\d+)?:?\s*)"), "");
+    s = std::regex_replace(s, std::regex(R"('[^']*')"), "'…'");
+    s = std::regex_replace(s, std::regex(R"(\b\d+\b)"), "N");
+    s = std::regex_replace(s, std::regex(R"(%[A-Za-z0-9_]+)"), "%x");
+    if (s.size() > 220)
+        s = s.substr(0, 220) + "…";
+    return failure + ": " + s;
 }
 
 // ---------------------------------------------------------------- engine request scan
@@ -397,6 +532,336 @@ std::string reflectionJson(const shaderxlat::Reflection& r, const std::string& e
       << ",\"uses_discard\":" << (r.uses_discard ? "true" : "false") << "}";
     return o.str();
 }
+
+// ---------------------------------------------------------------- WGSL summary
+
+std::string jobLabel(const JobResult& r)
+{
+    if (!r.job.request.empty())
+        return r.job.request;
+    return r.job.entry.rel + "@" + r.job.profile + (r.job.skin >= 0 ? "/skin" + std::to_string(r.job.skin) : "");
+}
+
+// The D3D name of a WGSL binding (via the register the binding number encodes).
+std::string d3dName(const JobResult& r, const WgslReport::Binding& b)
+{
+    if (b.cls == 's')
+        for (const auto& s : r.refl.samplers)
+            if (s.slot == b.reg)
+                return s.name;
+    if (b.cls == 't' || b.cls == 'u')
+        for (const auto& t : r.refl.textures)
+            if (t.slot == b.reg && t.is_uav == (b.cls == 'u'))
+                return t.name;
+    if (b.cls == 'b')
+        for (const auto& c : r.refl.constant_buffers)
+            if (c.slot == b.reg)
+                return c.name;
+    return b.name;
+}
+
+// Sampler states by name, as CBlender_Compile::r_dx10Sampler sets them (Blender_Recorder_R3.cpp).
+const char* samplerFilter(const std::string& name)
+{
+    if (name == "smp_smap")
+        return "comparison";
+    if (name == "smp_nofilter" || name == "smp_jitter" || name == "smp_point")
+        return "nearest";
+    return "linear";
+}
+
+template <class C>
+void listSome(std::ostringstream& md, const C& items, size_t max = 12)
+{
+    size_t shown = 0;
+    for (const auto& l : items)
+    {
+        if (shown++ == max)
+        {
+            md << "- ... (" << items.size() - max << " more)\n";
+            break;
+        }
+        md << "- " << l << "\n";
+    }
+}
+
+std::string wgslSummary(const std::vector<JobResult>& results, const std::vector<OtherRequest>& other, const EngineUse& eu,
+                        const std::vector<batch::Profile>& profiles, bool runtimeSet)
+{
+    std::ostringstream md;
+    md << "\n## WGSL (Tint)\n\n";
+    struct Agg { size_t jobs = 0, translated = 0, wgsl = 0; double ms = 0; };
+    std::map<std::string, Agg> byProfile, byStage;
+    Agg all;
+    std::map<std::string, std::vector<std::string>> groups, limitGroups;
+    std::map<std::string, std::set<std::string>> feature; // feature -> files
+    std::map<std::string, size_t> featureJobs, enables;
+    std::map<char, uint32_t> maxReg;
+    size_t maxBindingsPerStage = 0, cmpAgree = 0, cmpDisagree = 0;
+    std::vector<std::string> cmpExamples;
+    std::map<std::string, std::set<std::string>> depthFilter; // "texture via sampler (filter)" -> files
+    std::map<std::string, size_t> semantics;
+    std::map<std::string, bool> fileOk; // file -> WGSL ok in every job it has
+    std::vector<double> times;
+    for (const JobResult& r : results)
+    {
+        if (r.notAnEntry || r.category == shaderxlat::Category::UnsupportedStage)
+            continue;
+        const std::string stage = stageName(r.job.entry.stage);
+        for (Agg* a : {&all, &byProfile[r.job.profile], &byStage[stage]})
+        {
+            ++a->jobs;
+            a->translated += r.ok;
+            a->wgsl += r.ok && r.wgsl.ok;
+            a->ms += r.wgsl.ms;
+        }
+        auto fo = fileOk.find(r.job.entry.rel);
+        const bool ok = r.ok && r.wgsl.ok;
+        if (fo == fileOk.end()) fileOk[r.job.entry.rel] = ok; else fo->second = fo->second && ok;
+        const std::string label = jobLabel(r);
+        if (!r.ok)
+            continue;
+        if (!r.wgsl.ok)
+        {
+            groups[wgslErrorKey(r.wgsl.failure, r.wgsl.firstError)].push_back(label);
+            continue;
+        }
+        times.push_back(r.wgsl.ms);
+        const WgslReport& w = r.wgsl;
+        auto mark = [&](const std::string& f) { feature[f].insert(r.job.entry.rel); ++featureJobs[f]; };
+        if (w.derivativeUniformity) mark("needs `diagnostic(off, derivative_uniformity)`");
+        if (w.isNanRewrites) mark("SPIR-V rewrite: `OpIsNan`/`OpIsInf` as bit tests");
+        if (w.nonFiniteConstants) mark("SPIR-V rewrite: Inf/NaN constants as run-time values");
+        if (w.workgroup[0]) mark("compute workgroup " + std::to_string(w.workgroup[0]) + "x" + std::to_string(w.workgroup[1]) + "x" +
+                                 std::to_string(w.workgroup[2]) + ", " + std::to_string(w.workgroup[3]) + " bytes shared");
+        if (w.discard) mark("`discard`");
+        if (w.clipDistances) mark("`clip_distances` (" + std::to_string(w.clipDistances) + ")");
+        if (w.depthNonComparison) mark("depth texture sampled with a non-comparison sampler (Tint inspector)");
+        if (w.textureLoadDepth) mark("`textureLoad` on a depth texture");
+        for (const auto& e : w.enables) ++enables[e];
+        for (const auto& l : w.limits)
+            limitGroups[std::regex_replace(l, std::regex(R"(\b\d+\b)"), "N")].push_back(label);
+        maxBindingsPerStage = std::max(maxBindingsPerStage, w.bindings.size());
+        bool hasCmp = false, hasDepth = false;
+        for (const auto& b : w.bindings)
+        {
+            maxReg[b.cls] = std::max(maxReg[b.cls], b.reg);
+            hasCmp |= b.kind == "sampler_comparison";
+            hasDepth |= b.kind.rfind("depth", 0) == 0;
+        }
+        if (hasCmp) mark("comparison sampler (`sampler_comparison`)");
+        if (hasDepth) mark("depth texture (`texture_depth_*`)");
+        // agreement with the SPIRV-Cross analysis the MSL path uses (SamplerBinding::comparison, TextureBinding::depth)
+        bool agree = true;
+        std::string why;
+        for (const auto& b : w.bindings)
+        {
+            if (b.cls == 's')
+                for (const auto& s : r.refl.samplers)
+                    if (s.slot == b.reg && s.comparison != (b.kind == "sampler_comparison"))
+                    {
+                        agree = false;
+                        why = s.name + (s.comparison ? " comparison in MSL path, " : " plain in MSL path, ") + b.kind + " in WGSL";
+                    }
+            if (b.cls == 't')
+                for (const auto& t : r.refl.textures)
+                    if (!t.is_uav && t.slot == b.reg && t.depth != (b.kind.rfind("depth", 0) == 0))
+                    {
+                        agree = false;
+                        why = t.name + (t.depth ? " depth in MSL path, " : " colour in MSL path, ") + b.kind + " in WGSL";
+                    }
+        }
+        if (agree) ++cmpAgree;
+        else
+        {
+            ++cmpDisagree;
+            if (cmpExamples.size() < 12)
+                cmpExamples.push_back(label + ": " + why);
+        }
+        // depth resources (the shadow map) read through a filtering sampler
+        for (const auto& p : w.pairs)
+        {
+            const WgslReport::Binding *sb = nullptr, *tb = nullptr;
+            for (const auto& b : w.bindings)
+            {
+                if (b.group == p.sg && b.binding == p.sb) sb = &b;
+                if (b.group == p.tg && b.binding == p.tb) tb = &b;
+            }
+            if (!sb || !tb)
+                continue;
+            const std::string tex = d3dName(r, *tb), smp = d3dName(r, *sb);
+            // s_smap: the shadow map, a depth format. s_smap_minmax (R32F) and s_half_depth (R32F on NVIDIA, R16F
+            // elsewhere): 32-bit float targets, not filterable in WebGPU without the float32-filterable feature.
+            if (tex != "s_smap" && tex != "s_smap_minmax" && tex != "s_half_depth" && tb->kind.rfind("depth", 0) != 0)
+                continue;
+            depthFilter[tex + " (" + tb->kind + ") with " + smp + " (" + samplerFilter(smp) + ")"].insert(r.job.entry.rel);
+        }
+        // interstage semantics actually linked
+        const auto& sig = r.job.entry.stage == Stage::Vertex ? r.refl.outputs : r.job.entry.stage == Stage::Pixel ? r.refl.inputs : r.refl.outputs;
+        if (r.job.entry.stage != Stage::Compute)
+            for (const auto& v : sig)
+                if (!v.system_value)
+                    ++semantics[v.semantic + std::to_string(v.semantic_index)];
+    }
+    auto pct = [](size_t a, size_t b) { return b ? 100.0 * double(a) / double(b) : 0.0; };
+    char buf[64];
+    snprintf(buf, sizeof buf, "%.2f", pct(all.wgsl, all.jobs));
+    md << "- **valid WGSL: " << all.wgsl << " / " << all.jobs << " jobs (" << buf << " %)**";
+    snprintf(buf, sizeof buf, "%.2f", pct(all.wgsl, all.translated));
+    md << "; of the " << all.translated << " jobs that reach SPIR-V: " << all.wgsl << " (" << buf << " %)\n";
+    size_t filesOk = 0;
+    for (auto& [f, ok] : fileOk) filesOk += ok;
+    md << "- files valid in every job: " << filesOk << " / " << fileOk.size() << "\n";
+    std::sort(times.begin(), times.end());
+    double sum = 0;
+    for (double t : times) sum += t;
+    if (!times.empty())
+        md << "- Tint time per shader (patch + SPIR-V reader + WGSL writer + re-parse + lowering), ms: mean " << sum / times.size() << ", p50 "
+           << times[times.size() / 2] << ", p99 " << times[std::min(times.size() - 1, size_t(0.99 * times.size()))] << ", max " << times.back() << "\n";
+    md << "\n| profile | jobs | reach SPIR-V | valid WGSL | % of jobs |\n|---|---|---|---|---|\n";
+    for (auto& [k, a] : byProfile)
+    {
+        snprintf(buf, sizeof buf, "%.2f", pct(a.wgsl, a.jobs));
+        md << "| " << k << " | " << a.jobs << " | " << a.translated << " | " << a.wgsl << " | " << buf << " |\n";
+    }
+    md << "\n| stage | jobs | reach SPIR-V | valid WGSL |\n|---|---|---|---|\n";
+    for (auto& [k, a] : byStage)
+        md << "| " << k << " | " << a.jobs << " | " << a.translated << " | " << a.wgsl << " |\n";
+
+    if (runtimeSet)
+    {
+        std::map<std::string, std::vector<std::string>> cls;
+        for (const auto& o : other)
+            cls[o.status == "missing" ? "missing from the data" : "skipped: " + o.detail].push_back(o.label);
+        for (const JobResult& r : results)
+        {
+            std::string c;
+            if (r.category == shaderxlat::Category::UnsupportedStage) c = "unsupported stage (GS/HS/DS)";
+            else if (!r.ok) c = "HLSL front end fails: " + std::regex_replace(r.errorLine, std::regex(R"(^[^ ]*:\d+:\d+:\s*)"), "");
+            else if (r.wgsl.ok) c = "valid WGSL";
+            else c = "WGSL " + wgslErrorKey(r.wgsl.failure, r.wgsl.firstError);
+            if (r.job.request.find("(overlay only)") != std::string::npos)
+                c = "repo overlay only (missing from the game data): " + c;
+            cls[c].push_back(jobLabel(r));
+        }
+        md << "\n### Runtime set (r4_shader_warmup requests at default settings)\n\n" << results.size() + other.size()
+           << " requests; every one is classified below.\n\n| class | requests |\n|---|---|\n";
+        for (auto& [k, v] : cls)
+            md << "| " << k << " | " << v.size() << " |\n";
+        md << "\n";
+        for (auto& [k, v] : cls)
+            if (k != "valid WGSL")
+            {
+                md << "**" << k << "** (" << v.size() << ")\n";
+                listSome(md, v, 40);
+                md << "\n";
+            }
+    }
+
+    md << "\n### WGSL failure groups\n\n";
+    std::vector<std::pair<std::string, std::vector<std::string>>> gl(groups.begin(), groups.end());
+    std::sort(gl.begin(), gl.end(), [](auto& a, auto& b) { return a.second.size() > b.second.size(); });
+    for (auto& [msg, labels] : gl)
+    {
+        std::set<std::string> files;
+        for (const auto& l : labels) files.insert(l.substr(0, l.find('@')));
+        md << "#### " << labels.size() << " jobs, " << files.size() << " files: " << msg << "\n";
+        listSome(md, std::set<std::string>(labels.begin(), labels.end()));
+        md << "\n";
+    }
+
+    md << "### Features in the valid WGSL\n\n| feature | jobs | files |\n|---|---|---|\n";
+    for (auto& [f, files] : feature)
+        md << "| " << f << " | " << featureJobs[f] << " | " << files.size() << " |\n";
+    for (auto& [e, n] : enables)
+        md << "| `enable " << e << ";` | " << n << " | |\n";
+    md << "\nComparison/depth classification, Tint vs the SPIRV-Cross analysis of the MSL path: " << cmpAgree << " jobs agree, " << cmpDisagree
+       << " differ.\n\n";
+    listSome(md, cmpExamples);
+    md << "\n#### Depth and 32-bit float resources and the samplers that read them\n\n";
+    for (auto& [k, files] : depthFilter)
+    {
+        md << "- " << k << ": " << files.size() << " files\n";
+        std::vector<std::string> fl(files.begin(), files.end());
+        std::ostringstream inner;
+        listSome(inner, fl, 8);
+        std::string s = inner.str();
+        s = std::regex_replace(s, std::regex("(^|\n)- "), "$1  - ");
+        md << s;
+    }
+    md << "\n#### Entry-point limits (WebGPU defaults)\n\n";
+    if (limitGroups.empty())
+        md << "None exceeded.\n";
+    for (auto& [k, labels] : limitGroups)
+    {
+        md << "- " << labels.size() << " x " << k << "\n";
+        std::ostringstream inner;
+        listSome(inner, std::set<std::string>(labels.begin(), labels.end()), 6);
+        md << std::regex_replace(inner.str(), std::regex("(^|\n)- "), "$1  - ");
+    }
+    md << "\n#### Bindings\n\nHighest register per class: ";
+    for (auto& [c, reg] : maxReg) md << c << reg << " ";
+    md << "; most bindings in one shader: " << maxBindingsPerStage << "\n";
+    md << "\n#### Interstage semantics (vertex outputs and pixel inputs, jobs using each)\n\n";
+    for (auto& [s, n] : semantics) md << s << " (" << n << ", @location " << wgslInterstageLocation(s.substr(0, s.find_first_of("0123456789")), (uint32_t)std::atoi(s.c_str() + s.find_first_of("0123456789"))) << ") ";
+    md << "\n";
+
+    // vertex/pixel linking under WebGPU rules: every pixel input needs a vertex output at the same location with the same
+    // component count, base type and interpolation (RenderPipeline.cpp).
+    if (!eu.pairs.empty())
+    {
+        std::map<std::string, const JobResult*> idx;
+        for (const JobResult& r : results)
+            if (r.ok && r.wgsl.ok && r.job.skin < 0)
+                idx[r.job.entry.rel + "@" + r.job.profile] = &r;
+        size_t checked = 0, clean = 0;
+        std::map<std::string, size_t> kinds;
+        std::map<std::string, std::set<std::string>> ex;
+        for (const auto& [vsName, psName] : eu.pairs)
+            for (const auto& prof : profiles)
+            {
+                auto vi = idx.find(vsName + ".vs@" + prof.name), pi = idx.find(psName + ".ps@" + prof.name);
+                if (vi == idx.end() || pi == idx.end())
+                    continue;
+                ++checked;
+                bool bad = false;
+                for (const auto& in : pi->second->wgsl.inputs)
+                {
+                    const WgslReport::Var* outv = nullptr;
+                    for (const auto& o : vi->second->wgsl.outputs)
+                        if (o.location == in.location)
+                            outv = &o;
+                    std::string kind;
+                    if (!outv) kind = "pixel input with no vertex output";
+                    else
+                    {
+                        auto comps = [](const std::string& t) { return t.rfind("vec", 0) == 0 ? t[3] - '0' : 1; };
+                        auto base = [](const std::string& t) { auto lt = t.find('<'); return lt == std::string::npos ? t : t.substr(lt + 1, 3); };
+                        if (comps(outv->type) != comps(in.type)) kind = "component count differs";
+                        else if (base(outv->type) != base(in.type)) kind = "base type differs";
+                        else if (outv->interpolation != in.interpolation) kind = "interpolation differs";
+                    }
+                    if (kind.empty())
+                        continue;
+                    bad = true;
+                    ++kinds[kind];
+                    ex[kind].insert(vsName + " -> " + psName + " @location " + std::to_string(in.location) + " (" + in.type +
+                                    (outv ? " from " + outv->type : "") + ")");
+                }
+                clean += !bad;
+            }
+        md << "\n#### Vertex/pixel linking (pairs from blenders and .s scripts, WebGPU matching rules)\n\n" << checked
+           << " (vs, ps, profile) combinations, " << clean << " link as they are.\n\n";
+        for (auto& [k, n] : kinds)
+        {
+            md << "- " << n << " x " << k << " (" << ex[k].size() << " distinct)\n";
+            std::ostringstream inner;
+            listSome(inner, ex[k], 10);
+            md << std::regex_replace(inner.str(), std::regex("(^|\n)- "), "$1  - ");
+        }
+    }
+    return md.str();
+}
 } // namespace
 
 int main(int argc, char** argv)
@@ -407,6 +872,11 @@ int main(int argc, char** argv)
     std::string nameFilter, cacheDir;
     bool validate = true, keepMsl = false, dumpReflection = false, compat = true;
     unsigned jobs = std::max(1u, std::thread::hardware_concurrency());
+    // --target wgsl: SPIR-V -> WGSL with Tint through shader_wgsl (built with -DANOMALY_SHADERXLAT_WGSL=ON), instead of
+    // validating MSL with xcrun metal.
+    std::string target = "msl", wgslTool, requestsFile, wgslLocations = "semantic";
+    bool keepWgsl = false, wgslRemap = true, wgslStrictUniformity = false, wgslPolyfill = true;
+    std::vector<std::string> uavFormats;
     for (int i = 1; i < argc; ++i)
     {
         const std::string a = argv[i];
@@ -422,13 +892,40 @@ int main(int argc, char** argv)
         else if (a == "--cache") cacheDir = next();
         else if (a == "--no-compat") compat = false;
         else if (a == "--jobs") jobs = (unsigned)std::atoi(next().c_str());
+        else if (a == "--target") target = next();
+        else if (a == "--wgsl-tool") wgslTool = next();
+        else if (a == "--keep-wgsl") keepWgsl = true;
+        else if (a == "--requests") requestsFile = next();
+        else if (a == "--wgsl-locations") wgslLocations = next();
+        else if (a == "--wgsl-no-remap") wgslRemap = false;
+        else if (a == "--wgsl-strict-uniformity") wgslStrictUniformity = true;
+        else if (a == "--wgsl-no-polyfill") wgslPolyfill = false;
+        else if (a == "--uav-format") uavFormats.push_back(next());
         else { fprintf(stderr, "unknown option %s\n", a.c_str()); return 2; }
     }
-    if (g_roots.empty())
+    if (g_roots.empty() || (target != "msl" && target != "wgsl") || (wgslLocations != "semantic" && wgslLocations != "register"))
     {
         fprintf(stderr, "usage: shader_batch --root <shaders dir> [--root ...] --out <dir> [--engine-src <dir>] [--profile name]\n"
-                        "                    [--filter substr] [--no-validate] [--keep-msl] [--reflect] [--no-compat] [--cache dir] [--jobs N]\n");
+                        "                    [--filter substr] [--no-validate] [--keep-msl] [--reflect] [--no-compat] [--cache dir] [--jobs N]\n"
+                        "                    [--target msl|wgsl] [--wgsl-tool path] [--keep-wgsl] [--requests file]\n"
+                        "                    [--wgsl-locations semantic|register] [--wgsl-no-remap] [--wgsl-strict-uniformity]\n"
+                        "                    [--wgsl-no-polyfill]\n"
+                        "                    [--uav-format U=FMT]\n");
         return 2;
+    }
+    const bool wgslMode = target == "wgsl";
+    if (wgslMode)
+    {
+        validate = false; // no xcrun metal; the WGSL is validated by Tint instead
+        if (wgslTool.empty())
+            wgslTool = (fs::path(argv[0]).parent_path() / "shader_wgsl").string();
+        std::error_code ec;
+        if (!fs::is_regular_file(wgslTool, ec))
+        {
+            fprintf(stderr, "--target wgsl needs %s (configure with -DANOMALY_SHADERXLAT_WGSL=ON and build shader_wgsl)\n",
+                    wgslTool.c_str());
+            return 2;
+        }
     }
     for (const std::string& r : g_roots)
         for (const auto& part : fs::path(fs::weakly_canonical(outDir)))
@@ -471,8 +968,76 @@ int main(int argc, char** argv)
     // ---- build the job list
     std::vector<Job> joblist;
     std::vector<batch::Profile> profiles = batch::allProfiles();
+    std::vector<OtherRequest> otherRequests;
+    if (!requestsFile.empty())
+    {
+        // The runtime set: what r4_shader_warmup --export-requests wrote, one request per line:
+        //   name \t ext \t skin \t status \t entry \t target \t origin [\t NAME=VALUE]...
+        // with the exact macro list CRender::shader_compile builds at default settings.
+        std::ifstream rf(requestsFile);
+        if (!rf)
+        {
+            fprintf(stderr, "cannot read %s\n", requestsFile.c_str());
+            return 2;
+        }
+        profiles = {batch::Profile{"runtime", {}}};
+        std::string line;
+        while (std::getline(rf, line))
+        {
+            if (line.empty() || line[0] == '#')
+                continue;
+            std::vector<std::string> f;
+            std::istringstream ls(line);
+            for (std::string field; std::getline(ls, field, '\t');)
+                f.push_back(field);
+            if (f.size() < 7)
+                continue;
+            const std::string name = f[0], ext = f[1], status = f[3];
+            const int skin = std::atoi(f[2].c_str());
+            const std::string label = name + ext + (skin >= 0 ? " skin " + std::to_string(skin) : "");
+            if (nameFilter.size() && label.find(nameFilter) == std::string::npos)
+                continue;
+            std::string file = name;
+            if (const size_t p = file.find('('); p != std::string::npos)
+                file = file.substr(0, p);
+            bool overlayOnly = false;
+            if (status == "missing")
+            {
+                // missing from the game data the exporter mounted, but maybe present in one of our roots (the repo's
+                // gamedata/shaders overlay ships files the archive lacks)
+                RootIncludes inc;
+                std::string resolved, text;
+                overlayOnly = inc.open(file + ext, "", resolved, text) && f.size() > 7;
+            }
+            if (status != "ok" && !overlayOnly)
+            {
+                otherRequests.push_back({label, status, f[6]});
+                continue;
+            }
+            Stage st;
+            if (!stageFromExt(ext, st))
+                continue;
+            Job j;
+            j.entry = Entry{file + ext, st, file};
+            j.profile = "runtime";
+            j.skin = skin;
+            j.entryPoint = f[4];
+            j.target = f[5];
+            j.request = label + (overlayOnly ? " (overlay only)" : "");
+            for (size_t k = 7; k < f.size(); ++k)
+            {
+                const size_t eq = f[k].find('=');
+                if (eq != std::string::npos)
+                    j.macros.push_back({f[k].substr(0, eq), f[k].substr(eq + 1)});
+            }
+            // the engine compiles a file once per distinct name; requests that differ only in parameters share it
+            joblist.push_back(j);
+        }
+    }
     for (const auto& p : profiles)
     {
+        if (!requestsFile.empty())
+            break;
         const bool selected = profileFilter.empty() ? p.name != "msaa4" && p.name != "ssao4_hdao"
                                                     : std::find(profileFilter.begin(), profileFilter.end(), p.name) != profileFilter.end();
         if (!selected)
@@ -502,7 +1067,7 @@ int main(int argc, char** argv)
         eu = scanEngine(engineSrc, g_roots);
 
     const fs::path out(outDir);
-    fs::create_directories(out / "msl");
+    fs::create_directories(out / (wgslMode ? "wgsl" : "msl"));
 
     // ---- run
     std::vector<JobResult> results(joblist.size());
@@ -534,6 +1099,8 @@ int main(int argc, char** argv)
             o.platform = shaderxlat::Platform::MacOS;
             o.keep_spirv = true;
             o.fxc_compat = compat;
+            o.entry = job.entryPoint;
+            o.profile = job.target;
             const std::string label = job.entry.name + "." + stageName(job.entry.stage) + "@" + job.profile +
                                       (job.skin >= 0 ? "/skin" + std::to_string(job.skin) : "");
             bool hit = false;
@@ -564,6 +1131,73 @@ int main(int argc, char** argv)
                     std::lock_guard<std::mutex> lk(logMutex);
                     fs::create_directories(out / "reflection" / job.profile);
                     std::ofstream(out / "reflection" / job.profile / (base + ".json")) << reflectionJson(res.reflection, res.entry_point);
+                }
+                if (wgslMode && (job.entry.stage == Stage::Vertex || job.entry.stage == Stage::Pixel || job.entry.stage == Stage::Compute))
+                {
+                    const fs::path dir = out / "wgsl_tmp";
+                    {
+                        std::lock_guard<std::mutex> lk(logMutex);
+                        fs::create_directories(dir);
+                    }
+                    const fs::path spv = dir / (base + ".spv"), wgslFile = dir / (base + ".wgsl");
+                    std::ofstream(spv, std::ios::binary)
+                        .write(reinterpret_cast<const char*>(res.spirv.data()), std::streamsize(res.spirv.size() * 4));
+                    std::vector<std::string> args = {wgslTool, "--spv", spv.string(), "--stage", stageName(job.entry.stage), "--out",
+                                                     wgslFile.string()};
+                    if (wgslLocations == "semantic")
+                        for (const auto& [reg, loc] : interstageMap(res.reflection, job.entry.stage))
+                        {
+                            args.push_back("--loc");
+                            args.push_back(std::to_string(reg) + "=" + std::to_string(loc));
+                        }
+                    for (const std::string& u : uavFormats)
+                    {
+                        args.push_back("--uav-format");
+                        args.push_back(u);
+                    }
+                    if (!wgslRemap)
+                        args.push_back("--no-remap");
+                    if (wgslStrictUniformity)
+                        args.push_back("--strict-uniformity");
+                    if (!wgslPolyfill)
+                        args.push_back("--no-polyfill");
+                    const auto tw = Clock::now();
+                    Proc p = run(args);
+                    r.wgsl.run = true;
+                    r.wgsl.wallMs = msSince(tw);
+                    parseWgslReport(p.output, r.wgsl);
+                    if (p.status != 0 && p.status != 1)
+                    {
+                        // Tint aborted (internal compiler error) or the helper failed to start
+                        r.wgsl.ok = false;
+                        r.wgsl.crashed = true;
+                        r.wgsl.failure = "crash";
+                        std::string last;
+                        std::istringstream os(p.output);
+                        for (std::string l; std::getline(os, l);)
+                            if (!l.empty())
+                                last = l;
+                        r.wgsl.firstError = last.empty() ? "exit status " + std::to_string(p.status) : last;
+                        r.wgsl.log = p.output;
+                    }
+                    {
+                        std::lock_guard<std::mutex> lk(logMutex);
+                        std::error_code ec;
+                        if (keepWgsl || !r.wgsl.ok)
+                        {
+                            fs::create_directories(out / "wgsl");
+                            if (fs::exists(wgslFile, ec))
+                                fs::copy_file(wgslFile, out / "wgsl" / wgslFile.filename(), fs::copy_options::overwrite_existing, ec);
+                        }
+                        if (!r.wgsl.ok)
+                        {
+                            // the failing SPIR-V, for other front ends (Naga) and for bug reports
+                            fs::create_directories(out / "wgsl_failed_spirv");
+                            fs::copy_file(spv, out / "wgsl_failed_spirv" / spv.filename(), fs::copy_options::overwrite_existing, ec);
+                        }
+                        fs::remove(spv, ec);
+                        fs::remove(wgslFile, ec);
+                    }
                 }
                 if (validate)
                 {
@@ -828,6 +1462,8 @@ int main(int argc, char** argv)
         for (const auto& [k, n] : examples) md << "- " << k << (n > 1 ? " (x" + std::to_string(n) + ")" : "") << "\n";
         md << "\n";
     }
+    if (wgslMode)
+        md << wgslSummary(results, otherRequests, eu, profiles, !requestsFile.empty());
     { std::ofstream(out / "summary.md") << md.str(); }
 
     // per-job JSON lines
@@ -843,7 +1479,34 @@ int main(int argc, char** argv)
                << "\",\"metal_ios\":\"" << (r.metalIos == MetalState::Ok ? "ok" : r.metalIos == MetalState::Fail ? "fail" : "-")
                << "\",\"hooks\":[";
             for (size_t i = 0; i < r.hooks.size(); ++i) js << (i ? "," : "") << "\"" << jesc(r.hooks[i]) << "\"";
-            js << "]}\n";
+            js << "]";
+            if (!r.job.request.empty())
+                js << ",\"request\":\"" << jesc(r.job.request) << "\"";
+            if (r.wgsl.run)
+            {
+                const WgslReport& w = r.wgsl;
+                js << ",\"wgsl\":{\"ok\":" << (w.ok ? "true" : "false") << ",\"failure\":\"" << jesc(w.failure) << "\",\"error\":\""
+                   << jesc(w.firstError) << "\",\"ms\":" << w.ms << ",\"wall_ms\":" << w.wallMs
+                   << ",\"derivative_uniformity\":" << (w.derivativeUniformity ? "true" : "false")
+                   << ",\"discard\":" << (w.discard ? "true" : "false") << ",\"clip_distances\":" << w.clipDistances
+                   << ",\"depth_non_comparison_sampler\":" << (w.depthNonComparison ? "true" : "false")
+                   << ",\"isnan_rewrites\":" << w.isNanRewrites << ",\"nonfinite_constants\":" << w.nonFiniteConstants
+                   << ",\"workgroup\":[" << w.workgroup[0] << "," << w.workgroup[1] << "," << w.workgroup[2] << "],\"workgroup_storage\":"
+                   << w.workgroup[3] << ",\"enables\":[";
+                for (size_t i = 0; i < w.enables.size(); ++i) js << (i ? "," : "") << "\"" << jesc(w.enables[i]) << "\"";
+                js << "],\"bindings\":[";
+                for (size_t i = 0; i < w.bindings.size(); ++i)
+                {
+                    const auto& b = w.bindings[i];
+                    js << (i ? "," : "") << "{\"group\":" << b.group << ",\"binding\":" << b.binding << ",\"kind\":\"" << b.kind
+                       << "\",\"dim\":\"" << b.dim << "\",\"sampled\":\"" << b.sampled << "\",\"format\":\"" << b.format << "\",\"d3d\":\""
+                       << b.cls << b.reg << "\"}";
+                }
+                js << "],\"limits\":[";
+                for (size_t i = 0; i < w.limits.size(); ++i) js << (i ? "," : "") << "\"" << jesc(w.limits[i]) << "\"";
+                js << "]}";
+            }
+            js << "}\n";
         }
     }
     // full logs of failures
@@ -858,11 +1521,22 @@ int main(int argc, char** argv)
                 fl2 << "==== METAL macOS " << r.job.entry.rel << " @" << r.job.profile << "\n" << r.metalLogMac << "\n";
             else if (r.ok && r.metalIos == MetalState::Fail)
                 fl2 << "==== METAL iOS " << r.job.entry.rel << " @" << r.job.profile << "\n" << r.metalLogIos << "\n";
+            else if (r.ok && r.wgsl.run && !r.wgsl.ok)
+                fl2 << "==== WGSL " << r.wgsl.failure << " " << r.job.entry.rel << " @" << r.job.profile
+                    << (r.job.skin >= 0 ? " skin" + std::to_string(r.job.skin) : "") << "\n" << r.wgsl.log << "\n";
         }
     }
     std::error_code ec;
     fs::remove_all(out / "msl_tmp", ec);
-    printf("%s", md.str().substr(0, md.str().find("## Failure groups")).c_str());
+    fs::remove(out / "wgsl_tmp", ec); // empty by now: every job removes its own files
+    if (wgslMode)
+    {
+        const std::string s = md.str();
+        const size_t at = s.find("## WGSL");
+        printf("%s", s.substr(at, s.find("### WGSL failure groups", at) - at).c_str());
+    }
+    else
+        printf("%s", md.str().substr(0, md.str().find("## Failure groups")).c_str());
     printf("details: %s/summary.md  %s/results.jsonl  %s/failures.log\n", outDir.c_str(), outDir.c_str(), outDir.c_str());
     return 0;
 }

@@ -1,0 +1,7 @@
+# standalone
+# Memory run (tools/render_harness/mem_report.sh): the main menu, idle for a minute. The sampler also covers the engine start before it.
+# No Lua samples here: the script engine does not exist in the menu, and run_string / mem_stats crash there.
+2 mark menu idle begins
+30 mark menu idle 30 s
+60 mark menu idle ends
+64 quit

@@ -1,5 +1,5 @@
 --// General 
-jit.opt.start(2)
+if jit then jit.opt.start(2) end -- plain Lua 5.1 has no jit
 
 string.gfind = string.gmatch
 math.mod = math.fmod

@@ -1,13 +1,20 @@
 # CMake build for the macOS / iPadOS port. The Windows build still uses src/engine-vs2022.sln.
 cmake_minimum_required(VERSION 3.28)
 
+# The WebAssembly build (preset web-wasm32, docs/web-port/WASM-BUILD.md) has no Objective-C and takes its own, smaller
+# configuration from cmake/web/AnomalyWeb.cmake.
+set(anomaly_languages C CXX OBJC OBJCXX)
+if(ANOMALY_WEB)
+    set(anomaly_languages C CXX)
+endif()
+
 project(AnomalyPort
     VERSION 0.1.0
-    DESCRIPTION "STALKER Anomaly (xray-monolith) for macOS and iPadOS"
-    LANGUAGES C CXX OBJC OBJCXX)
+    DESCRIPTION "STALKER Anomaly (xray-monolith) for macOS, iPadOS and WebAssembly"
+    LANGUAGES ${anomaly_languages})
 
-if(NOT APPLE)
-    message(FATAL_ERROR "This CMake build targets macOS and iOS only; use src/engine-vs2022.sln on Windows.")
+if(NOT APPLE AND NOT ANOMALY_WEB)
+    message(FATAL_ERROR "This CMake build targets macOS, iOS and WebAssembly only; use src/engine-vs2022.sln on Windows.")
 endif()
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
@@ -15,6 +22,10 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 enable_testing()
 
 include(AnomalyPlatform)
+if(ANOMALY_WEB)
+    include(web/AnomalyWeb)
+    return()
+endif()
 include(Dependencies)
 include(AnomalyModules)
 

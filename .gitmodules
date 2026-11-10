@@ -46,3 +46,8 @@
 	path = external/xz
 	url = https://github.com/tukaani-project/xz.git
 	shallow = true
+[submodule "external/dawn"]
+	path = external/dawn
+	url = https://dawn.googlesource.com/dawn
+	shallow = true
+	branch = chromium/8103

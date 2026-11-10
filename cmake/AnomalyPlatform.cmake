@@ -6,12 +6,28 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
-if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
+# ANOMALY_WEB: the WebAssembly build (preset web-wasm32, Emscripten toolchain). docs/web-port/WASM-BUILD.md.
+option(ANOMALY_WEB "Build for WebAssembly with Emscripten (preset web-wasm32)" OFF)
+
+if(ANOMALY_WEB)
+    if(NOT EMSCRIPTEN)
+        message(FATAL_ERROR "ANOMALY_WEB needs the Emscripten toolchain; use: cmake --preset web-wasm32 (docs/web-port/WASM-BUILD.md)")
+    endif()
+    set(ANOMALY_IOS OFF)
+    set(ANOMALY_PLATFORM_NAME "web")
+elseif(CMAKE_SYSTEM_NAME STREQUAL "iOS")
     set(ANOMALY_IOS ON)
     set(ANOMALY_PLATFORM_NAME "ios")
 else()
     set(ANOMALY_IOS OFF)
     set(ANOMALY_PLATFORM_NAME "macos")
+endif()
+
+if(ANOMALY_WEB)
+    # Compiler and linker flags, the Node test runner: cmake/web/AnomalyWeb.cmake. None of the Apple settings below applies
+    # (sanitizers, bundle ids, signing, entitlements).
+    include(web/AnomalyWebFlags)
+    return()
 endif()
 
 if(NOT CMAKE_OSX_ARCHITECTURES STREQUAL "arm64")

@@ -1,5 +1,10 @@
 # jit_lab: LuaJIT benchmark and stability app for macOS and iPadOS. See docs/ios-port/IPAD-JIT.md.
 
+# LuaJIT only: not built with ANOMALY_LUA=lua51.
+if(NOT TARGET LuaJIT::luajit)
+    return()
+endif()
+
 # Embed the Lua workloads so the app has no resource lookup to get wrong on a device.
 set(bench_lua_file "${CMAKE_CURRENT_SOURCE_DIR}/lua/bench.lua")
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${bench_lua_file}")

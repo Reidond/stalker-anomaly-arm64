@@ -1,7 +1,8 @@
-# luabind as used by Anomaly (heavily modified 0.7-era luabind), built against LuaJIT 2.1.
+# luabind as used by Anomaly (heavily modified 0.7-era luabind), built against the configured Lua VM (Anomaly::Lua: LuaJIT 2.1,
+# or Lua 5.1.5 with ANOMALY_LUA=lua51).
 #
 # luabind has no dependency on xrCore. Its allocator is already injectable through
-# luabind::set_allocator(); the only external headers it needs are lua.hpp (LuaJIT) and the
+# luabind::set_allocator(); the only external headers it needs are lua.hpp and the
 # sm_boost shims in sdk/include.
 
 # The engine builds luabind with LUABIND_NO_EXCEPTIONS (errors go to luabind::set_error_callback) and,
@@ -45,7 +46,7 @@ target_include_directories(luabind SYSTEM PUBLIC
     "${luabind_sm_boost_dir}"
 )
 target_compile_definitions(luabind PRIVATE LUABIND_BUILDING)
-target_link_libraries(luabind PUBLIC LuaJIT::luajit)
+target_link_libraries(luabind PUBLIC Anomaly::Lua)
 
 # This changes the behaviour of header-only templates, so every consumer must see it.
 if(NOT ANOMALY_LUABIND_EXCEPTIONS)

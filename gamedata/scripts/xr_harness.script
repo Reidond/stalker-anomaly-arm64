@@ -299,3 +299,11 @@ function zoom(on)
 	end
 	log("zoom %s", tostring(on ~= false))
 end
+
+-- Lua heap in KB (collectgarbage("count"): what the Lua state holds, garbage included) next to the level name, for the memory runs
+-- (tools/render_harness/mem_report.sh). The Lua heap is not in the malloc counters on the Mac (LuaJIT allocates its own), but it would be
+-- in the wasm heap, so the report adds it.
+function mem(tag)
+	local ok, name = pcall(function() return level.name() end)
+	log("MEM %s lua_kb=%.0f level=%s", tostring(tag or ""), collectgarbage("count"), ok and tostring(name) or "-")
+end

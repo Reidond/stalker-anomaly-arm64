@@ -317,6 +317,18 @@ void Context::resetEncoderCaches()
 void Context::endFrame()
 {
     // `committed_` is the serial of the command buffer that carried this frame's tail.
+    {
+        // counters for docs/web-port/MEMORY.md: the most one frame took from the rings (what a CPU shadow ring would have to hold)
+        auto atomicMax = [](std::atomic<uint64_t>& a, uint64_t v) {
+            uint64_t cur = a.load(std::memory_order_relaxed);
+            while (v > cur && !a.compare_exchange_weak(cur, v, std::memory_order_relaxed)) {}
+        };
+        const uint64_t cu = constantRing_.usedThisFrame(), uu = uploadRing_.usedThisFrame();
+        atomicMax(dev_->memRingConstPeak, cu);
+        atomicMax(dev_->memRingUploadPeak, uu);
+        atomicMax(dev_->memRingFramePeak, cu + uu);
+        dev_->memRingAllocated.store(constantRing_.totalBytes() + uploadRing_.totalBytes(), std::memory_order_relaxed);
+    }
     constantRing_.tagCurrent(committed_);
     uploadRing_.tagCurrent(committed_);
     const uint64_t needC = constantRing_.advance();
@@ -2142,6 +2154,20 @@ bool GetRenderStats(RenderStats* out)
     out->renderTargetBytes = s.renderTargetBytes;
     out->bufferBytes = s.bufferBytes;
     out->deviceAllocatedBytes = s.deviceAllocatedBytes;
+    if (Device* d = LatestDevice())
+    {
+        out->bufferStaticBytes = d->memBuf[MemBufStatic];
+        out->bufferDynamicBytes = d->memBuf[MemBufDynamic];
+        out->bufferStagingBytes = d->memBuf[MemBufStaging];
+        out->textureSharedStaticBytes = d->memTex[MemTexSharedStatic];
+        out->textureDynamicBytes = d->memTex[MemTexDynamic];
+        out->textureStagingBytes = d->memTex[MemTexStaging];
+        out->texturePrivateBytes = d->memTex[MemTexPrivate];
+        out->ringAllocatedBytes = d->memRingAllocated;
+        out->ringFramePeakBytes = d->memRingFramePeak;
+        out->ringConstantPeakBytes = d->memRingConstPeak;
+        out->ringUploadPeakBytes = d->memRingUploadPeak;
+    }
     return true;
 }
 

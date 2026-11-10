@@ -3,6 +3,11 @@
 //   lua_cache_test                     the checks below; exit status 0 when every one passes
 //   lua_cache_test --bench <dir> [n]   compiles every *.script under <dir> n times (default 3) from the text and then through a warm
 //                                      cache, wrapped the way CScriptStorage wraps a script, and prints the times
+//   lua_cache_test --check <dir>...    compiles every *.script and *.lua under the directories once, wrapped the same way, and lists
+//                                      the ones the VM rejects with its message (the syntax audit of docs/web-port/LUA51.md); exit
+//                                      status 1 when any is rejected
+//
+// The VM is LuaJIT 2.1, or Lua 5.1.5 with ANOMALY_LUA51; only the bytecode header the corruption tests edit differs.
 //
 // Every check runs in a fresh lua_State and a fresh cache directory, the way two launches of the game would.
 
@@ -11,7 +16,9 @@ extern "C"
 #include <lua.h>
 #include <lauxlib.h>
 #include <lualib.h>
+#ifndef ANOMALY_LUA51
 #include <luajit.h>
+#endif
 }
 
 #include <xrServerEntities/script_bytecode_cache.h>
@@ -34,6 +41,21 @@ namespace fs = std::filesystem;
 
 namespace
 {
+#ifdef ANOMALY_LUA51
+// ESC "Lua" 0x51, format, endianness, sizeof int / size_t / Instruction / lua_Number, integral numbers
+constexpr size_t kVmHeaderSize = 12;
+// bytes after the header that the loader refuses (a zero-length function that is cut short)
+const std::string kRefusedBody(40, '\0');
+// another build's header: big endian (byte 6), a 4-byte size_t (byte 8)
+constexpr std::pair<size_t, unsigned char> kForeignHeader[] = {{6, 0x01}, {8, 0x0c}};
+#else
+// ESC 'L' 'J', bytecode version, flags
+constexpr size_t kVmHeaderSize = 5;
+const std::string kRefusedBody(40, '\x7f');
+// another build's flags: 32-bit GC references (FR2 off), big endian
+constexpr std::pair<size_t, unsigned char> kForeignHeader[] = {{4, 0x08}, {4, 0x01}};
+#endif
+
 int g_failed = 0;
 int g_checks = 0;
 
@@ -293,7 +315,7 @@ void test_corrupt_entries()
 	{
 		// the entry is internally consistent (the bytecode hash matches) but the bytecode itself is garbage: the VM refuses it
 		std::string d = good.substr(0, sizeof(Header) + strlen(kName));
-		const std::string junk = good.substr(sizeof(Header) + strlen(kName), 5) + std::string(40, '\x7f'); // the VM's own bytecode header, then junk
+		const std::string junk = good.substr(sizeof(Header) + strlen(kName), kVmHeaderSize) + kRefusedBody; // the VM's own bytecode header, then junk
 		Header h;
 		memcpy(&h, d.data(), sizeof(h));
 		h.bc_size = junk.size();
@@ -335,15 +357,15 @@ void test_other_vm()
 	};
 	damaged("another VM id", [](Header& h, std::string&) { h.vm_id ^= 0x1234; }, &script_cache::Stats::incompatible);
 	damaged("another cache format", [](Header& h, std::string&) { h.format = 99; }, &script_cache::Stats::incompatible);
-	// bytecode of the same text with the flags of another build (32-bit GC references, big endian): the entry is consistent, its
-	// bytecode header is not the running VM's
-	for (unsigned char flip : {0x01, 0x08})
+	// bytecode of the same text with the header of another build (LuaJIT: 32-bit GC references, big endian; Lua 5.1: big endian, a
+	// 32-bit size_t): the entry is consistent, its bytecode header is not the running VM's
+	for (const auto& [at, flip] : kForeignHeader)
 	{
 		char what[64];
-		snprintf(what, sizeof(what), "bytecode flags ^ 0x%02x", flip);
+		snprintf(what, sizeof(what), "bytecode header byte %zu ^ 0x%02x", at, flip);
 		damaged(what, [&](Header& h, std::string& d) {
 			char* bc = &d[sizeof(Header) + h.name_len];
-			bc[4] = char(bc[4] ^ flip);
+			bc[at] = char(bc[at] ^ flip);
 			script_cache::hash128(bc, size_t(h.bc_size), h.bc_h1, h.bc_h2);
 		}, &script_cache::Stats::incompatible);
 	}
@@ -581,12 +603,45 @@ double now_ms()
 	return double(clock_gettime_nsec_np(CLOCK_UPTIME_RAW)) * 1e-6;
 }
 
+// CScriptStorage's header (file_header_old), with the namespace the file name gives
+std::string wrap(const std::string& ns, const std::string& text)
+{
+	return "local function script_name() return \"" + ns + "\" end local this = {} " + ns + " = this  setmetatable(this, {__index = _G}) setfenv(1, this) " + text;
+}
+
+int check_dirs(int count, char** dirs)
+{
+	Lua lua;
+	size_t files = 0, rejected = 0, bytes = 0;
+	for (int i = 0; i < count; ++i)
+	{
+		std::vector<fs::path> paths;
+		for (const auto& e : fs::recursive_directory_iterator(dirs[i]))
+			if (e.is_regular_file() && (e.path().extension() == ".script" || e.path().extension() == ".lua"))
+				paths.push_back(e.path());
+		std::sort(paths.begin(), paths.end());
+		for (const auto& p : paths)
+		{
+			const std::string text = read_all(p.string());
+			// .script files run in their namespace (CScriptStorage::do_file); the .lua kernel scripts run as they are
+			const std::string chunk = p.extension() == ".script" ? wrap(p.stem().string(), text) : text;
+			const std::string name = "@" + p.string();
+			++files;
+			bytes += text.size();
+			if (luaL_loadbuffer(lua.L, chunk.data(), chunk.size(), name.c_str()) != 0)
+			{
+				++rejected;
+				printf("  REJECTED %s\n", lua_tostring(lua.L, -1));
+			}
+			lua_settop(lua.L, 0);
+		}
+	}
+	printf("%zu files, %.2f MB: %zu rejected\n", files, double(bytes) / 1e6, rejected);
+	return rejected ? 1 : 0;
+}
+
 int bench(const char* dir, int rounds)
 {
-	// CScriptStorage's header (file_header_old), with the namespace the file name gives
-	auto wrap = [](const std::string& ns, const std::string& text) {
-		return "local function script_name() return \"" + ns + "\" end local this = {} " + ns + " = this  setmetatable(this, {__index = _G}) setfenv(1, this) " + text;
-	};
 	std::vector<std::pair<std::string, std::string>> files;
 	size_t total = 0;
 	for (const auto& e : fs::recursive_directory_iterator(dir))
@@ -647,6 +702,8 @@ int main(int argc, char** argv)
 {
 	if (argc >= 3 && !strcmp(argv[1], "--bench"))
 		return bench(argv[2], argc > 3 ? atoi(argv[3]) : 3);
+	if (argc >= 3 && !strcmp(argv[1], "--check"))
+		return check_dirs(argc - 2, argv + 2);
 
 	test_off_by_default();
 	test_cold_then_warm();

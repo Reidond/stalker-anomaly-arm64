@@ -16,8 +16,13 @@
 #include "../os_clipboard.h"
 
 #include <cxxabi.h>
+#ifdef XR_PLATFORM_WEB
+// Emscripten: no signals to catch (a wasm trap is a JavaScript exception), no backtrace(), no dladdr() symbol names.
+#include <emscripten/emscripten.h>
+#else
 #include <dlfcn.h>
 #include <execinfo.h>
+#endif
 #include <new>
 #include <atomic>
 #include <exception>
@@ -54,6 +59,18 @@ namespace
 {
 const int MAX_FRAMES = 64;
 
+#ifdef XR_PLATFORM_WEB
+// The JavaScript engine's own stack of the calling thread (function names exist when the module is linked with -g or
+// --profiling-funcs; wasm-function[N] otherwise).
+void backtrace_to_string(std::string& out, int skip)
+{
+	(void)skip;
+	char buffer[8192];
+	if (emscripten_get_callstack(EM_LOG_C_STACK | EM_LOG_JS_STACK | EM_LOG_NO_PATHS | EM_LOG_DEMANGLE, buffer, sizeof(buffer)) > 0)
+		out += buffer;
+	out += '\n';
+}
+#else
 // "  #3  0x0000000104a3c1f0 xrCore`CLocatorAPI::r_open(char const*, char const*) + 112"
 void format_frame(int index, void* address, char* out, size_t size)
 {
@@ -87,6 +104,7 @@ void backtrace_to_string(std::string& out, int skip)
 		out += '\n';
 	}
 }
+#endif // XR_PLATFORM_WEB
 } // namespace
 
 void LogStackTrace(LPCSTR header, bool printStack)
@@ -399,6 +417,7 @@ static void terminate_handler()
 	handler_base("Unexpected application termination");
 }
 
+#ifndef XR_PLATFORM_WEB
 static std::atomic_flag g_in_crash = ATOMIC_FLAG_INIT;
 
 // Everything the fatal handler does after the first line is best effort and runs on a process whose heap, log or level may be
@@ -486,7 +505,12 @@ static void fatal_signal_handler(int sig, siginfo_t* info, void*)
 	raise(sig);
 }
 
+#endif // !XR_PLATFORM_WEB (signals)
+
 // Every thread that may fault needs its own alternate stack, or a stack overflow cannot be reported.
+#ifdef XR_PLATFORM_WEB
+static void install_alt_stack() {}
+#else
 static void install_alt_stack()
 {
 	static thread_local bool done = false;
@@ -503,6 +527,7 @@ static void install_alt_stack()
 	ss.ss_flags = 0;
 	if (ss.ss_sp) sigaltstack(&ss, nullptr);
 }
+#endif
 
 void debug_on_thread_spawn()
 {
@@ -520,6 +545,7 @@ void xrDebug::_initialize(const bool& dedicated)
 	if (installed) return;
 	installed = true;
 
+#ifndef XR_PLATFORM_WEB
 	struct sigaction sa;
 	memset(&sa, 0, sizeof(sa));
 	sigemptyset(&sa.sa_mask);
@@ -528,6 +554,7 @@ void xrDebug::_initialize(const bool& dedicated)
 	const int signals[] = {SIGSEGV, SIGBUS, SIGILL, SIGFPE, SIGABRT};
 	for (int sig : signals)
 		sigaction(sig, &sa, nullptr);
+#endif
 }
 
 void xrDebug::_destroy() {}

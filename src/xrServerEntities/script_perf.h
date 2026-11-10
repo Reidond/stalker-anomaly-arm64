@@ -11,7 +11,9 @@
 //             calling the engine calling Lua again is counted once. A report line per period (a label set with `lua_perf mark`)
 //             gives the frame time, the Lua time per frame, the share and its distribution.
 //   profiler  LuaJIT's sampling hook (luaJIT_profile_start; it samples the interpreter too): self and inclusive samples per Lua
-//             function, split by VM state (interpreter / C function / GC), written as `[lua-prof]` lines.
+//             function, split by VM state (interpreter / C function / GC), written as `[lua-prof]` lines. With Lua 5.1
+//             (ANOMALY_LUA51) the same tables come from a count hook armed by the sampler's signal and the VM state the vendored
+//             VM keeps (docs/web-port/LUA51.md).
 //
 // Everything is a no-op on other platforms.
 

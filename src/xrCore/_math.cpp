@@ -16,13 +16,16 @@
 #endif
 
 #include "profiler.h"
+#ifdef XR_PLATFORM_WEB
+#include <emscripten/threading.h>
+#endif
 
 // Initialized on startup
 XRCORE_API Fmatrix Fidentity;
 XRCORE_API Dmatrix Didentity;
 XRCORE_API CRandom Random;
 
-#if defined(_M_AMD64) || defined(XR_ARCH_ARM64)
+#if defined(_M_AMD64) || defined(XR_ARCH_ARM64) || defined(XR_ARCH_WASM32)
 u16 getFPUsw() { return 0; }
 
 namespace FPU
@@ -316,11 +319,17 @@ void _initialize_cpu_thread()
 #ifndef XRCORE_STATIC
 	FPU::m64r(); // round to nearest
 #endif // XRCORE_STATIC
+#ifdef XR_PLATFORM_WEB
+	// WebAssembly has no control register: floating point is always IEEE round-to-nearest with denormals kept. The x64
+	// and arm64 builds flush them to zero (MXCSR.FTZ/DAZ, FPCR.FZ); the numeric effect is measured in
+	// docs/web-port/WASM-BUILD.md. Nothing to set here.
+#else
 	// _MM_FLUSH_ZERO_ON + _MM_DENORMALS_ZERO_ON on x64 correspond to FPCR.FZ on arm64
 	uint64_t fpcr;
 	__asm__ volatile("mrs %0, fpcr" : "=r"(fpcr));
 	fpcr |= (1ull << 24);
 	__asm__ volatile("msr fpcr, %0" : : "r"(fpcr));
+#endif
 }
 #else
 // per-thread initialization
@@ -364,7 +373,11 @@ void _initialize_cpu_thread()
 #ifdef XR_PLATFORM_APPLE
 void thread_name(const char* name)
 {
+#ifdef XR_PLATFORM_WEB
+	if (name) emscripten_set_thread_name(pthread_self(), name); // pthread_setname_np is declared but not implemented; shows in DevTools
+#else
 	if (name) pthread_setname_np(name); // names the calling thread
+#endif
 }
 
 struct THREAD_STARTUP

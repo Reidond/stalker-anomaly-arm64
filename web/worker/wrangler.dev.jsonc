@@ -1,0 +1,10 @@
+// Local development: no routes, no account, the R2 binding reads the local simulation.
+// Fill it with `publish.py publish --local --persist-to <dir>` and serve it with
+//   wrangler dev -c wrangler.dev.jsonc --persist-to <dir>
+{
+  "name": "anomaly-web-worker",
+  "main": "src/worker.js",
+  "compatibility_date": "2026-10-01",
+  "assets": { "directory": "./public", "binding": "ASSETS", "run_worker_first": true },
+  "r2_buckets": [{ "binding": "DATA", "bucket_name": "anomaly-web-local" }]
+}

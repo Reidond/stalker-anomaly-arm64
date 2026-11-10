@@ -348,7 +348,9 @@ void CResourceManager::LS_Load()
 	luaopen_table(LSVM);
 	luaopen_string(LSVM);
 	luaopen_math(LSVM);
+#ifndef ANOMALY_LUA51 // Lua 5.1 (docs/web-port/LUA51.md) has no jit library; the shader scripts do not use it
 	luaopen_jit(LSVM);
+#endif
 
 	luaopen_lua_extensions(LSVM);
 

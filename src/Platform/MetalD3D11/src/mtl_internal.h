@@ -130,6 +130,9 @@ inline uint32_t Max1(uint32_t v) { return v ? v : 1; }
 // Resources
 // ---------------------------------------------------------------------------------------------------------
 enum class ResKind : uint8_t { Buffer, Tex1D, Tex2D, Tex3D };
+// Classes of CPU-visible memory the device counts (Device::memBuf / memTex).
+enum MemBuf : uint8_t { MemBufStatic = 0, MemBufDynamic = 1, MemBufStaging = 2 };
+enum MemTex : uint8_t { MemTexSharedStatic = 0, MemTexDynamic = 1, MemTexStaging = 2, MemTexPrivate = 3 };
 
 struct ResourceCore
 {
@@ -163,6 +166,8 @@ struct BufferCore : ResourceCore
     UINT miscFlags = 0;
     UINT structureStride = 0;
     BufferBacking cur;
+    uint8_t memClass = 0;            // MemBuf
+    uint64_t memBytes = 0;           // what this buffer added to Device::memBuf[memClass]
     std::vector<BufferBacking> pool; // rename pool for large DYNAMIC buffers
     std::vector<uint8_t> shadow;     // CPU copy for DEFAULT buffers updated via UpdateSubresource
 };
@@ -186,6 +191,8 @@ struct TextureCore : ResourceCore
     bool cube = false;
     bool isBackBuffer = false;
     SwapChain* swapChain = nullptr;
+    uint8_t memClass = 0;                  // MemTex
+    uint64_t memBytes = 0;                 // what this texture added to Device::memTex[memClass]
 
     id<MTLTexture> tex = nil;              // current backing (null for staging)
     std::vector<id<MTLTexture>> renamePool; // DYNAMIC textures rotate through these
@@ -560,6 +567,13 @@ public:
     std::atomic<uint64_t> textureBytes{0};
     std::atomic<uint64_t> renderTargetBytes{0}; // the part of textureBytes that is render target, depth or UAV
     std::atomic<uint64_t> bufferBytes{0};
+    // CPU-visible memory by class (docs/web-port/MEMORY.md). On Apple silicon all of it is shared storage outside the malloc heap; a
+    // WebGPU backend would keep the ones marked "heap" in the wasm heap, and the rest only on the GPU.
+    std::atomic<uint64_t> memBuf[3]{};      // [MemBuf*]: static (GPU-only after the upload), dynamic and staging (heap)
+    std::atomic<uint64_t> memTex[4]{};      // [MemTex*]: shared and filled once, dynamic (x3 here), staging (heap), private
+    std::atomic<uint64_t> memRingAllocated{0};   // constant + upload rings, every in-flight slab (heap, but only one frame's worth is needed)
+    std::atomic<uint64_t> memRingFramePeak{0};   // the most one frame used from both rings
+    std::atomic<uint64_t> memRingConstPeak{0}, memRingUploadPeak{0};
     bool supportsBC = false;
     bool supportsDepth24Stencil8 = false;
     bool supportsDualSourceBlend = true;

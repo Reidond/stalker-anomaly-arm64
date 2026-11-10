@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Anomaly web: hosting check</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<main>
+  <h1>Hosting check</h1>
+  <p class="lede">Placeholder page. It checks that this origin is cross-origin isolated and that game data comes through the Worker intact. It is not the game.</p>
+
+  <section>
+    <h2>Browser</h2>
+    <dl id="env"></dl>
+  </section>
+
+  <section>
+    <h2>Data <button id="rerun" type="button" hidden>Run again</button></h2>
+    <p id="summary" class="muted">Running…</p>
+    <table id="results" hidden>
+      <thead><tr><th>Check</th><th>Result</th><th>Detail</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </section>
+</main>
+<script src="/app.js" type="module"></script>
+</body>
+</html>

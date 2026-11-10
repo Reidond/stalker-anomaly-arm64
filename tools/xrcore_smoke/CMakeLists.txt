@@ -31,3 +31,17 @@ target_compile_definitions(xrcore_smoke PRIVATE
     # everything the tool writes (generated fsgame.ltx, appdata, logs) goes here, never into the game directory
     XRCORE_SMOKE_RUN_DIR="${CMAKE_CURRENT_BINARY_DIR}/run"
 )
+
+# WebAssembly (docs/web-port/WASM-BUILD.md): ctest runs the tool under Node, with NODERAWFS so it reads the real game archives.
+if(ANOMALY_WEB)
+    # the path layer on folders that differ only in case; needs no game data. The tool creates and removes <dir>/case_test.
+    add_test(NAME xrcore_smoke_case_test
+             COMMAND xrcore_smoke --case-test "${CMAKE_CURRENT_BINARY_DIR}/case_dir")
+    # the real data: mounts every archive, reads configs\system.ltx and a texture through both archive read paths
+    if(XRCORE_SMOKE_GAME_DIR)
+        add_test(NAME xrcore_smoke_gamedata
+                 COMMAND xrcore_smoke --game-dir "${XRCORE_SMOKE_GAME_DIR}" --run-dir "${CMAKE_CURRENT_BINARY_DIR}/run")
+    else()
+        message(STATUS "xrcore_smoke_gamedata not registered: no game directory (set XRCORE_SMOKE_GAME_DIR)")
+    endif()
+endif()

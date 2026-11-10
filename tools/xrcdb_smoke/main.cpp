@@ -1011,6 +1011,12 @@ void test_lp64()
 	ISpatial_NODE node;
 	node._init(nullptr);
 	check(node._empty(), "a fresh node is empty");
+	if (sizeof(void*) < 8)
+	{
+		// wasm32 (the web build): pointers have no bits above 32, so there is no pointer that is zero in its low 32 bits
+		printf("  [skip] children with a zero low half: pointers are %zu bytes here\n", sizeof(void*));
+		return;
+	}
 	for (int i = 0; i < 8; ++i)
 	{
 		node._init(nullptr);

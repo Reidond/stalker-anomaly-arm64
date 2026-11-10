@@ -1,10 +1,12 @@
-// Smoke test for the luabind port against LuaJIT 2.1: binds a class, a property and free functions,
-// calls them from Lua and from C++, and checks how errors and C++ exceptions travel across the boundary.
+// Smoke test for the luabind port against the configured VM (LuaJIT 2.1, or Lua 5.1.5 compiled as C++ with ANOMALY_LUA=lua51):
+// binds a class, a property and free functions, calls them from Lua and from C++, and checks how errors and C++ exceptions
+// travel across the boundary.
 //
 // What "error" and "exception" mean depends on how luabind was built (see src/3rd party/luabind/CMakeLists.txt):
 //  - LUABIND_NO_EXCEPTIONS (the release engine's mode, our default): luabind never throws or catches; a failed
 //    call_function() goes to luabind::set_error_callback(). C++ exceptions thrown by bound functions are not
-//    caught by luabind, so they cross the LuaJIT frames natively.
+//    caught by luabind, so they cross the Lua frames natively (LuaJIT's unwinder; Lua 5.1's catch(...) in lua_pcall, which
+//    reports them as the error "C++ exception").
 //  - otherwise (the debug engine's mode): luabind::error / cast_failed are thrown and bound functions' exceptions
 //    are converted into Lua errors.
 // Both modes must pass; the test reports which one it ran in.
@@ -91,6 +93,20 @@ void register_bindings(lua_State* L)
             .def(constructor<>())
             .def("twice", &Derived::twice)
     ];
+}
+
+// A Lua error raised under a C++ frame with a destructor: the destructor must run (LuaJIT unwinds with the system unwinder on
+// arm64, Lua 5.1 compiled as C++ throws a C++ exception; a longjmp would skip it).
+int g_guards_live = 0;
+struct Guard
+{
+    Guard() { ++g_guards_live; }
+    ~Guard() { --g_guards_live; }
+};
+int raise_under_guard(lua_State* L)
+{
+    Guard g;
+    return luaL_error(L, "raised under a guard");
 }
 
 // ---- helpers -------------------------------------------------------------------------------------------
@@ -226,6 +242,21 @@ void test_cpp_exceptions_in_bound_functions()
 #endif
 }
 
+void test_lua_error_unwinds_cpp_frames()
+{
+    std::printf("a Lua error unwinds C++ frames (destructors run)\n");
+    lua_State* L = luaL_newstate();
+    luaL_openlibs(L);
+    lua_register(L, "raise_under_guard", raise_under_guard);
+    std::string err;
+    CHECK(!run(L, "raise_under_guard()", &err) && contains(err, "raised under a guard"));
+    CHECK(g_guards_live == 0);
+    // and the state is still usable
+    CHECK(run(L, "assert(select(2, pcall(raise_under_guard)):find('guard'))"));
+    CHECK(g_guards_live == 0);
+    lua_close(L);
+}
+
 void test_argument_conversion()
 {
     std::printf("argument conversion (luabind has no error checking in this build)\n");
@@ -349,6 +380,7 @@ int main()
     test_call_from_cpp();
     test_gc();
     test_argument_conversion();
+    test_lua_error_unwinds_cpp_frames();
     test_call_function_failure();
     test_allocator_hook();
     test_cpp_exceptions_in_bound_functions(); // last: the no-exceptions variant may leave a state unusable

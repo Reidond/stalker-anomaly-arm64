@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Browser lab</title>
+  <link rel="stylesheet" href="lab.css">
+</head>
+<body>
+  <header>
+    <h1>Browser lab</h1>
+    <p class="sub">Spike S4b of the Anomaly web port: the browser features the port depends on, proven together on one page.
+      Every check reports pass, fail or unverified with its numbers. Write-up: <code>docs/web-port/BROWSER-LAB.md</code>.</p>
+    <div id="env" class="env"></div>
+  </header>
+
+  <main>
+    <section class="stage-section">
+      <div id="stage">
+        <canvas id="canvas" width="960" height="540" tabindex="0" aria-label="Worker-rendered WebGPU canvas"></canvas>
+        <div id="overlay" class="overlay" hidden>
+          <div class="spinner" aria-hidden="true"></div>
+          <div><strong>Worker blocked</strong><br><span id="overlay-text">this overlay is drawn by the page</span></div>
+        </div>
+      </div>
+
+      <div class="controls">
+        <div class="group">
+          <span class="label">SDL3 on the worker</span>
+          <button data-cmd="1">Relative mode on (L)</button>
+          <button data-cmd="2">Relative mode off (U)</button>
+          <button data-cmd="3">Fullscreen (F)</button>
+          <button data-cmd="4">Exit fullscreen</button>
+        </div>
+        <div class="group">
+          <span class="label">Page bridge</span>
+          <button id="page-lock">Pointer lock</button>
+          <button id="page-fullscreen">Fullscreen + Esc lock</button>
+          <button id="page-exit-fullscreen">Exit fullscreen</button>
+          <label class="check"><input type="checkbox" id="bridge-capture" checked> Suppress browser keys</label>
+        </div>
+        <div class="group">
+          <span class="label">Worker</span>
+          <button data-cmd="5" data-arg="3000">Block worker 3 s</button>
+          <button data-cmd="6">Reset input counters</button>
+          <button data-cmd="7">Next trigger preset (T)</button>
+        </div>
+      </div>
+      <p class="hint">Click the canvas, then type, click, move the mouse and scroll: each event is counted twice, once through
+        SDL3 on the worker and once through the page bridge. Keys handled on the worker: <kbd>L</kbd> relative mode,
+        <kbd>U</kbd> relative off, <kbd>F</kbd> fullscreen, <kbd>T</kbd> next DualSense feedback preset.</p>
+      <div id="live" class="live" aria-live="polite"></div>
+    </section>
+
+    <section>
+      <div class="section-head">
+        <h2>Results</h2>
+        <button id="copy-results">Copy as JSON</button>
+      </div>
+      <table id="results">
+        <thead><tr><th>Item</th><th>Check</th><th>Verdict</th><th>Result</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </section>
+
+    <section id="pad">
+      <h2>DualSense over WebHID</h2>
+      <p id="pad-status" class="status">Not connected.</p>
+      <div class="controls">
+        <div class="group">
+          <button id="pad-connect">Connect DualSense</button>
+          <button id="pad-disconnect" disabled>Disconnect</button>
+          <button id="pad-selftest">Run self-test</button>
+          <button id="pad-synthetic">Feed synthetic reports to the worker</button>
+        </div>
+        <div class="group">
+          <span class="label">Output</span>
+          <button data-pad="rumble">Rumble 1 s</button>
+          <button data-pad="red">Light bar red</button>
+          <button data-pad="green">Green</button>
+          <button data-pad="blue">Blue</button>
+          <button data-pad="leds">Player LEDs</button>
+        </div>
+        <div class="group">
+          <span class="label">Triggers (both)</span>
+          <button data-trigger="0">Off</button>
+          <button data-trigger="1">Feedback</button>
+          <button data-trigger="2">Weapon</button>
+          <button data-trigger="3">Vibration</button>
+          <button data-trigger="4">Slope</button>
+          <label class="check"><input type="checkbox" id="pad-follow" checked> Follow worker feedback</label>
+        </div>
+      </div>
+      <div class="pad-grid">
+        <pre id="pad-state" class="readout">No input yet.</pre>
+        <pre id="pad-output" class="readout">No output report sent yet.</pre>
+      </div>
+      <details open>
+        <summary>Manual checklist (the owner runs this; hardware cannot be tested here)</summary>
+        <div id="checklist" class="checklist"></div>
+      </details>
+    </section>
+
+    <section>
+      <h2>Log</h2>
+      <pre id="log" class="log"></pre>
+    </section>
+  </main>
+
+  <script type="module" src="page.js"></script>
+</body>
+</html>

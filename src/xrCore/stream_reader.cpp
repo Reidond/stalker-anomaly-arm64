@@ -1,5 +1,8 @@
 #include "stdafx.h"
 #include "stream_reader.h"
+#ifdef XR_PLATFORM_APPLE
+#include "Platform/XrMemStats.h"
+#endif
 
 void CStreamReader::construct(
 	const HANDLE& file_mapping_handle,
@@ -50,6 +53,7 @@ void CStreamReader::map(const u32& new_offset)
 	void* view = mmap(NULL, m_current_window_size, PROT_READ, MAP_PRIVATE,
 	                  int(intptr_t(m_file_mapping_handle)) - 1, (off_t)start_offset);
 	R_ASSERT2(view != MAP_FAILED, "cannot map a window of the file");
+	xr_apple_map_note(XR_MAP_STREAM, (long long)m_current_map_length); // counter for docs/web-port/MEMORY.md
 	m_current_map_view_of_file = (u8*)view;
 #else
 	m_current_map_view_of_file = (u8*)

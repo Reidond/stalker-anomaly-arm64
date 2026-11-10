@@ -1,5 +1,8 @@
 #ifndef STREAM_READER_INLINE_H
 #define STREAM_READER_INLINE_H
+#ifdef XR_PLATFORM_APPLE
+#include "Platform/XrMemStats.h"
+#endif
 
 IC CStreamReader::CStreamReader()
 {
@@ -28,6 +31,7 @@ IC const HANDLE& CStreamReader::file_mapping_handle() const
 IC void CStreamReader::unmap()
 {
 #ifdef XR_PLATFORM_APPLE
+	xr_apple_map_note(XR_MAP_STREAM, -(long long)m_current_map_length); // counter for docs/web-port/MEMORY.md
 	munmap(m_current_map_view_of_file, m_current_map_length);
 #else
 	UnmapViewOfFile(m_current_map_view_of_file);

@@ -65,6 +65,15 @@ set(XRCORE_SOURCES
     Platform/xrMemory_apple.cpp
     Platform/xrCore_defaults_apple.cpp
 )
+if(ANOMALY_WEB)
+    # WebAssembly: PlatformApple.cpp and xrDebug_posix.cpp are POSIX apart from the Apple calls the web files below replace;
+    # xrMemory_apple.cpp is Apple's realloc front end, xrCore_defaults_apple.cpp is shared. docs/web-port/WASM-BUILD.md
+    list(APPEND XRCORE_SOURCES
+        Platform/PlatformWeb.cpp
+        Platform/xrThreadPool_web.cpp
+    )
+    set(ANOMALY_WEB_TASK_THREADS 4 CACHE STRING "Threads of the xr_task_group / xr_parallel_for pool that replaces GCD (Platform/xrThreadPool_web.h)")
+endif()
 
 add_library(xrCore STATIC ${XRCORE_SOURCES})
 add_library(Anomaly::xrCore ALIAS xrCore)
@@ -113,6 +122,10 @@ target_compile_options(xrCore PRIVATE
     -Wno-address-of-temporary
     -Wno-dangling-else
 )
+
+if(ANOMALY_WEB)
+    target_compile_definitions(xrCore PUBLIC XR_WEB_TASK_THREADS=${ANOMALY_WEB_TASK_THREADS})
+endif()
 
 find_package(Threads REQUIRED)
 target_link_libraries(xrCore PUBLIC Threads::Threads)

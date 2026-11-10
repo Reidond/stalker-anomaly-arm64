@@ -30,7 +30,10 @@ namespace CPU
 	XRCORE_API extern _processor_info ID;
 	XRCORE_API extern u64 QPC();
 
-#ifdef XR_PLATFORM_APPLE
+#if defined(XR_PLATFORM_WEB)
+	// wasm has no cycle counter: the monotonic clock in nanoseconds (1 GHz "clock"), the same unit as QueryPerformanceCounter
+	XRCORE_API u64 GetCLK(void);
+#elif defined(XR_PLATFORM_APPLE)
 	// arm64: the virtual counter register (24 MHz on Apple silicon), the closest thing to rdtsc.
 	IC u64 GetCLK(void)
 	{

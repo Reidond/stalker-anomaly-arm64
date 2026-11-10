@@ -565,6 +565,7 @@ inline int _stricmp(const char* a, const char* b) { return strcasecmp(a, b); }
 inline int _strnicmp(const char* a, const char* b, size_t n) { return strncasecmp(a, b, n); }
 inline int strcmpi(const char* a, const char* b) { return strcasecmp(a, b); }
 inline int _strcmpi(const char* a, const char* b) { return strcasecmp(a, b); }
+#if !defined(XR_PLATFORM_WEB) // Emscripten's <string.h> already declares (extern "C") and its libc defines strupr and strlwr
 inline char* strupr(char* s)
 {
 	for (char* p = s; *p; ++p) *p = (char)toupper((unsigned char)*p);
@@ -575,6 +576,7 @@ inline char* strlwr(char* s)
 	for (char* p = s; *p; ++p) *p = (char)tolower((unsigned char)*p);
 	return s;
 }
+#endif
 inline char* _strupr(char* s) { return strupr(s); }
 inline char* _strlwr(char* s) { return strlwr(s); }
 inline char* _strdup(const char* s) { return strdup(s); }
@@ -970,7 +972,11 @@ inline void MemoryBarrier() { __atomic_thread_fence(__ATOMIC_SEQ_CST); }
 // MSVC compiler intrinsics: _Interlocked*() are clang builtins under -fms-extensions (32-bit, like LONG).
 #define __debugbreak() __builtin_debugtrap()
 #define _ReadWriteBarrier() __atomic_signal_fence(__ATOMIC_SEQ_CST)
+#if defined(XR_ARCH_WASM32)
+inline void YieldProcessor() { __asm__ __volatile__("" ::: "memory"); } // wasm has no pause/yield instruction
+#else
 inline void YieldProcessor() { __asm__ __volatile__("yield"); }
+#endif
 
 // ---------------------------------------------------------------------------------------------
 // Time of day, system information

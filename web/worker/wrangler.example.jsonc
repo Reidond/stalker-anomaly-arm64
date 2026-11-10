@@ -1,0 +1,16 @@
+// Deployment template. deploy.sh renders it to wrangler.jsonc (untracked) with the values
+// from deploy.local.env filled in. Do not put real values in this file.
+{
+  "name": "anomaly-web-worker",
+  "main": "src/worker.js",
+  "compatibility_date": "2026-10-01",
+
+  // Nothing may bypass Cloudflare Access: no workers.dev address, no preview URLs.
+  "workers_dev": false,
+  "preview_urls": false,
+
+  "assets": { "directory": "./public", "binding": "ASSETS", "run_worker_first": true },
+  "r2_buckets": [{ "binding": "DATA", "bucket_name": "__BUCKET__" }],
+  "routes": [{ "pattern": "__HOSTNAME__", "custom_domain": true }],
+  "observability": { "enabled": false }
+}
