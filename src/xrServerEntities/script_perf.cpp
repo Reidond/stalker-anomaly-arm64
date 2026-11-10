@@ -14,6 +14,12 @@
 #include "../xrEngine/xr_ioconsole.h"
 #include "../xrEngine/xr_ioc_cmd.h"
 #include <luabind/detail/pcall.hpp>
+#ifdef ANOMALY_LUA51
+extern "C"
+{
+#include <lualib.h> // lua51_vmstate (src/3rd party/lua-5.1.5/README.anomaly.md)
+}
+#endif
 
 #include <pthread.h>
 #include <signal.h>
@@ -89,6 +95,7 @@ struct Period
 	double cpu_ms = 0;
 	double gc_ms = 0, off_ms = 0, off_gc_ms = 0;
 	u64 calls = 0, nested = 0, off_calls = 0;
+	double heap_kb_sum = 0, heap_kb_max = 0; // the Lua heap (LUA_GCCOUNT) at the end of each frame
 };
 
 struct Watch
@@ -157,11 +164,12 @@ void print_period(const char* why)
 		const double frame_avg = p.frame_ms_sum / f;
 		std::vector<float> fm = p.frame_ms, lm = p.lua_ms;
 		Msg("* [lua-perf] label=%s why=%s secs=%.1f frames=%llu frame_ms=%.2f frame_p95=%.2f frame_max=%.1f lua_ms=%.3f lua_cpu=%.3f lua_p50=%.3f lua_p95=%.3f "
-		    "lua_max=%.2f share=%.1f sched=%.3f binder=%.3f alife=%.3f cb=%.3f other=%.3f gc=%.3f calls=%.0f nested=%.0f off_main=%.3f off_gc=%.3f",
+		    "lua_max=%.2f share=%.1f sched=%.3f binder=%.3f alife=%.3f cb=%.3f other=%.3f gc=%.3f calls=%.0f nested=%.0f off_main=%.3f off_gc=%.3f "
+		    "heap_kb=%.0f heap_max_kb=%.0f",
 		    p.label.c_str(), why, secs, p.frames, frame_avg, pct(fm, 0.95), p.frame_ms_max, lua_sum / f, p.cpu_ms / f, pct(lm, 0.5), pct(lm, 0.95),
 		    lm.empty() ? 0.0 : double(*std::max_element(lm.begin(), lm.end())), frame_avg > 0 ? 100.0 * (lua_sum / f) / frame_avg : 0.0,
 		    p.sec_ms[Scheduler] / f, p.sec_ms[Binder] / f, p.sec_ms[ALife] / f, p.sec_ms[Callback] / f, p.sec_ms[Other] / f, p.gc_ms / f,
-		    double(p.calls) / f, double(p.nested) / f, p.off_ms / f, p.off_gc_ms / f);
+		    double(p.calls) / f, double(p.nested) / f, p.off_ms / f, p.off_gc_ms / f, p.heap_kb_sum / f, p.heap_kb_max);
 		if (!g_watch.empty())
 		{
 			std::vector<std::pair<std::string, Watch>> w(g_watch.begin(), g_watch.end());
@@ -343,6 +351,41 @@ void* sampler_main(void* arg)
 	return nullptr;
 }
 
+void prof_callback(void*, lua_State* L, int samples, int vmstate);
+
+#ifdef ANOMALY_LUA51
+// Lua 5.1 has no sampling profiler of its own; this is one on the same clock. The sampler thread's SIGPROF lands on the main thread
+// while it is inside a call into Lua. The handler reads the VM state the vendored VM keeps (lua51_vmstate: 'I' bytecode, 'C' a C
+// function, 'G' the collector, 'N' outside the VM, which is engine glue and booked as 'C') and arms a count hook, which lua_sethook
+// allows from a signal handler; the hook runs at the main state's next instruction, on the Lua stack the sample belongs to, and books
+// it as LuaJIT's callback would (several ticks before the hook runs are one sample of that weight, with the latest state, as LuaJIT).
+lua_State* g_l51_state = nullptr;
+volatile sig_atomic_t g_l51_pending = 0;
+volatile sig_atomic_t g_l51_vmstate = 0;
+struct sigaction g_l51_old_action;
+
+void l51_hook(lua_State* L, lua_Debug*)
+{
+	const int n = g_l51_pending;
+	const int st = g_l51_vmstate;
+	g_l51_pending = 0;
+	lua_sethook(L, nullptr, 0, 0);
+	if (n > 0)
+		prof_callback(nullptr, L, n, st);
+}
+
+void l51_signal(int)
+{
+	lua_State* L = g_l51_state;
+	if (!L)
+		return;
+	const int st = lua51_vmstate();
+	g_l51_vmstate = st == 'N' ? 'C' : st;
+	g_l51_pending = g_l51_pending + 1;
+	lua_sethook(L, l51_hook, LUA_MASKCOUNT, 1);
+}
+#endif
+
 bool g_prof_on = false;
 std::string g_prof_label = "run";
 int g_prof_ms = 1;
@@ -521,10 +564,21 @@ void prof_start(int ms)
 	snprintf(mode, sizeof(mode), "i%d", g_prof_ms);
 	prof_reset();
 	g_prof_state = L;
+#ifdef ANOMALY_LUA51
+	(void)mode;
+	g_l51_pending = 0;
+	g_l51_state = L;
+	struct sigaction sa = {};
+	sa.sa_handler = l51_signal;
+	sigemptyset(&sa.sa_mask);
+	sa.sa_flags = SA_RESTART;
+	sigaction(SIGPROF, &sa, &g_l51_old_action);
+#else
 	luaJIT_profile_start(L, mode, prof_callback, nullptr);
 	// LuaJIT armed its ITIMER_PROF: disarm it, the sampler thread is the clock (see above)
 	struct itimerval off = {};
 	setitimer(ITIMER_PROF, &off, nullptr);
+#endif
 	set_on(true);
 	g_sampler_target = pthread_self();
 	g_sampler_run = true;
@@ -539,7 +593,14 @@ void prof_stop()
 		return;
 	if (g_sampler_run.exchange(false))
 		pthread_join(g_sampler_thread, nullptr);
+#ifdef ANOMALY_LUA51
+	sigaction(SIGPROF, &g_l51_old_action, nullptr);
+	g_l51_state = nullptr;
+	if (g_prof_state)
+		lua_sethook(g_prof_state, nullptr, 0, 0);
+#else
 	luaJIT_profile_stop(g_prof_state);
+#endif
 	g_prof_on = false;
 	g_prof_state = nullptr;
 }
@@ -824,6 +885,12 @@ void frame()
 		p.frame_ms_max = std::max(p.frame_ms_max, dt);
 		p.frame_ms.push_back(float(dt));
 		p.lua_ms.push_back(float(lua));
+		if (lua_State* L = ai().script_engine().lua())
+		{
+			const double kb = double(lua_gc(L, LUA_GCCOUNT, 0));
+			p.heap_kb_sum += kb;
+			p.heap_kb_max = std::max(p.heap_kb_max, kb);
+		}
 		if (g_interval_s > 0 && double(now - p.start_ns) * 1e-9 >= g_interval_s)
 		{
 			print_period("interval");

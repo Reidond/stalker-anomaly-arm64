@@ -1,9 +1,10 @@
 ////////////////////////////////////////////////////////////////////////////
 //	Module 		: script_bytecode_cache.cpp
-//	Description : On-disk cache of LuaJIT bytecode for script files (Apple port, docs/ios-port/LUA-PERF.md)
+//	Description : On-disk cache of Lua bytecode for script files (Apple port, docs/ios-port/LUA-PERF.md)
 ////////////////////////////////////////////////////////////////////////////
 //
-// Standalone on purpose (standard library and LuaJIT only): tools/lua_cache_test links this file without the engine.
+// Standalone on purpose (standard library and Lua only): tools/lua_cache_test links this file without the engine.
+// The VM is LuaJIT 2.1, or Lua 5.1.5 with ANOMALY_LUA51 (docs/web-port/LUA51.md): only the bytecode header differs.
 
 #include "script_bytecode_cache.h"
 
@@ -11,7 +12,9 @@ extern "C"
 {
 #include <lua.h>
 #include <lauxlib.h>
+#ifndef ANOMALY_LUA51
 #include <luajit.h>
+#endif
 }
 
 #include <fcntl.h>
@@ -37,7 +40,14 @@ namespace
 {
 constexpr uint32_t kFormat = 1;
 constexpr char kMagic[8] = {'A', 'L', 'U', 'A', 'B', 'C', '1', 0};
+#ifdef ANOMALY_LUA51
+// ESC 'L' 'u' 'a' <version 0x51> <format> <endianness> <sizeof int, size_t, Instruction, lua_Number> <integral numbers>
+constexpr size_t kVmHeaderSize = 12;
+constexpr const char* kVmVersion = LUA_RELEASE;
+#else
 constexpr size_t kVmHeaderSize = 5; // ESC 'L' 'J' <bytecode version> <flags>
+constexpr const char* kVmVersion = LUAJIT_VERSION;
+#endif
 
 // Entry layout: Header, the chunk name (name_len bytes), the bytecode (bc_size bytes). Host byte order: a cache is never
 // moved between machines of another endianness (the bytecode's own header says so as well).
@@ -152,8 +162,9 @@ int dump_writer(lua_State*, const void* p, size_t sz, void* ud)
 	return 0;
 }
 
-// The first bytes of a dump say the bytecode version and the flags (FR2 = 64-bit GC references, big endian, FFI): what a
-// bytecode file must match to be loadable by this VM. A tiny chunk is dumped once to read them.
+// The first bytes of a dump say the bytecode version and the flags (LuaJIT: FR2 = 64-bit GC references, big endian, FFI; Lua 5.1:
+// endianness and the sizes of int, size_t, Instruction and lua_Number): what a bytecode file must match to be loadable by this VM. A
+// tiny chunk is dumped once to read them.
 bool probe_vm(lua_State* L, State& s)
 {
 	if (s.vm_probed)
@@ -164,14 +175,18 @@ bool probe_vm(lua_State* L, State& s)
 	if (luaL_loadbuffer(L, "return 1", 8, "=probe") == 0 && lua_dump(L, dump_writer, &dump) == 0 && dump.size() >= kVmHeaderSize)
 	{
 		memcpy(s.vm_header, dump.data(), kVmHeaderSize);
-		std::string id = LUAJIT_VERSION;
+		std::string id = kVmVersion;
 		id.append(reinterpret_cast<const char*>(s.vm_header), kVmHeaderSize);
 		const uint8_t ptr = sizeof(void*);
 		id.append(reinterpret_cast<const char*>(&ptr), 1);
 		uint64_t h1, h2;
 		hash128_impl(id.data(), id.size(), h1, h2);
 		s.vm_id = uint32_t(h1 ^ (h1 >> 32));
+#ifdef ANOMALY_LUA51
+		s.vm_ok = memcmp(s.vm_header, "\x1bLua\x51", 5) == 0;
+#else
 		s.vm_ok = s.vm_header[0] == 0x1b && s.vm_header[1] == 'L' && s.vm_header[2] == 'J';
+#endif
 	}
 	lua_settop(L, top);
 	return s.vm_ok;

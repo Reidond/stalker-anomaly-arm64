@@ -60,7 +60,7 @@ anomaly_add_module(xrEngine
         "${ANOMALY_SRC_DIR}/3rd party/imgui"
         "${ANOMALY_SRC_DIR}/3rd party/giflib"
     DEFINES ${xrengine_defines}
-    LINK luabind LuaJIT::luajit OpenAL::OpenAL Vorbis::vorbis Ogg::ogg Theora::theora
+    LINK luabind Anomaly::Lua OpenAL::OpenAL Vorbis::vorbis Ogg::ogg Theora::theora
          xrAPI xrCDB xrSound xrNetServer xrParticles xrPhysics xrXMLParser lua_extensions
          xrImGui giflib anomaly_apple_shell metal_d3d11
 )

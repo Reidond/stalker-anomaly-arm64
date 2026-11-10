@@ -1,5 +1,5 @@
 add_executable(platform_probe main.cpp)
-target_link_libraries(platform_probe PRIVATE SDL3::SDL3-static OpenAL::OpenAL LuaJIT::luajit)
+target_link_libraries(platform_probe PRIVATE SDL3::SDL3-static OpenAL::OpenAL Anomaly::Lua)
 target_compile_definitions(platform_probe PRIVATE AL_LIBTYPE_STATIC)
 
 anomaly_configure_app(platform_probe

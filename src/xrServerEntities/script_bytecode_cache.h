@@ -1,6 +1,6 @@
 ////////////////////////////////////////////////////////////////////////////
 //	Module 		: script_bytecode_cache.h
-//	Description : On-disk cache of LuaJIT bytecode for script files (Apple port, docs/ios-port/LUA-PERF.md)
+//	Description : On-disk cache of Lua bytecode (LuaJIT 2.1 or Lua 5.1) for script files (Apple port, docs/ios-port/LUA-PERF.md)
 ////////////////////////////////////////////////////////////////////////////
 //
 // The script engine wraps every script file in a namespace header and compiles the text with luaL_loadbuffer. Parsing the

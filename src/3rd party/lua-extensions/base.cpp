@@ -43,8 +43,10 @@ int luaopen_lua_extensions(lua_State *L, bool IsDebug = false){
 
     if (IsDebug)
     {
+#ifndef ANOMALY_LUA51 // Lua 5.1 has no jit and no ffi library
         luaopen_jit(L);
         luaopen_ffi(L);
+#endif
         luaopen_debug(L);
     }
 

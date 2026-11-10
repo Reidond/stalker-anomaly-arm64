@@ -16,7 +16,7 @@ anomaly_add_module(xrRender_R4
         "${ANOMALY_SRC_DIR}/Layers/xrRenderPC_R4"
         "${ANOMALY_SRC_DIR}/3rd party/imgui"
     DEFINES USE_DX11 XRRENDER_R4_EXPORTS
-    LINK xrAPI xrCPU_Pipe luabind LuaJIT::luajit SDL3::SDL3-static ShaderXlatMetal
+    LINK xrAPI xrCPU_Pipe luabind Anomaly::Lua SDL3::SDL3-static ShaderXlatMetal
 )
 
 # Shader warm-up tool (macOS): drives the renderer's D3DCompile path without the engine

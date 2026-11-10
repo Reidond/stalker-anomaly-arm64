@@ -12,15 +12,19 @@ if(NOT WIN32)
 endif()
 
 # The Windows build compiles against src/3rd party/luajit-2 (LuaJIT 2.0.4, whose lauxlib.h keeps the Lua 5.0 names);
-# the Apple port links LuaJIT 2.1 from external/LuaJIT, which dropped `luaL_reg`.
+# the Apple port links LuaJIT 2.1 from external/LuaJIT, which dropped `luaL_reg`. Lua 5.1's lauxlib.h (ANOMALY_LUA=lua51) has it.
+set(lua_extensions_defines _CRT_SECURE_NO_WARNINGS)
+if(NOT ANOMALY_LUA STREQUAL "lua51")
+    list(APPEND lua_extensions_defines luaL_reg=luaL_Reg)
+endif()
 anomaly_add_module(lua_extensions
     SOURCES ${lua_extensions_sources}
     INCLUDE_DIRS "${ANOMALY_SRC_DIR}/3rd party/lua-extensions"
-    DEFINES _CRT_SECURE_NO_WARNINGS luaL_reg=luaL_Reg
-    LINK LuaJIT::luajit
+    DEFINES ${lua_extensions_defines}
+    LINK Anomaly::Lua
 )
 
-# Host-side check of the libraries Anomaly's scripts load, against LuaJIT 2.1 (the iOS build only checks that they compile).
+# Host-side check of the libraries Anomaly's scripts load, against the configured VM (the iOS build only checks that they compile).
 if(NOT ANOMALY_IOS)
     add_subdirectory("${PROJECT_SOURCE_DIR}/tools/lua_ext_smoke" "${CMAKE_BINARY_DIR}/tools/lua_ext_smoke")
 endif()
