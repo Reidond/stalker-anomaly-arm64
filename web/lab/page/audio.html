@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Audio lab</title>
+  <link rel="stylesheet" href="lab.css">
+</head>
+<body>
+  <header>
+    <h1>Audio lab</h1>
+    <p class="sub">Item 5 (stretch): the repo's OpenAL Soft through its SDL3 backend to Web Audio, program on a worker,
+      HRTF on, EFX reverb on a looping sound that circles the listener. Back to the <a href="index.html">browser lab</a>.</p>
+  </header>
+  <main>
+    <section>
+      <div class="controls"><div class="group">
+        <button id="start">Start audio</button>
+        <span class="label">Browsers start audio only after a click.</span>
+      </div></div>
+      <pre id="out" class="readout">Loading…</pre>
+    </section>
+  </main>
+  <script type="module" src="audio_page.js"></script>
+</body>
+</html>
