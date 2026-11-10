@@ -177,7 +177,32 @@ for the core.
 
 ### Run times against native
 
-@@TIMING@@
+Median of 7 runs after one warm-up run, `cmake/web/probes/timing.py`; native is the `macos-arm64-release` build
+(RelWithDebInfo, `-O2`), wasm is the default preset under Node 26 (V8, Release `-O3`), both on the same M-series Mac.
+Wall seconds, and CPU seconds (user + system, all threads):
+
+| Tool | native wall | wasm wall | wasm wall minus start-up | native CPU | wasm CPU |
+|---|---|---|---|---|---|
+| `ode_smoke` | 0.013 | 0.254 | 0 (this is the floor) | 0.004 | 0.372 |
+| `xrcdb_smoke` | 0.325 | 0.634 | 0.38 (1.2x) | 0.309 | 0.778 |
+| `xrcdb_smoke -mt_cdb` | 0.365 | 0.673 | 0.42 (1.1x) | 0.311 | 0.797 |
+| `xrparticles_smoke` | 0.128 | 0.407 | 0.15 (1.2x) | 0.114 | 0.471 |
+| `xrcpu_pipe_smoke` | 0.249 | 0.607 | 0.35 (1.4x) | 0.217 | 0.676 |
+| `xrphysics_smoke` | 0.132 | 0.631 | 0.38 (2.9x) | 0.093 | 0.619 |
+| `xrcore_smoke` (game data) | 0.466 | 1.112 | 0.86 (1.8x) | 0.375 | 1.277 |
+
+Read it with care:
+
+- **The floor is Node, not the engine.** `ode_smoke` does about 4 ms of work; the wasm run's 0.25 s is Node starting, compiling
+  the module and creating the 12 pre-started Workers. The "minus start-up" column subtracts it, which is a rough correction.
+- **The machine was shared.** Another session's game (`pgrep -x anomaly`: 1 instance) was running throughout, because the
+  guard that waits for a quiet machine gave up after 25 minutes; load average was 7 at the start. Treat the ratios as +-30%.
+- Across the tools that do real work the wasm run takes 1.1 to 1.8 times the native wall time, apart from `xrphysics_smoke`
+  (2.9x: ODE is scalar float code at `-ffp-contract=off` on both sides, so the gap is V8's code against clang's, and the
+  tool's run-to-run variation is large). CPU time is higher than wall time for wasm because the Workers spin up threads that
+  the native run does not have.
+- This is the headless core. Nothing here says how the renderer-bound frame will compare.
+
 
 ### Numeric differences without flush-to-zero
 
@@ -212,8 +237,8 @@ there; the engine only ever leaves round-to-nearest in effect (`FPU::m24r`, `m64
 
 ## What this means for the plan
 
-- **The core is not the hard part.** One session got xrCore plus five modules to build, link and pass with 35 files touched and
-  796 lines added, most of them comments, the thread pool and the software CRC. W1's cost is in the other 99 files that say
+- **The core is not the hard part.** One session got xrCore plus five modules to build, link and pass with 35 source and build
+  files touched and about 800 lines added, most of them comments, the thread pool and the software CRC. W1's cost is in the other 99 files that say
   `XR_PLATFORM_APPLE` (below), the renderer, audio and Lua.
 - **Plan item "Allocator: mimalloc" is confirmed and becomes a requirement**, not an optimisation: the engine assumes
   16-byte aligned blocks and only mimalloc gives them on wasm32. The plan's "Platform layer" paragraph can say so.
@@ -272,7 +297,8 @@ there; the engine only ever leaves round-to-nearest in effect (`FPU::m24r`, `m64
   `CVirtualFileReader` (`FS.cpp:599`) and `CVirtualFileRW` (`FS.cpp:577`) are not reached by any tool; only the probe
   (`cmake/web/probes/mmap_probe.cpp`) covers the mapping calls they make.
 - **Speed of the allocator and of the pool.** mimalloc against dlmalloc, the 4-thread pool against GCD, and
-  `GROWABLE_ARRAYBUFFERS` were not benchmarked; the timings above are of whole smoke runs on a shared machine.
+  `GROWABLE_ARRAYBUFFERS` were not benchmarked; the timings above are of whole smoke runs on a shared machine with a game
+  instance running.
 - **Denormal cost on x86**, and any audio or particle behaviour that depends on denormals.
 - **`emscripten_get_callstack`** output (no assertion or trap was provoked) and the clipboard, `LoadLibrary` and `ShellExecute`
   stubs.
