@@ -83,6 +83,8 @@ check(string.format("%d %x", 3.7, 2^40) == "3 10000000000", "string.format %d an
 check("\x41\x42" == "AB" and "a\z
       b" == "ab", "\\x and \\z escapes")
 check(loadstring("return [[a [[b]]")() == "a [[b", "[[ inside a long string")
+local function for_count(a, b, s) local n = 0 for i = a, b, s do n = n + 1 if n > 5 then return "endless" end end return n end
+check(for_count(1, 0, 0) == 0 and for_count(0, 1, 0) == "endless" and for_count(1, 0, -0.0) == 0, "for with a step of 0 (positive, as LuaJIT)")
 check(math.mod and string.gfind, "math.mod and string.gfind (set by the engine on LuaJIT 2.1)")
 
 -- marshal: the .scoc save data

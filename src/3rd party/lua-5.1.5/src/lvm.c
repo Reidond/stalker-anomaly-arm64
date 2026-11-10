@@ -655,7 +655,10 @@ void luaV_execute (lua_State *L, int nexeccalls) {
         lua_Number step = nvalue(ra+2);
         lua_Number idx = luai_numadd(nvalue(ra), step); /* increment index */
         lua_Number limit = nvalue(ra+1);
-        if (luai_numlt(0, step) ? luai_numle(idx, limit)
+        /* ANOMALY: a step of 0 counts as positive, as in LuaJIT: `for i=1,0,0`
+        ** runs no iteration (stock 5.1 takes it as negative and never ends;
+        ** item_radio.script runs `for i=1,size,size/5` with size 0). */
+        if (luai_numle(0, step) ? luai_numle(idx, limit)
                                 : luai_numle(limit, idx)) {
           dojump(L, pc, GETARG_sBx(i));  /* jump back */
           setnvalue(ra, idx);  /* update internal index... */
