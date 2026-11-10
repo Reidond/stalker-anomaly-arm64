@@ -42,7 +42,11 @@ const char lua_ident[] =
 
 #define api_checkvalidindex(L, i)	api_check(L, (i) != luaO_nilobject)
 
-#define api_incr_top(L)   {api_check(L, L->top < L->ci->top); L->top++;}
+/* ANOMALY: a push grows the stack when it is full, as every push of LuaJIT's
+** C API does. C code written against LuaJIT pushes past LUA_MINSTACK without
+** lua_checkstack (lmarshal.c decoding a save's nested tables); stock 5.1 then
+** writes past the end of the stack. */
+#define api_incr_top(L)   {L->top++; luaD_checkstack(L, 0);}
 
 
 

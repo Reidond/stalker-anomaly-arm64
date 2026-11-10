@@ -100,6 +100,12 @@ for i = 1, 5000 do big[i] = tostring(i) end
 local rb = marshal.decode(marshal.encode(big))
 check(#rb == 5000 and rb[5000] == "5000", "marshal large table")
 check(marshal.decode(marshal.encode({s = ("x"):rep(100000)})).s == ("x"):rep(100000), "marshal long string")
+-- deep nesting: lmarshal pushes without lua_checkstack; LuaJIT's C API grows the stack, the vendored Lua 5.1 does too
+local deep = {}
+do local t = deep for i = 1, 60 do t.child = {i = i, s = "x" .. i}; t = t.child end end
+local rd, depth = marshal.decode(marshal.encode(deep)), 0
+while rd.child do rd = rd.child; depth = depth + 1 end
+check(depth == 60 and rd.s == "x60", "marshal 60 nested tables")
 
 -- lfs and io with the engine's virtual paths
 check(lfs.currentdir() ~= nil, "lfs.currentdir")
