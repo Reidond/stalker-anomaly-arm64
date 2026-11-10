@@ -1,6 +1,7 @@
 // The Anomaly app: SDL3 callbacks around xr_engine::Init / Frame / Shutdown (src/xrEngine/xr_engine_app.h).
 //
 //   anomaly [--data-root <path>] [--exit-after <seconds>] [--script <file>] [--no-launcher] [--show-launcher]
+//           [--memstat <csv> [--memstat-ms <n>]]
 //           [--launcher-script <file>] [--unattended [--size <w>x<h>] [--show-window]] [--foreground] [engine flags...]
 //
 // Everything that is not one of the app's own flags goes to the engine as its command line (the same flags the Windows
@@ -50,6 +51,7 @@
 //   <t> ballast <MB>                allocate and touch that much memory (to provoke the memory warnings), in 64 MB chunks
 //   <t> unballast                   free it again
 //   <t> log <text...>               a line in the shell log
+//   <t> mark <text...>              a labelled row in the --memstat CSV and a line in the shell log (a phase of a memory run)
 //   <t> delete <path>               remove one file, or one empty folder, below gamedata/, db/addons/ or db/patches/ of the game folder (any case;
 //                                   Platform/Apple/DeleteStep.h): never a stock archive or folder of db/, no `..`, no link anywhere in the path, never
 //                                   recursive. For test runs that leave the game folder as they found it (tools/addons_test): a device has no way
@@ -72,6 +74,7 @@
 #include <Platform/Launcher/AnomalyLauncher.h>
 
 #include <mtl_d3d11/mtl_stats.h>
+#include <xrCore/Platform/XrMemStats.h>
 
 #include "Unattended.h"
 #include "xrEngine/xr_engine_app.h"
@@ -482,6 +485,7 @@ bool RunScript(App& app)
             return true;
         AppleShell::Log("anomaly: script: %s after %.1f s", timed_out ? "waitlevel timed out" : "level ready",
             now - app.wait_started_s);
+        xr_apple_memstat_mark(timed_out ? "waitlevel timed out" : ("level ready " + app.wait_level_name).c_str()); // no-op without --memstat
         // later steps count from here: t of the waitlevel step is "now"
         app.engine_start_ns = SDL_GetTicksNS() - Uint64(app.wait_step_at * 1e9);
         app.waiting_level = false;
@@ -633,6 +637,8 @@ bool RunScript(App& app)
         }
         else if (step.command == "log")
             AppleShell::Log("anomaly: script: %s", step.args.c_str());
+        else if (step.command == "mark")
+            xr_apple_memstat_mark(step.args.c_str());
         else if (step.command == "delete")
         {
             // test runs that leave the game folder as they found it: Platform/Apple/DeleteStep.h has the rules (below gamedata, db/addons, db/patches only)
@@ -762,6 +768,7 @@ bool StartEngine(App& app)
         l.on_pause = [] { if (g_app) SaveForBackground(*g_app); };
         app.lifecycle_listener = AppleShell::AddListener(std::move(l));
     }
+    xr_apple_memstat_mark("engine init begins");
     xr_engine::InitParams params;
     params.argc = app.argc;
     params.argv = app.argv;
@@ -785,6 +792,7 @@ bool StartEngine(App& app)
         app.pointer_y = float(h) * 0.5f;
     }
     AppleShell::Log("anomaly: engine up in %.2f s", double(app.engine_start_ns - t0) * 1e-9);
+    xr_apple_memstat_mark("engine up");
     app.engine_up = true;
     return true;
 }
@@ -1109,6 +1117,35 @@ void RunLauncherScript(App& app)
 }
 } // namespace
 
+namespace
+{
+// --memstat: the renderer's numbers for the sampler of docs/web-port/MEMORY.md (CPU-visible Metal memory by class)
+int MetalMemProbe(XrMemExtra* out)
+{
+    mtl_d3d11::RenderStats st; // all zero until the renderer's device exists: the CSV header needs the same columns from the first row
+    mtl_d3d11::GetRenderStats(&st);
+    int n = 0;
+    auto add = [&](const char* name, uint64_t value) { out[n++] = {name, value}; };
+    add("metal_allocated", st.deviceAllocatedBytes);
+    add("metal_textures", st.textureBytes);
+    add("metal_render_targets", st.renderTargetBytes);
+    add("metal_buffers", st.bufferBytes);
+    add("buf_static", st.bufferStaticBytes);
+    add("buf_dynamic", st.bufferDynamicBytes);
+    add("buf_staging", st.bufferStagingBytes);
+    add("tex_shared_static", st.textureSharedStaticBytes);
+    add("tex_dynamic", st.textureDynamicBytes);
+    add("tex_staging", st.textureStagingBytes);
+    add("tex_private", st.texturePrivateBytes);
+    add("ring_allocated", st.ringAllocatedBytes);
+    add("ring_frame_peak", st.ringFramePeakBytes);
+    add("ring_const_peak", st.ringConstantPeakBytes);
+    add("ring_upload_peak", st.ringUploadPeakBytes);
+    return n;
+}
+void MemLog(const char* line) { AppleShell::Log("%s", line); }
+} // namespace
+
 SDL_AppResult SDL_AppInit(void** appstate, int argc, char** argv)
 {
     SDL_SetAppMetadata("Anomaly", "0.1", "com.andriishafar.anomaly");
@@ -1121,6 +1158,9 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char** argv)
     bool want_launcher = false, unattended_flag = false, foreground = false, no_launcher = false;
     const char* script_path = nullptr;
     const char* launcher_script_path = nullptr;
+    const char* memstat_csv = getenv("ANOMALY_MEMSTAT");
+    unsigned memstat_ms = 100;
+    bool memstat = memstat_csv && *memstat_csv;
     for (int i = 1; i < argc; ++i)
     {
         if (!strcmp(argv[i], "--show-launcher"))
@@ -1141,7 +1181,18 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char** argv)
             app->exit_after_s = atof(argv[++i]);
         else if (!strcmp(argv[i], "--script") && i + 1 < argc)
             script_path = argv[++i];
+        else if (!strcmp(argv[i], "--memstat") && i + 1 < argc)
+        {
+            memstat = true;
+            memstat_csv = argv[++i];
+        }
+        else if (!strcmp(argv[i], "--memstat-ms") && i + 1 < argc)
+            memstat_ms = unsigned(std::max(10, atoi(argv[++i])));
     }
+    // --memstat <csv> (or ANOMALY_MEMSTAT=<csv>): a thread samples malloc, the process footprint, the mapped file windows and the
+    // renderer's CPU-visible memory every --memstat-ms (100) and keeps the peaks; docs/web-port/MEMORY.md
+    if (memstat)
+        xr_apple_memstat_start(memstat_csv, memstat_ms, MetalMemProbe, MemLog);
     app->unattended = !foreground && (unattended_flag || script_path || app->exit_after_s > 0);
     // The launcher is the first screen of an ordinary start. Runs nobody watches (--script, --exit-after, --unattended) and
     // --no-launcher / ANOMALY_NO_LAUNCHER go straight to the engine, which mounts the mods of modlist.json as they are.
@@ -1432,6 +1483,7 @@ void SDL_AppQuit(void* appstate, SDL_AppResult result)
     auto* app = static_cast<App*>(appstate);
     if (!app)
         return;
+    xr_apple_memstat_stop(); // before the renderer goes away: the sampler reads its counters
     if (app->engine_up)
         xr_engine::Shutdown();
     CloseLauncher(*app);
