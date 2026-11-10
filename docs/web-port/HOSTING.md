@@ -1,10 +1,10 @@
 # Hosting on Cloudflare (spike S4a)
 
 Result: a Worker, an R2 bucket and an Access application are deployed and work together; a publisher cuts
-game files into content-addressed chunks and uploads them; the 24 MB `db/configs` sample is in the bucket and
-a second publish uploads nothing. The unauthenticated check passes (every path answers with the Access
-login redirect and no content). The authenticated check (log in, see the page) needs the owner:
-[steps below](#owner-check-after-logging-in).
+game files into content-addressed chunks and uploads them. All of `db/` (67 files, 15.97 GiB, 4,128 chunks)
+is in the bucket ([numbers](#result-for-all-of-db)), and `verify` finds nothing missing. The unauthenticated
+check passes (every path answers with the Access login redirect and no content). The owner's logged-in check
+passed except for one expectation, `cf-cache-status`, which is an [open item](#open-item-cf-cache-status-shows-na).
 
 Deployment values (account id, hostname, login email, Access team name) are not in the repository. This
 document writes them as `<hostname>`, `<team>` and so on; the real ones live in the untracked
@@ -93,9 +93,10 @@ the archive. The format is the one `CLocatorAPI::LoadArchive` and `open_chunk_fd
   those two files; the test is in `test_publish.py`.
 
 Size of the index for the sample: 337 KiB. For all of `db/` (67 files, 15.97 GiB, 67 archives, 50,781 table
-entries, 4,128 chunks; measured by reading the tables only) it will be about 4.4 MiB, roughly 1.1 MiB
-compressed on the wire. That is one request, but a start-up cost worth a look at the W1 milestone; the
-fallback is one small index per archive, loaded when that archive is first needed.
+entries, 4,128 chunks) the stored `index.json` is 4,686,956 bytes (4.47 MiB); gzip -6 gives 1,121,696 bytes
+(1.07 MiB), gzip -9 1,091,733, brotli quality 5 1,008,383 (0.96 MiB). That is one request, but a start-up
+cost worth a look at the W1 milestone; the fallback is one small index per archive, loaded when that archive
+is first needed. Whether Cloudflare compresses the response at the edge is not verified.
 
 ## Tooling
 
@@ -234,7 +235,14 @@ endpoint (it shows the caller's own connection details, nothing of ours).
 
 ### Owner check, after logging in
 
-I cannot do this part: it needs a browser session for the allow-listed email.
+**Passed, with one open item.** The owner signed in at the deployed origin on 2026-11-10 and reported (to the
+root session, which relayed it; I did not see the page) steps 1 to 3 as expected: `crossOriginIsolated`
+true, `SharedArrayBuffer`, WebGPU, WebHID and OPFS present, "All checks passed" (`index.json` 200, four
+chunks hash-verified, HEAD 200, If-None-Match 304, Range 206, missing chunk 404). Step 4 did not give what it
+expected: every chunk row showed `cf-cache-status n/a`, see the
+[open item](#open-item-cf-cache-status-shows-na). Steps 5 and 6 were not reported.
+
+I could not do this part myself: it needs a browser session for the allow-listed email. The steps:
 
 1. Open `https://<hostname>/` in desktop Chrome or Edge. Expect the Cloudflare Access login for your account,
    then the page "Hosting check".
@@ -242,8 +250,8 @@ I cannot do this part: it needs a browser session for the allow-listed email.
    open DevTools, Network, click the document request and check the three isolation response headers.
 3. "Data" must end with "All checks passed.": `index.json` 200, 4 chunks "hash verified", HEAD 200,
    If-None-Match 304, Range 206, missing chunk 404.
-4. Reload. The chunk rows should now show `cf-cache-status: HIT` once the edge cache is warm (the first load
-   after a publish is `MISS` or `DYNAMIC`).
+4. Reload. I expected the chunk rows to show `cf-cache-status: HIT` once the edge cache is warm. That
+   expectation was wrong for this Worker: it never sets that header (see the open item), so the row says `n/a`.
 5. In a private window, or after clearing the `CF_Authorization` cookie, `https://<hostname>/data/index.json`
    must go back to the login page, not return JSON.
 6. Optional: from a second account whose email is not on the list, the login must be refused.
@@ -299,27 +307,65 @@ hand; at about $0.015 per GB-month that is cheap, and a `prune` command can foll
 Runs 3 and 4 exist because the index format changed after run 2; run 4 is the "second run uploads nothing"
 for the final format. The full output is in the session notes folder, not in the repository.
 
+### Result for all of `db/`
+
+Run on 2026-11-10 with the owner's go-ahead, after re-checking that the bucket was still private (`r2.dev`
+off, no custom domains) and that an unauthenticated `curl -sI` on `/data/index.json`, a chunk path, `/`
+and `/bin/` still gave the Access redirect. Source: the game directory, read only. Command:
+`publish --path db --jobs 8` (4 MiB chunks), one background job, started after a `--dry-run` whose plan it
+then matched exactly.
+
+| | |
+|---|---|
+| Files, size | 67 (`db/` only), 15.97 GiB (17,154,171,163 bytes in the bucket including the index) |
+| Chunks | 4,128 referenced, 4,128 distinct (no chunk is shared between files), 4,119 uploaded, 9 skipped (already stored by the sample run) |
+| Wall time | 1,894 s (31 min 34 s), 02:23:33Z to 02:55:07Z, one run, no resume needed |
+| Average rate | 8.6 MiB/s (15.9 GiB uploaded in 1,894 s); the running average in the progress lines stayed between 6.9 and 8.7 MiB/s |
+| Failures | 0 chunks failed after retries; the index was uploaded last |
+| Retries | not counted: the publisher logs a chunk only when all attempts failed, so a retry that succeeded leaves no trace. A counter would be a small addition |
+| `index.json` | 4,686,956 bytes (4.47 MiB); gzip -6 1,121,696; brotli q5 1,008,383 |
+| Bucket afterwards | 4,129 objects (4,128 chunks + `data/index.json`), 17,154,171,163 bytes (15.976 GiB) |
+
+Checks afterwards:
+
+- `verify` (existence and size of every chunk the index lists): 4,128 chunks, 0 missing or wrong size, 7 s.
+- Deep sample (an ad hoc script, not part of the repository, using the publisher's `cf r2 objects get`
+  wrapper; the publisher's own `verify --deep` has no sample option and would download all 16 GB):
+  two whole files, `db/levels/level_pripyat.db0` (485.4 MiB, 122 chunks) and `db/textures/textures_ui.db0`
+  (63.6 MiB, 16 chunks), each downloaded, every chunk hashed against its key, reassembled, and the file's
+  SHA-256 compared with the index and with the local source (equal); plus 150 random chunks from 48 other
+  files. 288 chunks (about 1.1 GiB), 0 problems, 115 s. `level_pripyat.db0` is larger than 300 MB, the most
+  `cf r2 objects put` takes in one object, so it exists in the bucket only as chunks.
+- Unauthenticated `curl -sI` after the upload: `/data/index.json`, a chunk path, `/`, `/bin/` and `/anything`
+  all give 302 to the Access login, and `/data/index.json` returns the generic 143-byte body. `r2.dev`
+  still `enabled: false`, custom domains empty.
+
+The 8-way upload is bounded by the `cf` start-up per object, as expected: 4,119 objects in 1,894 s is 2.2
+objects per second. That is acceptable for a first publish and for changed chunks later (only chunks whose
+bytes differ are uploaded; a change that shifts the following bytes of a file changes the rest of its
+chunks). The S3 API would be faster but needs an R2 API token, which this spike was not allowed to create.
+
 ## R2 operations and cost observed
 
-Counted from the commands run against the real bucket (bucket creation, one dry run, four publish runs,
-two `verify --deep`, plus a read-only development session against it):
+Counted from the commands run against the real bucket (a hand count of the publisher's `cf` calls, not
+billing data). Sample phase: bucket creation, one dry run, four publish runs, two `verify --deep`, plus a
+read-only development session against it. Full upload: one dry-run list, the publish (one list, 4,119 chunk
+puts, one index put), `verify` (five list pages), a bucket-wide list for the object count (five pages), the
+deep sample (one index get, 288 chunk gets) and the shallow verify's index get.
 
-| | Count | Free tier per month |
-|---|---|---|
-| Class A (list, put, create bucket) | about 25 | 1,000,000 |
-| Class B (get, head) | under 100 | 10,000,000 |
-| Storage | 24.4 MiB of chunks + 0.3 MiB index | 10 GB-month |
-| Egress | 0 (free for R2 in any case) | |
+| | Sample phase | Full upload | Free tier per month |
+|---|---|---|---|
+| Class A (list, put, create bucket) | about 25 | about 4,130 | 1,000,000 |
+| Class B (get, head) | under 100 | about 290 | 10,000,000 |
+| Storage | 24.4 MiB of chunks + 0.3 MiB index | 15.976 GiB (17.15 GB) | 10 GB-month |
+| Egress | 0 | 0 (the deep sample's downloads included; free for R2 in any case) | |
 
-So the sample costs nothing. Prices from the R2 pricing page, read on 2026-11-10: storage $0.015 per
-GB-month, Class A $4.50 per million, Class B $0.36 per million, egress free. A publish costs one list per
-1,000 stored chunks plus one put per new chunk and one for the index, regardless of how many files they
-belong to. Extrapolation for all of `db/` (not measured): 4,128 puts once, then about 6 lists per publish;
-15.97 GiB stored is about $0.09 a month above the free 10 GB. The `cf` process start-up (a Node process per
-object) is what bounds upload speed: 9 objects at 8-way parallelism took about 7 s. For 4,128 objects I would expect
-on the order of an hour, depending on the uplink; measure it at the full-upload milestone, and if it is too
-slow, replace the `put` call with the S3 API (needs an R2 API token, which this spike was not allowed to
-create) or a one-off Worker that accepts uploads.
+So the operations cost nothing: about 0.4 % of the Class A allowance. Prices from the R2 pricing page, read
+on 2026-11-10: storage $0.015 per GB-month, Class A $4.50 per million, Class B $0.36 per million, egress
+free. Storage above the free 10 GB is $0.09 a month counting GiB and $0.11 counting 10^9 bytes; I did not
+check which unit the bill uses. A publish costs one list per 1,000 stored chunks plus one put per new
+chunk and one for the index, regardless of how many files they belong to, so a republish of unchanged data
+is about 6 Class A operations.
 
 Request counts matter more than R2 operations at play time. With `run_worker_first`, every request, static
 asset or chunk, runs the Worker. The Workers Free plan allows 100,000 requests a day (Error 1027 beyond that);
@@ -372,24 +418,53 @@ Access applications, policies, buckets or Workers. Locally, remove `web/worker/d
 - **`cf r2 objects put` takes at most 300 MB**, which 4 MiB chunks stay far below. There is no
   `--cache-control` option on it, which is why caching headers are set by the Worker, not stored.
 - **`cf --local` and parallel puts** worked with 8 processes against the local simulation without errors.
-- **Index size** grows with the table of contents (about 4.4 MiB for all of `db/`), see above.
+- **Index size** grows with the table of contents (4.47 MiB for all of `db/`, about 1 MiB compressed), see above.
 - **Bucket location.** The bucket was placed in `WEUR` (nearest the caller when it was created). Reads from
   elsewhere cross to it on a cache miss; the edge cache absorbs repeats.
 - **Static assets are capped at 25 MiB each and 20,000 files** on the Free plan (Workers limits page); the
   page and its scripts are far below. The wasm binary goes in R2, not in assets.
 
+## Open item: `cf-cache-status` shows `n/a`
+
+What the owner saw: on the deployed origin every chunk row of the hosting check page reads
+`cf-cache-status n/a`, next to `cache-control public, max-age=31536000, immutable`. So whether the edge
+cache serves repeated reads is not confirmed. My best explanation, from the code and the Cloudflare docs
+read on 2026-11-10 (not tested on the deployed origin, which sits behind Access):
+
+- **The page is not at fault.** [`app.js`](../../web/worker/public/app.js) line 116 prints
+  `r.headers.get("cf-cache-status") || "n/a"` for a same-origin response, so `n/a` means the header was not
+  on the response; the display is not hiding it.
+- **The Worker never sets it, and nothing in front of the Worker does.** The Worker's cache is the Cache
+  API (`caches.default`, [`worker.js`](../../web/worker/src/worker.js) lines 79 to 85 for the lookup and 119
+  to 122 for the store). The docs describe `Cf-Cache-Status` ("every response carries" it) under Workers
+  Cache, a separate feature that is switched on with `"cache": { "enabled": true }` in the Wrangler config;
+  `wrangler.example.jsonc` has no `cache` setting, so it is off. I found no statement that a Cache API hit or
+  miss adds the header. `withIsolation` (lines 29 to 33) copies all headers of the inner response, so it
+  would not remove one. Hence `n/a` is expected on a hit as well as on a miss, and says nothing about
+  whether the cache works.
+- **Also unknown:** whether the owner's load was warm at all (a first load after a publish is a miss; the
+  store runs in `waitUntil`).
+
+Not a page-only display bug, so nothing is changed here and the Worker is not redeployed. For W1:
+
+1. Make hits observable whichever cache is used: add a header such as `X-Anomaly-Cache: hit|miss` in the
+   Worker (hit is the `cache.match` branch) and show it on the page, then reload on the deployed origin and
+   compare the first and second load.
+2. Or move to Workers Cache (`"cache": { "enabled": true }`). The docs say Cloudflare then answers hits
+   before the Worker runs, which also cuts Worker requests (relevant to the 100,000 a day limit above; I did
+   not check whether a hit still counts as a request), sets `Cf-Cache-Status` on every response, and serves
+   `Range` itself from a cached full `200`: it strips `Range` before the Worker runs, and a `206` returned by
+   the Worker is not stored. That would change the Worker's own `Range` and 416 handling and its tests. I did
+   not try it; check that it is available on the account's plan and not a beta first.
+
 ## Not verified
 
-- The authenticated path end to end: Access login, then the page loading data through the deployed Worker.
-  Everything that can be tested without a session was: the Worker code against the local simulation and
-  against the real bucket (all smoke checks passed), the page in a browser against the local Worker
-  (`crossOriginIsolated` true, all checks passed), and the unauthenticated behaviour of the deployment.
-- Edge-cache behaviour on the deployed Worker (`cf-cache-status` HIT on the second load) and compression of
-  `index.json` at the edge. Both are expected from Cloudflare's documented behaviour; neither can be seen
-  without a session.
-- Whether Access with one identity provider also stops a second account's login (step 6 of the owner check).
+- Edge-cache behaviour on the deployed Worker and compression of `index.json` at the edge: see the open item
+  above; neither can be seen without a session.
+- Owner-check steps 5 and 6: that a private window gets the login page again, and that a second account not
+  on the list is refused. Not reported.
 - The tear-down commands and the invite steps; only the `--dry-run` output or help text was read. That deleting the Worker also removes the DNS record it owns is the documented behaviour of a custom domain, not something I saw.
-- Upload time and Worker request counts for the full 16 GB, and the Workers plan of the account.
+- Worker request counts for a full download of the 16 GB, and the Workers plan of the account.
 - Serving this volume through Cloudflare under the account's terms of service. R2 and Workers are the
   products Cloudflare provides for it, but I did not read the terms.
 - `cf dev` as an alternative to `wrangler dev`.
@@ -400,6 +475,8 @@ Access applications, policies, buckets or Workers. Locally, remove `web/worker/d
   `wrangler.jsonc` or `cloudflare.config.ts` gains assets settings; the other Cloudflare work stays on `cf`.
 - Files and game data: the index carries each archive's decoded table of contents (names are byte strings),
   so the web file backend needs no request to register an archive. The measured size for all of `db/` is
-  4.4 MiB; decide at W1 whether to split it per archive.
+  4.47 MiB (about 1 MiB compressed); decide at W1 whether to split it per archive.
+- The first full publish of `db/` took 31.5 minutes at 8.6 MiB/s with 8 `cf` processes; a data update that
+  changes few chunks is quick. The cache hit check (open item above) goes to W1.
 - The numbers in the plan's hosting cost line hold: about $0.10 a month for storage, free egress; request
   volume on the Workers plan, not R2, is the thing to watch.
