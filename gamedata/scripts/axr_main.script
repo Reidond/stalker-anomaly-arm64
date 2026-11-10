@@ -18,7 +18,8 @@ config = ini_file_ex("axr_options.ltx",true)
 -- one is read-only on the iPad, and on the Mac it is shared by every game that runs: the new-game values one game writes for its first
 -- update (character_creation) reached the first update of another and sent that player to the start of a new game. The copy in the game's
 -- config folder is only the default until the first save; the file in appdata wins once it exists.
-if jit and jit.os == "OSX" then
+-- Plain Lua 5.1 (the web build's VM, docs/web-port/LUA51.md) has no jit table: there a POSIX path separator says the same.
+if (jit and jit.os == "OSX") or (not jit and package.config:sub(1, 1) == "/") then
 	local fname = "axr_options.ltx"
 	local user = getFS():update_path('$app_data_root$', '')..fname
 	config.fname = user -- where save() writes
