@@ -106,6 +106,11 @@ do local t = deep for i = 1, 60 do t.child = {i = i, s = "x" .. i}; t = t.child 
 local rd, depth = marshal.decode(marshal.encode(deep)), 0
 while rd.child do rd = rd.child; depth = depth + 1 end
 check(depth == 60 and rd.s == "x60", "marshal 60 nested tables")
+-- a function written by another VM (its bytecode header broken here) is an error, not a crash
+local enc = marshal.encode({f = function() return 1 end})
+local esc = enc:find("\27", 1, true)
+local ok_other, err_other = pcall(marshal.decode, enc:sub(1, esc) .. "X" .. enc:sub(esc + 2))
+check(esc and not ok_other and tostring(err_other):find("another Lua VM", 1, true), "marshal: bytecode of another VM is an error")
 
 -- lfs and io with the engine's virtual paths
 check(lfs.currentdir() ~= nil, "lfs.currentdir")
