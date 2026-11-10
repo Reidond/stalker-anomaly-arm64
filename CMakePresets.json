@@ -46,6 +46,19 @@
       }
     },
     {
+      "name": "web-wasm32",
+      "displayName": "WebAssembly wasm32 (Emscripten, Ninja, Release; emsdk in build/emsdk, see docs/web-port/WASM-BUILD.md)",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "toolchainFile": "${sourceDir}/build/emsdk/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake",
+      "environment": { "EM_CONFIG": "${sourceDir}/build/emsdk/.emscripten" },
+      "cacheVariables": {
+        "ANOMALY_WEB": "ON",
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+      }
+    },
+    {
       "name": "ios-arm64",
       "displayName": "iPadOS arm64 (Xcode)",
       "inherits": "apple-base",
@@ -63,6 +76,10 @@
     { "name": "macos-arm64-release", "configurePreset": "macos-arm64-release" },
     { "name": "macos-arm64-asan", "configurePreset": "macos-arm64-asan" },
     { "name": "macos-arm64-tsan", "configurePreset": "macos-arm64-tsan" },
-    { "name": "ios-arm64", "configurePreset": "ios-arm64", "configuration": "Debug" }
+    { "name": "ios-arm64", "configurePreset": "ios-arm64", "configuration": "Debug" },
+    { "name": "web-wasm32", "configurePreset": "web-wasm32" }
+  ],
+  "testPresets": [
+    { "name": "web-wasm32", "configurePreset": "web-wasm32", "output": { "outputOnFailure": true } }
   ]
 }
