@@ -379,7 +379,10 @@ static void mar_decode_value
             dec_buf.size = l;
             dec_buf.head = l;
             dec_buf.seek = 0;
-            lua_load(L, (lua_Reader)buf_read, &dec_buf, "=marshal");
+            /* A function is kept as the bytecode of the VM that wrote it (LuaJIT 2.0, LuaJIT 2.1 GC64, Lua 5.1 are three formats):
+               another VM refuses it. Raise that as an error; going on with the message where the function should be crashed. */
+            if (lua_load(L, (lua_Reader)buf_read, &dec_buf, "=marshal") != 0)
+                luaL_error(L, "marshal: cannot load a function written by another Lua VM (%s)", lua_tostring(L, -1));
             mar_incr_ptr(l);
 
             lua_pushvalue(L, -1);
