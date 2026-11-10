@@ -99,6 +99,8 @@ Buffer::Buffer(Device* d) : BufferCore(d) { d->AddRef(); }
 Buffer::~Buffer()
 {
     dev->bufferBytes -= std::min<uint64_t>(dev->bufferBytes, byteWidth);
+    if (memBytes)
+        dev->memBuf[memClass] -= std::min<uint64_t>(dev->memBuf[memClass], memBytes);
     dev->Release();
 }
 void Buffer::GetDevice(ID3D11Device** pp)
@@ -128,6 +130,8 @@ TextureImpl<I, Desc>::~TextureImpl()
         for (UINT m = 0; m < mips; ++m)
             bytes += SliceBytes(fi, Max1(width >> m), Max1(height >> m)) * Max1(depth >> m) * arraySize * samples;
         dev->textureBytes -= std::min<uint64_t>(dev->textureBytes, bytes);
+        if (memBytes)
+            dev->memTex[memClass] -= std::min<uint64_t>(dev->memTex[memClass], memBytes);
         if (bindFlags & (D3D11_BIND_RENDER_TARGET | D3D11_BIND_DEPTH_STENCIL | D3D11_BIND_UNORDERED_ACCESS))
             dev->renderTargetBytes -= std::min<uint64_t>(dev->renderTargetBytes, bytes);
     }
@@ -449,6 +453,9 @@ HRESULT Device::CreateBuffer(const D3D11_BUFFER_DESC* d, const D3D11_SUBRESOURCE
     else
         std::memset(b->cur.ptr, 0, d->ByteWidth);
     bufferBytes += d->ByteWidth;
+    b->memClass = d->Usage == D3D11_USAGE_DYNAMIC ? MemBufDynamic : d->Usage == D3D11_USAGE_STAGING ? MemBufStaging : MemBufStatic;
+    b->memBytes = d->ByteWidth;
+    memBuf[b->memClass] += b->memBytes;
     *out = b;
     return S_OK;
 }
@@ -591,6 +598,9 @@ HRESULT Device::createTexture(ResKind kind, const void* descIn, const D3D11_SUBR
                                     src + z * srcSlice + r * srcRow, std::min(srcRow, l.rowPitch));
             }
         textureBytes += texBytes;
+        t->memClass = MemTexStaging;
+        t->memBytes = total; // the packed shared buffer, padding included
+        memTex[MemTexStaging] += total;
         if (p.bind & (D3D11_BIND_RENDER_TARGET | D3D11_BIND_DEPTH_STENCIL | D3D11_BIND_UNORDERED_ACCESS))
             renderTargetBytes += texBytes;
         return S_OK;
@@ -645,6 +655,9 @@ HRESULT Device::createTexture(ResKind kind, const void* descIn, const D3D11_SUBR
         }
     }
     textureBytes += texBytes * (dynamic ? 3 : 1);
+    t->memClass = dynamic ? MemTexDynamic : (td.storageMode == MTLStorageModeShared ? MemTexSharedStatic : MemTexPrivate);
+    t->memBytes = texBytes * (dynamic ? 3 : 1);
+    memTex[t->memClass] += t->memBytes;
     if (p.bind & (D3D11_BIND_RENDER_TARGET | D3D11_BIND_DEPTH_STENCIL | D3D11_BIND_UNORDERED_ACCESS))
         renderTargetBytes += texBytes;
     // D3D11 gives a render target or depth buffer without initial data zeroed; a private Metal texture shows what the memory held (the
