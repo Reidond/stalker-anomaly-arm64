@@ -50,3 +50,8 @@ __pycache__/
 
 # iOS port: read-only reference checkouts (OpenXRay)
 /reference/
+
+# web port hosting: deployment values and generated config stay local
+/web/worker/deploy.local.env
+/web/worker/wrangler.jsonc
+/web/worker/node_modules/
